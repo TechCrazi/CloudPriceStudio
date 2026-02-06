@@ -24,6 +24,7 @@ const workloadSelect = form.querySelector("[name='workload']");
 const awsInstanceSelect = document.getElementById("aws-instance");
 const azureInstanceSelect = document.getElementById("azure-instance");
 const gcpInstanceSelect = document.getElementById("gcp-instance");
+const diskTierSelect = form.querySelector("[name='diskTier']");
 const sqlEditionSelect = form.querySelector("[name='sqlEdition']");
 const sqlRateInput = form.querySelector("[name='sqlLicenseRate']");
 const osDiskInput = form.querySelector("[name='osDiskGb']");
@@ -33,6 +34,10 @@ const SQL_DEFAULTS = {
   none: 0,
   standard: 0.35,
   enterprise: 0.5,
+};
+const DISK_TIER_LABELS = {
+  premium: "Premium SSD",
+  max: "Max performance",
 };
 let sqlRateTouched = false;
 let sizeOptions = null;
@@ -49,7 +54,7 @@ const MODE_COPY = {
   vm: {
     formTitle: "Workload inputs",
     formSubtitle:
-      "Windows only, no local or temp disks, premium storage, network >= 10 Gbps.",
+      "Windows only, no local or temp disks, disk tier selectable, network >= 10 Gbps.",
     resultsTitle: "Price comparison",
     resultsSubtitle: "Live compute rates + estimated storage, egress, and SQL.",
     cpuLabel: "vCPU count (min 8)",
@@ -62,7 +67,7 @@ const MODE_COPY = {
   k8s: {
     formTitle: "Kubernetes inputs",
     formSubtitle:
-      "Premium managed Kubernetes tiers (Linux nodes). Node sizing uses the same VM families.",
+      "Premium managed Kubernetes tiers (Linux nodes). Disk tier selectable for OS disks.",
     resultsTitle: "Kubernetes price comparison",
     resultsSubtitle:
       "Node compute rates + control plane fees + storage and egress.",
@@ -691,6 +696,7 @@ function serializeForm(formElement) {
     gcpInstanceType: gcpInstanceSelect.value,
     regionKey: data.regionKey,
     pricingProvider: data.pricingProvider,
+    diskTier: data.diskTier,
     sqlEdition: data.sqlEdition,
     mode: data.mode,
     osDiskGb: Number.parseFloat(data.osDiskGb),
@@ -735,6 +741,13 @@ async function fetchAndRender() {
   }
   if (data.notes?.sizeCap) {
     noteParts.push(data.notes.sizeCap);
+  }
+  const diskTierLabel =
+    data.input?.diskTierLabel ||
+    DISK_TIER_LABELS[data.input?.diskTier] ||
+    DISK_TIER_LABELS[diskTierSelect?.value];
+  if (diskTierLabel) {
+    noteParts.push(`Disk tier: ${diskTierLabel}.`);
   }
   if (vmCount && vmCount > 1) {
     const countLabel = mode === "k8s" ? "nodes" : "VMs";
@@ -828,6 +841,7 @@ function buildCsv(data) {
         Workload: input.workload ?? "",
         SQL_Edition: input.sqlEdition ?? "",
         SQL_License_Rate: input.sqlLicenseRate ?? "",
+        Disk_Tier: input.diskTier ?? "",
         OS_Disk_GB: input.osDiskGb ?? "",
         Data_Disk_TB: input.dataDiskTb ?? "",
         Backups_Enabled: input.backupEnabled ? "Yes" : "No",

@@ -13,6 +13,11 @@ const HOURS_IN_MONTH = 730;
 const MIN_CPU = 8;
 const MIN_MEMORY = 8;
 const MIN_NETWORK_GBPS = 10;
+const PRICING_WARMUP_ENABLED = process.env.PRICING_CACHE_WARMUP !== "false";
+const PRICING_WARMUP_CONCURRENCY = Math.max(
+  1,
+  Number.parseInt(process.env.PRICING_CACHE_CONCURRENCY || "4", 10) || 4
+);
 const BACKUP_RETENTION_DAYS = 15;
 const BACKUP_DAILY_DELTA_PERCENT = 10;
 const K8S_OS_DISK_MIN_GB = 32;
@@ -210,11 +215,35 @@ const K8S_DEFAULT_FLAVORS = {
   gcp: "general",
 };
 
-const STORAGE_RATES = {
-  aws: 0.125,
-  azure: 0.12,
-  gcp: 0.17,
+const DISK_TIERS = {
+  premium: {
+    label: "Premium SSD",
+    storageRates: {
+      aws: 0.125,
+      azure: 0.12,
+      gcp: 0.17,
+    },
+    snapshotRates: {
+      aws: 0.125,
+      azure: 0.12,
+      gcp: 0.17,
+    },
+  },
+  max: {
+    label: "Max performance (Ultra/Extreme/io2 BE)",
+    storageRates: {
+      aws: 0.25,
+      azure: 0.24,
+      gcp: 0.34,
+    },
+    snapshotRates: {
+      aws: 0.25,
+      azure: 0.24,
+      gcp: 0.34,
+    },
+  },
 };
+const DEFAULT_DISK_TIER = "max";
 
 const K8S_SHARED_STORAGE_DEFAULT_RATES = {
   aws: 0.3,
@@ -225,12 +254,6 @@ const K8S_SHARED_STORAGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const AWS_EFS_REGION_INDEX_URL =
   "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEFS/current/region_index.json";
 const GCP_FILESTORE_PRICING_URL = "https://cloud.google.com/filestore/pricing";
-
-const SNAPSHOT_RATES = {
-  aws: 0.125,
-  azure: 0.12,
-  gcp: 0.17,
-};
 
 const EGRESS_RATES = {
   aws: 0.09,
@@ -312,6 +335,7 @@ const azureReservedCache = new Map();
 const azurePublicCache = { loadedAt: 0, data: null };
 const gcpPublicCache = { loadedAt: 0, data: null };
 const gcpBillingCache = { loadedAt: 0, data: null };
+const gcpApiCache = new Map();
 const awsEfsRegionIndexCache = { loadedAt: 0, data: null };
 const k8sSharedStorageCache = new Map();
 
@@ -470,10 +494,16 @@ function toBoolean(value) {
 }
 
 function logPricingWarning(provider, context, message) {
+  if (context?.silent) {
+    return;
+  }
   console.warn(`[pricing:${provider}] ${message}`, context);
 }
 
 function logPricingError(provider, context, error) {
+  if (context?.silent) {
+    return;
+  }
   const details = error?.stack || error?.message || String(error);
   console.error(`[pricing:${provider}] ${details}`, context);
 }
@@ -524,6 +554,209 @@ function sortSizes(sizes) {
     }
     return a.vcpu - b.vcpu;
   });
+}
+
+function flattenFlavorSizes(flavors) {
+  const sizes = [];
+  const seen = new Set();
+  Object.values(flavors || {}).forEach((flavor) => {
+    (flavor.sizes || []).forEach((size) => {
+      if (seen.has(size.type)) {
+        return;
+      }
+      sizes.push(size);
+      seen.add(size.type);
+    });
+  });
+  return sizes;
+}
+
+async function runWithConcurrency(tasks, limit) {
+  const executing = new Set();
+  const results = [];
+  for (const task of tasks) {
+    const promise = Promise.resolve().then(task);
+    results.push(promise);
+    executing.add(promise);
+    const cleanup = () => executing.delete(promise);
+    promise.then(cleanup, cleanup);
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  return Promise.allSettled(results);
+}
+
+async function warmPricingCaches() {
+  const startedAt = Date.now();
+  const summary = {
+    aws: { ok: 0, fail: 0 },
+    azure: { ok: 0, fail: 0, reservedOk: 0, reservedFail: 0 },
+    gcp: { ok: 0, fail: 0 },
+    public: { aws: false, azure: false, gcp: false },
+    sharedStorage: { ok: 0, fail: 0 },
+  };
+  const warmContext = { warmup: true, silent: true };
+  console.log("[pricing] Cache warm-up starting...");
+
+  const publicTasks = [
+    () =>
+      loadAwsPublicPricing()
+        .then(() => {
+          summary.public.aws = true;
+        })
+        .catch(() => {
+          summary.public.aws = false;
+        }),
+    () =>
+      loadAzurePublicPricing()
+        .then(() => {
+          summary.public.azure = true;
+        })
+        .catch(() => {
+          summary.public.azure = false;
+        }),
+    () =>
+      loadGcpPublicPricing()
+        .then(() => {
+          summary.public.gcp = true;
+        })
+        .catch(() => {
+          summary.public.gcp = false;
+        }),
+  ];
+  await Promise.allSettled(publicTasks.map((task) => task()));
+
+  if (hasGcpApiCredentials()) {
+    try {
+      await loadGcpBillingSkus(getGcpApiKey());
+    } catch (error) {
+      logPricingError("gcp", { warmup: true }, error);
+    }
+  }
+
+  let options;
+  try {
+    options = await buildSizeOptions();
+  } catch (error) {
+    logPricingError("pricing", { warmup: true }, error);
+    return;
+  }
+
+  const awsSizes = flattenFlavorSizes(options.providers.aws.flavors);
+  const azureSizes = flattenFlavorSizes(options.providers.azure.flavors);
+  const gcpSizes = flattenFlavorSizes(options.providers.gcp.flavors);
+  const regions = Object.values(REGION_MAP);
+
+  const tasks = [];
+
+  if (hasAwsApiCredentials()) {
+    regions.forEach((region) => {
+      awsSizes.forEach((size) => {
+        ["windows", "linux"].forEach((os) => {
+          tasks.push(async () => {
+            try {
+              await getAwsOnDemandPrice({
+                instanceType: size.type,
+                location: region.aws.location,
+                os,
+                sqlEdition: "none",
+                logContext: warmContext,
+              });
+              summary.aws.ok += 1;
+            } catch (error) {
+              summary.aws.fail += 1;
+            }
+          });
+        });
+      });
+    });
+  } else {
+    console.log(
+      "[pricing] Cache warm-up skipped for AWS API (missing credentials)."
+    );
+  }
+
+  regions.forEach((region) => {
+    azureSizes.forEach((size) => {
+      ["windows", "linux"].forEach((os) => {
+        tasks.push(async () => {
+          try {
+            await getAzureOnDemandPrice({
+              skuName: size.type,
+              region: region.azure.region,
+              os,
+            });
+            summary.azure.ok += 1;
+          } catch (error) {
+            summary.azure.fail += 1;
+          }
+        });
+        [1, 3].forEach((termYears) => {
+          tasks.push(async () => {
+            try {
+              await getAzureReservedPrice({
+                skuName: size.type,
+                region: region.azure.region,
+                os,
+                termYears,
+              });
+              summary.azure.reservedOk += 1;
+            } catch (error) {
+              summary.azure.reservedFail += 1;
+            }
+          });
+        });
+      });
+    });
+  });
+
+  if (hasGcpApiCredentials()) {
+    regions.forEach((region) => {
+      gcpSizes.forEach((size) => {
+        ["windows", "linux"].forEach((os) => {
+          tasks.push(async () => {
+            try {
+              await getGcpApiOnDemandPrice({
+                instanceType: size.type,
+                vcpu: size.vcpu,
+                memory: size.memory,
+                region: region.gcp.region,
+                os,
+                apiKey: getGcpApiKey(),
+              });
+              summary.gcp.ok += 1;
+            } catch (error) {
+              summary.gcp.fail += 1;
+            }
+          });
+        });
+      });
+    });
+  } else {
+    console.log(
+      "[pricing] Cache warm-up skipped for GCP API (missing credentials)."
+    );
+  }
+
+  regions.forEach((region) => {
+    tasks.push(async () => {
+      try {
+        await resolveK8sSharedStorageRates(region);
+        summary.sharedStorage.ok += 1;
+      } catch (error) {
+        summary.sharedStorage.fail += 1;
+      }
+    });
+  });
+
+  await runWithConcurrency(tasks, PRICING_WARMUP_CONCURRENCY);
+
+  const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+  console.log(
+    `[pricing] Cache warm-up complete in ${elapsed}s.`,
+    summary
+  );
 }
 
 function pickSizeByCpu(sizes, cpu) {
@@ -1001,6 +1234,10 @@ async function getGcpApiOnDemandPrice({
   os,
   apiKey,
 }) {
+  const cacheKey = [instanceType, region, os].join("|");
+  if (gcpApiCache.has(cacheKey)) {
+    return gcpApiCache.get(cacheKey);
+  }
   const familyToken = instanceType.split("-")[0] || "";
   const skus = await loadGcpBillingSkus(apiKey);
   const cpuRate = findGcpSkuRate({
@@ -1024,7 +1261,9 @@ async function getGcpApiOnDemandPrice({
   if (!Number.isFinite(rate) || rate <= 0) {
     throw new Error("Invalid GCP API hourly rate.");
   }
-  return { rate, source: "gcp-cloud-billing" };
+  const result = { rate, source: "gcp-cloud-billing" };
+  gcpApiCache.set(cacheKey, result);
+  return result;
 }
 
 function readSharedStorageCache(key) {
@@ -1885,6 +2124,12 @@ app.post("/api/compare", async (req, res) => {
   const allowedFlavors =
     mode === "k8s" ? K8S_FLAVORS : workloadConfig.flavors;
   const pricingProvider = resolvePricingProvider(body);
+  const diskTierKey =
+    typeof body.diskTier === "string" &&
+    Object.prototype.hasOwnProperty.call(DISK_TIERS, body.diskTier)
+      ? body.diskTier
+      : DEFAULT_DISK_TIER;
+  const diskTier = DISK_TIERS[diskTierKey] || DISK_TIERS[DEFAULT_DISK_TIER];
   const regionKey = body.regionKey in REGION_MAP ? body.regionKey : "us-east";
   const sqlEdition =
     mode === "k8s" ? "none" : normalizeSqlEdition(body.sqlEdition);
@@ -2391,7 +2636,7 @@ app.post("/api/compare", async (req, res) => {
   addSelectionNote("GCP", gcpInstanceType, gcpSelection);
 
   const dataStorageRates =
-    mode === "k8s" ? sharedStorageRates : STORAGE_RATES;
+    mode === "k8s" ? sharedStorageRates : diskTier.storageRates;
   const awsControlPlaneMonthly =
     mode === "k8s" ? K8S_CONTROL_PLANE_HOURLY.aws * hours : 0;
   const azureControlPlaneMonthly =
@@ -2406,9 +2651,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.aws,
+    storageRate: diskTier.storageRates.aws,
     dataStorageRate: dataStorageRates.aws,
-    snapshotRate: SNAPSHOT_RATES.aws,
+    snapshotRate: diskTier.snapshotRates.aws,
     egressRate: EGRESS_RATES.aws,
     sqlLicenseRate,
     vcpu: awsSize.vcpu,
@@ -2427,9 +2672,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.azure,
+    storageRate: diskTier.storageRates.azure,
     dataStorageRate: dataStorageRates.azure,
-    snapshotRate: SNAPSHOT_RATES.azure,
+    snapshotRate: diskTier.snapshotRates.azure,
     egressRate: EGRESS_RATES.azure,
     sqlLicenseRate,
     vcpu: azureSize.vcpu,
@@ -2448,9 +2693,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.aws,
+    storageRate: diskTier.storageRates.aws,
     dataStorageRate: dataStorageRates.aws,
-    snapshotRate: SNAPSHOT_RATES.aws,
+    snapshotRate: diskTier.snapshotRates.aws,
     egressRate: EGRESS_RATES.aws,
     sqlLicenseRate,
     vcpu: awsSize.vcpu,
@@ -2469,9 +2714,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.aws,
+    storageRate: diskTier.storageRates.aws,
     dataStorageRate: dataStorageRates.aws,
-    snapshotRate: SNAPSHOT_RATES.aws,
+    snapshotRate: diskTier.snapshotRates.aws,
     egressRate: EGRESS_RATES.aws,
     sqlLicenseRate,
     vcpu: awsSize.vcpu,
@@ -2490,9 +2735,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.azure,
+    storageRate: diskTier.storageRates.azure,
     dataStorageRate: dataStorageRates.azure,
-    snapshotRate: SNAPSHOT_RATES.azure,
+    snapshotRate: diskTier.snapshotRates.azure,
     egressRate: EGRESS_RATES.azure,
     sqlLicenseRate,
     vcpu: azureSize.vcpu,
@@ -2511,9 +2756,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.azure,
+    storageRate: diskTier.storageRates.azure,
     dataStorageRate: dataStorageRates.azure,
-    snapshotRate: SNAPSHOT_RATES.azure,
+    snapshotRate: diskTier.snapshotRates.azure,
     egressRate: EGRESS_RATES.azure,
     sqlLicenseRate,
     vcpu: azureSize.vcpu,
@@ -2532,9 +2777,9 @@ app.post("/api/compare", async (req, res) => {
     snapshotGb,
     egressGb,
     hours,
-    storageRate: STORAGE_RATES.gcp,
+    storageRate: diskTier.storageRates.gcp,
     dataStorageRate: dataStorageRates.gcp,
-    snapshotRate: SNAPSHOT_RATES.gcp,
+    snapshotRate: diskTier.snapshotRates.gcp,
     egressRate: EGRESS_RATES.gcp,
     sqlLicenseRate,
     vcpu: gcpSize?.vcpu || cpu,
@@ -2554,8 +2799,8 @@ app.post("/api/compare", async (req, res) => {
     useApiPricing ? "azure-retail-reservation" : "public-snapshot";
   const constraintsNote =
     mode === "k8s"
-      ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Premium managed disks only for OS. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
-      : "Windows-only. Premium managed disks only. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
+      ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
+      : "Windows-only. Disk tier selectable (Premium or Max performance). No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
 
   res.json({
     input: {
@@ -2584,6 +2829,8 @@ app.post("/api/compare", async (req, res) => {
       awsReservedType,
       pricingProvider,
       sqlLicenseRate,
+      diskTier: diskTierKey,
+      diskTierLabel: diskTier.label,
     },
     region,
     aws: {
@@ -2625,8 +2872,8 @@ app.post("/api/compare", async (req, res) => {
           reservedType: awsReservedType,
         },
       },
-      storageRate: STORAGE_RATES.aws,
-      snapshotRate: SNAPSHOT_RATES.aws,
+      storageRate: diskTier.storageRates.aws,
+      snapshotRate: diskTier.snapshotRates.aws,
       egressRate: EGRESS_RATES.aws,
       egress: {
         egressTb,
@@ -2676,8 +2923,8 @@ app.post("/api/compare", async (req, res) => {
           source: azureReservedSource,
         },
       },
-      storageRate: STORAGE_RATES.azure,
-      snapshotRate: SNAPSHOT_RATES.azure,
+      storageRate: diskTier.storageRates.azure,
+      snapshotRate: diskTier.snapshotRates.azure,
       egressRate: EGRESS_RATES.azure,
       egress: {
         egressTb,
@@ -2726,8 +2973,8 @@ app.post("/api/compare", async (req, res) => {
           source: "n/a",
         },
       },
-      storageRate: STORAGE_RATES.gcp,
-      snapshotRate: SNAPSHOT_RATES.gcp,
+      storageRate: diskTier.storageRates.gcp,
+      snapshotRate: diskTier.snapshotRates.gcp,
       egressRate: EGRESS_RATES.gcp,
       egress: {
         egressTb,
@@ -2751,6 +2998,13 @@ app.post("/api/compare", async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Cloud price app running at http://localhost:${PORT}`);
+    if (PRICING_WARMUP_ENABLED) {
+      warmPricingCaches().catch((error) => {
+        console.error("[pricing] Cache warm-up failed.", error);
+      });
+    } else {
+      console.log("[pricing] Cache warm-up disabled.");
+    }
   });
 }
 

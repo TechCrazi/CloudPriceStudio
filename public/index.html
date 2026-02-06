@@ -24,8 +24,8 @@
         <span class="badge">Cloud Price Studio</span>
         <h1>Compare VM and Kubernetes pricing across AWS, Azure, and GCP.</h1>
         <p>
-          Windows-only pricing with premium managed disks and a 10+ Gbps network
-          floor. Use the tabs to switch between VM sizing and managed
+          Windows-only pricing with a selectable disk tier and a 10+ Gbps
+          network floor. Use the tabs to switch between VM sizing and managed
           Kubernetes estimates, then compare monthly totals across AWS, Azure,
           and GCP.
         </p>
@@ -44,8 +44,8 @@
           <div class="card-header">
             <h2 id="form-title">Workload inputs</h2>
             <p id="form-subtitle">
-              Windows only, no local or temp disks, premium storage, network
-              >= 10 Gbps.
+              Windows only, no local or temp disks, disk tier selectable,
+              network >= 10 Gbps.
             </p>
           </div>
           <div class="form-grid">
@@ -102,6 +102,15 @@
               <select name="pricingProvider">
                 <option value="retail">Retail (Vantage)</option>
                 <option value="api">API (cloud provider)</option>
+              </select>
+            </label>
+            <label>
+              Disk tier
+              <select name="diskTier" id="disk-tier-select">
+                <option value="max" selected>
+                  Max performance (Ultra/Extreme/io2 BE)
+                </option>
+                <option value="premium">Premium SSD</option>
               </select>
             </label>
             <label>
@@ -356,26 +365,27 @@
           </div>
           <div class="delta" id="delta"></div>
           <p class="disclaimer">
-            Storage uses premium managed disk rates (AWS io2, Azure Premium SSD,
-            GCP SSD PD estimates). In Kubernetes mode, data storage uses
-            shared file storage (EFS/Azure Files/Filestore), priced per
-            cluster from public provider pricing (cached; falls back to defaults); SQL pricing is disabled. Backups assume 15-day retention with 10%
-            daily delta changes and use the same per-GB rate when enabled. DR
-            uplift applies to compute + storage + backups + SQL (egress
-            excluded). Egress uses base internet out pricing for the first tier.
-            SQL license add-on is estimated per vCPU-hour and can be overridden.
-            AWS compute uses Windows BYOL pricing; SQL is added via the license
-            input. Kubernetes mode uses Linux nodes and adds premium control
-            plane fees (EKS ~$365/mo, AKS ~$438/mo, GKE ~$365/mo at 730 hours).
-            Pricing provider toggles cloud APIs versus the public Vantage
-            snapshot. API mode requires AWS/GCP credentials (Azure Retail
-            Prices API is public); missing keys are reported per provider.
-            Retail mode uses Vantage snapshots. GCP
-            network is shown as Variable and is not filtered by the 10 Gbps
-            floor. Reserved tiers use 1-year and 3-year no-upfront terms and
-            apply to compute only; GCP reserved tiers are not included. AWS
-            reserved pricing is set to Convertible (no upfront). Data and
-            egress disk math treats 1 TB as 1024 GB.
+            Storage uses the selected disk tier (Premium SSD or Max performance
+            with an uplift for ultra tiers; per-IOPS charges are not modeled).
+            In Kubernetes mode, data storage uses shared file storage
+            (EFS/Azure Files/Filestore), priced per cluster from public provider
+            pricing (cached; falls back to defaults); SQL pricing is disabled.
+            Backups assume 15-day retention with 10% daily delta changes and
+            use the same per-GB rate when enabled. DR uplift applies to compute
+            + storage + backups + SQL (egress excluded). Egress uses base
+            internet out pricing for the first tier. SQL license add-on is
+            estimated per vCPU-hour and can be overridden. AWS compute uses
+            Windows BYOL pricing; SQL is added via the license input. Kubernetes
+            mode uses Linux nodes and adds premium control plane fees (EKS
+            ~$365/mo, AKS ~$438/mo, GKE ~$365/mo at 730 hours). Pricing provider
+            toggles cloud APIs versus the public Vantage snapshot. API mode
+            requires AWS/GCP credentials (Azure Retail Prices API is public);
+            missing keys are reported per provider. Retail mode uses Vantage
+            snapshots. GCP network is shown as Variable and is not filtered by
+            the 10 Gbps floor. Reserved tiers use 1-year and 3-year no-upfront
+            terms and apply to compute only; GCP reserved tiers are not
+            included. AWS reserved pricing is set to Convertible (no upfront).
+            Data and egress disk math treats 1 TB as 1024 GB.
           </p>
         </section>
       </section>

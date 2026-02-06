@@ -9,7 +9,7 @@ flavor and shows monthly totals.
 Constraints:
 - Windows-only pricing.
 - No local or temp disks (managed disk only).
-- Premium disk pricing and 10+ Gbps network floor.
+- Disk tier selectable (Premium SSD or Max performance) and 10+ Gbps network floor.
 - Minimum 8 vCPU and 8 GB RAM.
 - Pricing tiers show on-demand plus 1-year and 3-year reserved (no upfront).
 - AWS reserved type is fixed to Convertible (no upfront).
@@ -70,9 +70,23 @@ Azure Retail Prices API is public.
 
 Retail (Vantage) mode does not require credentials.
 
+## Pricing cache warm-up
+
+On startup, the app preloads pricing data for the supported instance sizes and
+regions so most requests hit in-memory caches instead of live API calls.
+
+- Set `PRICING_CACHE_WARMUP=false` to disable warm-up.
+- Set `PRICING_CACHE_CONCURRENCY=4` (or higher/lower) to tune API fan-out.
+- Warm-up uses AWS/GCP credentials when available; missing credentials skip
+  those providers.
+
 ## Notes
 
-- Storage defaults: AWS io2, Azure Premium SSD, and GCP SSD PD per-GB estimates.
+- Storage defaults: Premium SSD per-GB estimates. Max performance applies an
+  uplift to approximate Ultra/Extreme/io2 BE tiers; per-IOPS charges are not
+  modeled.
+- Disk tier defaults to Max performance in the UI and can be switched back to
+  Premium SSD.
 - Backups use 15-day retention with a 10% daily delta when enabled.
 - Snapshot storage uses the same per-GB rate as primary storage.
 - OS disk input is in GB; data disk input is in TB (1 TB = 1024 GB).
