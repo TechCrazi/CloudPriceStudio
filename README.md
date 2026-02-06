@@ -30,7 +30,7 @@ Open `http://localhost:3000`.
 ## Docker
 
 ```bash
-docker build --no-cache -t cloud-price .
+docker build --no-cache -t ghcr.io/techcrazi/cloudpricestudio:latest .
 ```
 
 ```bash
@@ -44,7 +44,7 @@ docker run --rm -p 3000:3000 \
   -e AWS_SECRET_ACCESS_KEY=... \
   -e GCP_PRICING_API_KEY=... \
   -e GCP_API_KEY=... \
-  cloud-price
+  ghcr.io/techcrazi/cloudpricestudio:latest
 ```
 
 ```bash
@@ -52,7 +52,9 @@ docker run --rm -p 3000:3000 \
   -v ~/.aws:/root/.aws:ro \
   -e AWS_PROFILE=profile-name \
   -e AWS_SDK_LOAD_CONFIG=1 \
-  cloud-price
+  -e GCP_PRICING_API_KEY=... \
+  -e GCP_API_KEY=... \
+  ghcr.io/techcrazi/cloudpricestudio:latest
 ```
 
 Open `http://localhost:3000`.
