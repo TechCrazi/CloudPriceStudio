@@ -1,4 +1,4 @@
-# Cloud Price Studio (v1)
+# Cloud Price Studio
 
 This is the v1 baseline. We will iterate on v2 in a follow-up branch.
 
