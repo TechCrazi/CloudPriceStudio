@@ -260,6 +260,361 @@ const EGRESS_RATES = {
   azure: 0.087,
   gcp: 0.12,
 };
+const NETWORK_ADDON_OPTIONS = {
+  aws: {
+    vpc: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      { key: "vpc-base", label: "VPC (base)", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "transit-gateway",
+        label: "Transit Gateway (per hour)",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AmazonVPC",
+          usagetypeIncludes: "TransitGateway-Hours",
+          operationIncludes: "TransitGatewayVPC",
+        },
+      },
+    ],
+    firewall: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "standard",
+        label: "Network Firewall (Standard)",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AWSNetworkFirewall",
+          usagetypeIncludes: /\\bEndpoint-Hour\\b/i,
+          subcategoryIncludes: /^Endpoint$/i,
+        },
+      },
+      {
+        key: "advanced",
+        label: "Network Firewall (Advanced inspection)",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AWSNetworkFirewall",
+          usagetypeIncludes: /Advanced-Inspection-Endpoint-Hour/i,
+          subcategoryIncludes: /Endpoint-Advanced/i,
+        },
+      },
+    ],
+    loadBalancer: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "classic",
+        label: "Classic ELB",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AWSELB",
+          usagetypeIncludes: "LoadBalancerUsage",
+        },
+      },
+      {
+        key: "application",
+        label: "Application LB (ALB)",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AWSELB",
+          usagetypeIncludes: "LoadBalancerUsage",
+        },
+      },
+      {
+        key: "network",
+        label: "Network LB (NLB)",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AWSELB",
+          usagetypeIncludes: "LoadBalancerUsage",
+        },
+      },
+      {
+        key: "gateway",
+        label: "Gateway LB (GWLB)",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AWSELB",
+          usagetypeIncludes: "LoadBalancerUsage",
+        },
+      },
+    ],
+  },
+  azure: {
+    vpc: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      { key: "vnet-base", label: "VNet (base)", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "vpn-basic",
+        label: "VPN Gateway Basic",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "Basic",
+          meterNameIncludes: "Basic",
+        },
+      },
+      {
+        key: "vpn-gw1",
+        label: "VPN Gateway VpnGw1",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw1",
+          meterNameIncludes: "VpnGw1",
+        },
+      },
+      {
+        key: "vpn-gw1az",
+        label: "VPN Gateway VpnGw1AZ",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw1AZ",
+          meterNameIncludes: "VpnGw1AZ",
+        },
+      },
+      {
+        key: "vpn-gw2",
+        label: "VPN Gateway VpnGw2",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw2",
+          meterNameIncludes: "VpnGw2",
+        },
+      },
+      {
+        key: "vpn-gw2az",
+        label: "VPN Gateway VpnGw2AZ",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw2AZ",
+          meterNameIncludes: "VpnGw2AZ",
+        },
+      },
+      {
+        key: "vpn-gw3",
+        label: "VPN Gateway VpnGw3",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw3",
+          meterNameIncludes: "VpnGw3",
+        },
+      },
+      {
+        key: "vpn-gw3az",
+        label: "VPN Gateway VpnGw3AZ",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw3AZ",
+          meterNameIncludes: "VpnGw3AZ",
+        },
+      },
+      {
+        key: "vpn-gw4",
+        label: "VPN Gateway VpnGw4",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw4",
+          meterNameIncludes: "VpnGw4",
+        },
+      },
+      {
+        key: "vpn-gw4az",
+        label: "VPN Gateway VpnGw4AZ",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw4AZ",
+          meterNameIncludes: "VpnGw4AZ",
+        },
+      },
+      {
+        key: "vpn-gw5",
+        label: "VPN Gateway VpnGw5",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw5",
+          meterNameIncludes: "VpnGw5",
+        },
+      },
+      {
+        key: "vpn-gw5az",
+        label: "VPN Gateway VpnGw5AZ",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw5AZ",
+          meterNameIncludes: "VpnGw5AZ",
+        },
+      },
+    ],
+    firewall: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "basic",
+        label: "Azure Firewall Basic",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Azure Firewall",
+          skuName: "Basic",
+          meterNameIncludes: "Deployment",
+        },
+      },
+      {
+        key: "standard",
+        label: "Azure Firewall Standard",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Azure Firewall",
+          skuName: "Standard",
+          meterNameIncludes: "Deployment",
+        },
+      },
+      {
+        key: "premium",
+        label: "Azure Firewall Premium",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Azure Firewall",
+          skuName: "Premium",
+          meterNameIncludes: "Deployment",
+        },
+      },
+    ],
+    loadBalancer: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "standard",
+        label: "Standard Load Balancer (L4)",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Load Balancer",
+          skuName: "Standard",
+          unitIncludes: "Hour",
+        },
+      },
+      {
+        key: "appgw-basic-small",
+        label: "App Gateway Basic (Small)",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Application Gateway",
+          productNameIncludes: "Basic Application Gateway",
+          meterNameIncludes: "Small Gateway",
+        },
+      },
+      {
+        key: "appgw-basic-medium",
+        label: "App Gateway Basic (Medium)",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Application Gateway",
+          productNameIncludes: "Basic Application Gateway",
+          meterNameIncludes: "Medium Gateway",
+        },
+      },
+      {
+        key: "appgw-basic-large",
+        label: "App Gateway Basic (Large)",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Application Gateway",
+          productNameIncludes: "Basic Application Gateway",
+          meterNameIncludes: "Large Gateway",
+        },
+      },
+      {
+        key: "appgw-waf-medium",
+        label: "App Gateway WAF (Medium)",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Application Gateway",
+          productNameIncludes: "WAF Application Gateway",
+          meterNameIncludes: "Medium Gateway",
+        },
+      },
+      {
+        key: "appgw-waf-large",
+        label: "App Gateway WAF (Large)",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "Application Gateway",
+          productNameIncludes: "WAF Application Gateway",
+          meterNameIncludes: "Large Gateway",
+        },
+      },
+    ],
+  },
+  gcp: {
+    vpc: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      { key: "vpc-base", label: "VPC (base)", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "cloud-vpn",
+        label: "Cloud VPN (HA)",
+        pricing: {
+          type: "gcp-billing",
+          serviceName: "Cloud VPN",
+          descriptionPatterns: ["VPN", "tunnel"],
+        },
+      },
+    ],
+    firewall: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      { key: "vpc-firewall", label: "VPC Firewall (rules)", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "cloud-armor",
+        label: "Cloud Armor (WAF)",
+        pricing: {
+          type: "gcp-billing",
+          serviceName: "Cloud Armor",
+          descriptionPatterns: ["policy"],
+        },
+      },
+    ],
+    loadBalancer: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "external-http",
+        label: "External HTTP(S) LB",
+        pricing: {
+          type: "gcp-billing",
+          serviceName: "Cloud Load Balancing",
+          descriptionPatterns: ["Forwarding Rule", "HTTP"],
+        },
+      },
+      {
+        key: "external-tcp",
+        label: "External TCP/UDP LB",
+        pricing: {
+          type: "gcp-billing",
+          serviceName: "Cloud Load Balancing",
+          descriptionPatterns: ["Forwarding Rule"],
+        },
+      },
+      {
+        key: "internal",
+        label: "Internal LB",
+        pricing: {
+          type: "gcp-billing",
+          serviceName: "Cloud Load Balancing",
+          descriptionPatterns: ["Forwarding Rule", "Internal"],
+        },
+      },
+    ],
+  },
+};
+const NETWORK_ADDON_DEFAULTS = {
+  aws: { vpc: "none", firewall: "none", loadBalancer: "none" },
+  azure: { vpc: "none", firewall: "none", loadBalancer: "none" },
+  gcp: { vpc: "none", firewall: "none", loadBalancer: "none" },
+};
 
 const SQL_LICENSE_RATES = {
   standard: 0.35,
@@ -330,12 +685,17 @@ const awsCache = new Map();
 const awsPublicCache = { loadedAt: 0, data: null };
 const awsPriceListIndexCache = { loadedAt: 0, data: null };
 const awsPriceListRegionCache = new Map();
+const awsServiceIndexCache = new Map();
+const awsServiceRegionCache = new Map();
 const azureCache = new Map();
 const azureReservedCache = new Map();
 const azurePublicCache = { loadedAt: 0, data: null };
+const azureNetworkCache = new Map();
 const gcpPublicCache = { loadedAt: 0, data: null };
 const gcpBillingCache = { loadedAt: 0, data: null };
 const gcpApiCache = new Map();
+const gcpServiceCache = { loadedAt: 0, data: null };
+const gcpServiceSkuCache = new Map();
 const awsEfsRegionIndexCache = { loadedAt: 0, data: null };
 const k8sSharedStorageCache = new Map();
 
@@ -397,6 +757,24 @@ function buildEmptyGcpFlavors() {
     output[key] = { label, sizes: [] };
   }
   return output;
+}
+
+function buildNetworkAddonOptions() {
+  const providers = {};
+  const defaults = {};
+  for (const [providerKey, addonMap] of Object.entries(
+    NETWORK_ADDON_OPTIONS
+  )) {
+    providers[providerKey] = {};
+    defaults[providerKey] = NETWORK_ADDON_DEFAULTS[providerKey] || {};
+    for (const [addonKey, options] of Object.entries(addonMap)) {
+      providers[providerKey][addonKey] = options.map((option) => ({
+        key: option.key,
+        label: option.label,
+      }));
+    }
+  }
+  return { providers, defaults };
 }
 
 function buildGcpFlavorSizesFromList(list, options) {
@@ -481,6 +859,7 @@ async function buildSizeOptions() {
       azure: { flavors: azureFlavors },
       gcp: { flavors: gcpFlavors },
     },
+    networkAddons: buildNetworkAddonOptions(),
   };
 }
 
@@ -1987,6 +2366,464 @@ async function getAzureOnDemandPrice({ skuName, region, os }) {
   return rate;
 }
 
+function toText(value) {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function includesMatch(value, matcher) {
+  if (!matcher) {
+    return true;
+  }
+  const text = toText(value);
+  if (!text) {
+    return false;
+  }
+  if (matcher instanceof RegExp) {
+    return matcher.test(text);
+  }
+  return text.toLowerCase().includes(toText(matcher).toLowerCase());
+}
+
+function listIncludes(list, matcher) {
+  if (!matcher) {
+    return true;
+  }
+  if (!Array.isArray(list)) {
+    return false;
+  }
+  const needle = toText(matcher).toLowerCase();
+  return list.some((item) => toText(item).toLowerCase().includes(needle));
+}
+
+function isHourlyUnit(unit) {
+  return /hour/i.test(toText(unit));
+}
+
+async function loadAwsServiceRegionIndex(serviceCode) {
+  const cached = awsServiceIndexCache.get(serviceCode);
+  if (cached && Date.now() - cached.loadedAt < AWS_PRICE_LIST_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const url = `${AWS_PRICE_LIST_BASE_URL}/offers/v1.0/aws/${serviceCode}/current/region_index.json`;
+  const response = await fetcher(url, {
+    headers: { "User-Agent": "cloud-price/0.1", Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`AWS ${serviceCode} price index fetch failed: ${response.status}`);
+  }
+  const data = await response.json();
+  awsServiceIndexCache.set(serviceCode, {
+    loadedAt: Date.now(),
+    data,
+  });
+  return data;
+}
+
+async function loadAwsServicePriceList(serviceCode, regionCode) {
+  const cacheKey = `${serviceCode}|${regionCode}`;
+  const cached = awsServiceRegionCache.get(cacheKey);
+  if (cached && Date.now() - cached.loadedAt < AWS_PRICE_LIST_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const index = await loadAwsServiceRegionIndex(serviceCode);
+  const regionEntry = index?.regions?.[regionCode];
+  if (!regionEntry?.currentVersionUrl) {
+    throw new Error(`AWS ${serviceCode} pricing missing for region.`);
+  }
+  const url = `${AWS_PRICE_LIST_BASE_URL}${regionEntry.currentVersionUrl}`;
+  const response = await fetcher(url, {
+    headers: { "User-Agent": "cloud-price/0.1", Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`AWS ${serviceCode} pricing fetch failed: ${response.status}`);
+  }
+  const data = await response.json();
+  awsServiceRegionCache.set(cacheKey, {
+    loadedAt: Date.now(),
+    data,
+  });
+  return data;
+}
+
+async function getAwsServiceHourlyRate({
+  serviceCode,
+  regionCode,
+  location,
+  matchers,
+}) {
+  const data = await loadAwsServicePriceList(serviceCode, regionCode);
+  const products = data.products || {};
+  const candidates = [];
+  for (const [sku, product] of Object.entries(products)) {
+    const attrs = product.attributes || {};
+    if (location && attrs.location && attrs.location !== location) {
+      continue;
+    }
+    if (
+      matchers?.productFamily &&
+      product.productFamily &&
+      product.productFamily !== matchers.productFamily
+    ) {
+      continue;
+    }
+    if (
+      matchers?.usagetypeIncludes &&
+      !includesMatch(attrs.usagetype, matchers.usagetypeIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.operationIncludes &&
+      !includesMatch(attrs.operation, matchers.operationIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.groupDescriptionIncludes &&
+      !includesMatch(attrs.groupDescription, matchers.groupDescriptionIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.subcategoryIncludes &&
+      !includesMatch(attrs.subcategory, matchers.subcategoryIncludes)
+    ) {
+      continue;
+    }
+    candidates.push({ sku, attrs });
+  }
+  for (const candidate of candidates) {
+    const terms = data.terms?.OnDemand?.[candidate.sku] || {};
+    for (const term of Object.values(terms)) {
+      for (const dimension of Object.values(term.priceDimensions || {})) {
+        if (!isHourlyUnit(dimension.unit)) {
+          continue;
+        }
+        const rate = Number.parseFloat(dimension.pricePerUnit?.USD || "0");
+        if (Number.isFinite(rate) && rate > 0) {
+          return rate;
+        }
+      }
+    }
+  }
+  throw new Error(`AWS ${serviceCode} hourly rate not found.`);
+}
+
+async function getAzureRetailHourlyRate({
+  serviceName,
+  region,
+  skuName,
+  productNameIncludes,
+  meterNameIncludes,
+  unitIncludes,
+  allowRegionFallback = true,
+}) {
+  const cacheKey = [
+    serviceName,
+    region,
+    skuName || "",
+    productNameIncludes || "",
+    meterNameIncludes || "",
+    unitIncludes || "",
+  ].join("|");
+  if (azureNetworkCache.has(cacheKey)) {
+    return azureNetworkCache.get(cacheKey);
+  }
+  const baseQuery = [
+    `serviceName eq '${serviceName}'`,
+    region ? `armRegionName eq '${region}'` : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  let url =
+    "https://prices.azure.com/api/retail/prices?$filter=" +
+    encodeURIComponent(baseQuery);
+  while (url) {
+    const response = await fetcher(url);
+    if (!response.ok) {
+      throw new Error(`Azure pricing API error: ${response.status}`);
+    }
+    const data = await response.json();
+    const items = data.Items || [];
+    const filtered = items.filter((item) => {
+      if (!isHourlyUnit(item.unitOfMeasure)) {
+        return false;
+      }
+      if (unitIncludes && !includesMatch(item.unitOfMeasure, unitIncludes)) {
+        return false;
+      }
+      if (skuName && item.skuName !== skuName) {
+        return false;
+      }
+      if (productNameIncludes && !includesMatch(item.productName, productNameIncludes)) {
+        return false;
+      }
+      if (meterNameIncludes && !includesMatch(item.meterName, meterNameIncludes)) {
+        return false;
+      }
+      return true;
+    });
+    const candidate = filtered[0] || null;
+    if (candidate) {
+      const rate = Number.parseFloat(candidate.retailPrice || "0");
+      if (Number.isFinite(rate)) {
+        azureNetworkCache.set(cacheKey, rate);
+        return rate;
+      }
+    }
+    url = data.NextPageLink || null;
+  }
+  if (region && allowRegionFallback) {
+    return getAzureRetailHourlyRate({
+      serviceName,
+      region: null,
+      skuName,
+      productNameIncludes,
+      meterNameIncludes,
+      unitIncludes,
+      allowRegionFallback: false,
+    });
+  }
+  throw new Error("Azure hourly rate not found.");
+}
+
+async function loadGcpServices(apiKey) {
+  if (
+    gcpServiceCache.data &&
+    Date.now() - gcpServiceCache.loadedAt < GCP_BILLING_CACHE_TTL_MS
+  ) {
+    return gcpServiceCache.data;
+  }
+  let url =
+    "https://cloudbilling.googleapis.com/v1/services?key=" +
+    encodeURIComponent(apiKey);
+  const services = [];
+  while (url) {
+    const response = await fetcher(url);
+    if (!response.ok) {
+      throw new Error(`GCP Billing API error: ${response.status}`);
+    }
+    const data = await response.json();
+    if (Array.isArray(data.services)) {
+      services.push(...data.services);
+    }
+    if (data.nextPageToken) {
+      url =
+        "https://cloudbilling.googleapis.com/v1/services?key=" +
+        encodeURIComponent(apiKey) +
+        `&pageToken=${encodeURIComponent(data.nextPageToken)}`;
+    } else {
+      url = null;
+    }
+  }
+  gcpServiceCache.data = services;
+  gcpServiceCache.loadedAt = Date.now();
+  return services;
+}
+
+async function getGcpServiceIdByName(apiKey, displayName) {
+  const services = await loadGcpServices(apiKey);
+  const normalized = toText(displayName).toLowerCase();
+  const exact = services.find(
+    (service) => toText(service.displayName).toLowerCase() === normalized
+  );
+  if (exact) {
+    return exact.name?.split("/").pop();
+  }
+  const partial = services.find((service) =>
+    toText(service.displayName).toLowerCase().includes(normalized)
+  );
+  if (!partial) {
+    throw new Error(`GCP service not found: ${displayName}`);
+  }
+  return partial.name?.split("/").pop();
+}
+
+async function loadGcpServiceSkus(apiKey, serviceId) {
+  const cached = gcpServiceSkuCache.get(serviceId);
+  if (cached && Date.now() - cached.loadedAt < GCP_BILLING_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  let url =
+    `https://cloudbilling.googleapis.com/v1/services/${serviceId}/skus?key=` +
+    encodeURIComponent(apiKey);
+  const skus = [];
+  while (url) {
+    const response = await fetcher(url);
+    if (!response.ok) {
+      throw new Error(`GCP Billing API error: ${response.status}`);
+    }
+    const data = await response.json();
+    if (Array.isArray(data.skus)) {
+      skus.push(...data.skus);
+    }
+    if (data.nextPageToken) {
+      url =
+        `https://cloudbilling.googleapis.com/v1/services/${serviceId}/skus?key=` +
+        encodeURIComponent(apiKey) +
+        `&pageToken=${encodeURIComponent(data.nextPageToken)}`;
+    } else {
+      url = null;
+    }
+  }
+  gcpServiceSkuCache.set(serviceId, { data: skus, loadedAt: Date.now() });
+  return skus;
+}
+
+function findGcpHourlySkuRate({ skus, region, descriptionPatterns }) {
+  const patterns = (descriptionPatterns || []).map((pattern) =>
+    pattern instanceof RegExp ? pattern : new RegExp(pattern, "i")
+  );
+  const candidate = skus.find((sku) => {
+    const description = toText(sku.description);
+    if (!patterns.every((pattern) => pattern.test(description))) {
+      return false;
+    }
+    const regions = sku.serviceRegions || [];
+    if (!listIncludes(regions, region) && !regions.includes("global")) {
+      return false;
+    }
+    const pricingInfo = sku.pricingInfo || [];
+    const usageUnit = pricingInfo[0]?.pricingExpression?.usageUnit;
+    const usageDesc = pricingInfo[0]?.pricingExpression?.usageUnitDescription;
+    if (!isHourlyUnit(usageUnit) && !isHourlyUnit(usageDesc)) {
+      return false;
+    }
+    return true;
+  });
+  const price =
+    candidate?.pricingInfo?.[0]?.pricingExpression?.tieredRates?.[0]
+      ?.unitPrice;
+  const rate = unitPriceToNumber(price);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return null;
+  }
+  return rate;
+}
+
+function resolveNetworkFlavor(providerKey, addonKey, flavorKey) {
+  const options = NETWORK_ADDON_OPTIONS[providerKey]?.[addonKey] || [];
+  const defaults = NETWORK_ADDON_DEFAULTS[providerKey] || {};
+  const fallbackKey = defaults[addonKey] || (options[0] ? options[0].key : "");
+  const resolvedKey = flavorKey || fallbackKey;
+  return (
+    options.find((option) => option.key === resolvedKey) ||
+    options.find((option) => option.key === fallbackKey) ||
+    options[0] ||
+    null
+  );
+}
+
+async function resolveNetworkAddonRate({
+  providerKey,
+  addonKey,
+  flavor,
+  region,
+}) {
+  const pricing = flavor?.pricing || {};
+  if (pricing.type === "static") {
+    return { hourlyRate: pricing.hourly || 0, source: "static" };
+  }
+  if (pricing.type === "aws-price-list") {
+    const rate = await getAwsServiceHourlyRate({
+      serviceCode: pricing.serviceCode,
+      regionCode: region.aws.region,
+      location: region.aws.location,
+      matchers: pricing,
+    });
+    return { hourlyRate: rate, source: "aws-price-list" };
+  }
+  if (pricing.type === "azure-retail") {
+    const rate = await getAzureRetailHourlyRate({
+      serviceName: pricing.serviceName,
+      region: region.azure.region,
+      skuName: pricing.skuName,
+      productNameIncludes: pricing.productNameIncludes,
+      meterNameIncludes: pricing.meterNameIncludes,
+      unitIncludes: pricing.unitIncludes,
+    });
+    return { hourlyRate: rate, source: "azure-retail-api" };
+  }
+  if (pricing.type === "gcp-billing") {
+    if (!hasGcpApiCredentials()) {
+      throw new Error("GCP API key missing.");
+    }
+    const serviceId = await getGcpServiceIdByName(
+      getGcpApiKey(),
+      pricing.serviceName
+    );
+    const skus = await loadGcpServiceSkus(getGcpApiKey(), serviceId);
+    const rate = findGcpHourlySkuRate({
+      skus,
+      region: region.gcp.region,
+      descriptionPatterns: pricing.descriptionPatterns,
+    });
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error("GCP hourly rate not found.");
+    }
+    return { hourlyRate: rate, source: "gcp-cloud-billing" };
+  }
+  return { hourlyRate: 0, source: "unknown" };
+}
+
+async function resolveNetworkAddonsForProvider({
+  providerKey,
+  region,
+  selections,
+  hours,
+}) {
+  const items = [];
+  const errors = [];
+  let hourlyTotal = 0;
+  for (const addonKey of ["vpc", "firewall", "loadBalancer"]) {
+    const flavor = resolveNetworkFlavor(
+      providerKey,
+      addonKey,
+      selections?.[addonKey]
+    );
+    if (!flavor || flavor.key === "none") {
+      continue;
+    }
+    try {
+      const { hourlyRate, source } = await resolveNetworkAddonRate({
+        providerKey,
+        addonKey,
+        flavor,
+        region,
+      });
+      hourlyTotal += hourlyRate;
+      items.push({
+        addonKey,
+        key: flavor.key,
+        label: flavor.label,
+        hourlyRate,
+        source,
+        status: "ok",
+      });
+    } catch (error) {
+      errors.push(`${addonKey}:${flavor.label}`);
+      items.push({
+        addonKey,
+        key: flavor.key,
+        label: flavor.label,
+        hourlyRate: 0,
+        source: "missing",
+        status: "error",
+      });
+    }
+  }
+  const monthlyTotal = Number.isFinite(hours) ? hours * hourlyTotal : 0;
+  const note = errors.length
+    ? `Network add-on pricing missing for ${errors.join(", ")}.`
+    : null;
+  return {
+    items,
+    hourlyTotal,
+    monthlyTotal,
+    note,
+  };
+}
+
 function computeTotals({
   hourlyRate,
   osDiskGb,
@@ -1998,6 +2835,7 @@ function computeTotals({
   dataStorageRate,
   snapshotRate,
   egressRate,
+  networkMonthly,
   sqlLicenseRate,
   vcpu,
   drPercent,
@@ -2036,6 +2874,7 @@ function computeTotals({
   const backupMonthly = backupBase * scale;
   const egressMonthly = egressBase * egressMultiplier;
   const sqlMonthly = sqlBase * scale;
+  const networkBase = Number.isFinite(networkMonthly) ? networkMonthly : 0;
   const drRate = Number.isFinite(drPercent) ? drPercent / 100 : 0;
   const drMonthly =
     drRate > 0
@@ -2049,6 +2888,7 @@ function computeTotals({
     egressMonthly +
     sqlMonthly +
     drMonthly +
+    networkBase +
     controlPlane;
   return {
     computeMonthly,
@@ -2057,6 +2897,7 @@ function computeTotals({
     backupMonthly,
     egressMonthly,
     sqlMonthly,
+    networkMonthly: networkBase,
     drMonthly,
     total,
   };
@@ -2098,6 +2939,36 @@ app.post("/api/compare", async (req, res) => {
   const dataDiskGb = dataDiskTb * 1024;
   const storageGb = osDiskGb + dataDiskGb;
   const backupEnabled = toBoolean(body.backupEnabled);
+  const awsVpcFlavor =
+    typeof body.awsVpcFlavor === "string" ? body.awsVpcFlavor.trim() : "";
+  const awsFirewallFlavor =
+    typeof body.awsFirewallFlavor === "string"
+      ? body.awsFirewallFlavor.trim()
+      : "";
+  const awsLoadBalancerFlavor =
+    typeof body.awsLoadBalancerFlavor === "string"
+      ? body.awsLoadBalancerFlavor.trim()
+      : "";
+  const azureVpcFlavor =
+    typeof body.azureVpcFlavor === "string" ? body.azureVpcFlavor.trim() : "";
+  const azureFirewallFlavor =
+    typeof body.azureFirewallFlavor === "string"
+      ? body.azureFirewallFlavor.trim()
+      : "";
+  const azureLoadBalancerFlavor =
+    typeof body.azureLoadBalancerFlavor === "string"
+      ? body.azureLoadBalancerFlavor.trim()
+      : "";
+  const gcpVpcFlavor =
+    typeof body.gcpVpcFlavor === "string" ? body.gcpVpcFlavor.trim() : "";
+  const gcpFirewallFlavor =
+    typeof body.gcpFirewallFlavor === "string"
+      ? body.gcpFirewallFlavor.trim()
+      : "";
+  const gcpLoadBalancerFlavor =
+    typeof body.gcpLoadBalancerFlavor === "string"
+      ? body.gcpLoadBalancerFlavor.trim()
+      : "";
   const snapshotMultiplier =
     1 +
     Math.max(0, BACKUP_RETENTION_DAYS - 1) *
@@ -2167,6 +3038,45 @@ app.post("/api/compare", async (req, res) => {
     sharedStorageRates = sharedStorage.rates;
     sharedStorageSources = sharedStorage.sources;
   }
+  const awsNetworkSelections = {
+    vpc: awsVpcFlavor,
+    firewall: awsFirewallFlavor,
+    loadBalancer: awsLoadBalancerFlavor,
+  };
+  const azureNetworkSelections = {
+    vpc: azureVpcFlavor,
+    firewall: azureFirewallFlavor,
+    loadBalancer: azureLoadBalancerFlavor,
+  };
+  const gcpNetworkSelections = {
+    vpc: gcpVpcFlavor,
+    firewall: gcpFirewallFlavor,
+    loadBalancer: gcpLoadBalancerFlavor,
+  };
+  const [
+    awsNetworkAddons,
+    azureNetworkAddons,
+    gcpNetworkAddons,
+  ] = await Promise.all([
+    resolveNetworkAddonsForProvider({
+      providerKey: "aws",
+      region,
+      selections: awsNetworkSelections,
+      hours,
+    }),
+    resolveNetworkAddonsForProvider({
+      providerKey: "azure",
+      region,
+      selections: azureNetworkSelections,
+      hours,
+    }),
+    resolveNetworkAddonsForProvider({
+      providerKey: "gcp",
+      region,
+      selections: gcpNetworkSelections,
+      hours,
+    }),
+  ]);
 
   const awsSizes = collectProviderSizes(
     AWS_FAMILIES,
@@ -2655,6 +3565,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.aws,
     snapshotRate: diskTier.snapshotRates.aws,
     egressRate: EGRESS_RATES.aws,
+    networkMonthly: awsNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: awsSize.vcpu,
     drPercent,
@@ -2676,6 +3587,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.azure,
     snapshotRate: diskTier.snapshotRates.azure,
     egressRate: EGRESS_RATES.azure,
+    networkMonthly: azureNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: azureSize.vcpu,
     drPercent,
@@ -2697,6 +3609,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.aws,
     snapshotRate: diskTier.snapshotRates.aws,
     egressRate: EGRESS_RATES.aws,
+    networkMonthly: awsNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: awsSize.vcpu,
     drPercent,
@@ -2718,6 +3631,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.aws,
     snapshotRate: diskTier.snapshotRates.aws,
     egressRate: EGRESS_RATES.aws,
+    networkMonthly: awsNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: awsSize.vcpu,
     drPercent,
@@ -2739,6 +3653,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.azure,
     snapshotRate: diskTier.snapshotRates.azure,
     egressRate: EGRESS_RATES.azure,
+    networkMonthly: azureNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: azureSize.vcpu,
     drPercent,
@@ -2760,6 +3675,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.azure,
     snapshotRate: diskTier.snapshotRates.azure,
     egressRate: EGRESS_RATES.azure,
+    networkMonthly: azureNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: azureSize.vcpu,
     drPercent,
@@ -2781,6 +3697,7 @@ app.post("/api/compare", async (req, res) => {
     dataStorageRate: dataStorageRates.gcp,
     snapshotRate: diskTier.snapshotRates.gcp,
     egressRate: EGRESS_RATES.gcp,
+    networkMonthly: gcpNetworkAddons.monthlyTotal,
     sqlLicenseRate,
     vcpu: gcpSize?.vcpu || cpu,
     drPercent,
@@ -2799,8 +3716,8 @@ app.post("/api/compare", async (req, res) => {
     useApiPricing ? "azure-retail-reservation" : "public-snapshot";
   const constraintsNote =
     mode === "k8s"
-      ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
-      : "Windows-only. Disk tier selectable (Premium or Max performance). No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
+      ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
+      : "Windows-only. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
 
   res.json({
     input: {
@@ -2831,6 +3748,15 @@ app.post("/api/compare", async (req, res) => {
       sqlLicenseRate,
       diskTier: diskTierKey,
       diskTierLabel: diskTier.label,
+      awsVpcFlavor,
+      awsFirewallFlavor,
+      awsLoadBalancerFlavor,
+      azureVpcFlavor,
+      azureFirewallFlavor,
+      azureLoadBalancerFlavor,
+      gcpVpcFlavor,
+      gcpFirewallFlavor,
+      gcpLoadBalancerFlavor,
     },
     region,
     aws: {
@@ -2849,6 +3775,7 @@ app.post("/api/compare", async (req, res) => {
         retentionDays: BACKUP_RETENTION_DAYS,
         dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
       },
+      networkAddons: awsNetworkAddons,
       dr: {
         percent: drPercent,
       },
@@ -2902,6 +3829,7 @@ app.post("/api/compare", async (req, res) => {
         retentionDays: BACKUP_RETENTION_DAYS,
         dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
       },
+      networkAddons: azureNetworkAddons,
       dr: {
         percent: drPercent,
       },
@@ -2952,6 +3880,7 @@ app.post("/api/compare", async (req, res) => {
         retentionDays: BACKUP_RETENTION_DAYS,
         dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
       },
+      networkAddons: gcpNetworkAddons,
       dr: {
         percent: drPercent,
       },

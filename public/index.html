@@ -147,6 +147,64 @@
                 value="1"
               />
             </label>
+            <div class="form-section">Network add-ons</div>
+            <label>
+              AWS VPC
+              <select name="awsVpcFlavor" id="aws-vpc-flavor"></select>
+            </label>
+            <label>
+              AWS firewall
+              <select name="awsFirewallFlavor" id="aws-firewall-flavor"></select>
+            </label>
+            <label>
+              AWS load balancer
+              <select
+                name="awsLoadBalancerFlavor"
+                id="aws-lb-flavor"
+              ></select>
+            </label>
+            <label>
+              Azure VNet
+              <select
+                name="azureVpcFlavor"
+                id="azure-vnet-flavor"
+              ></select>
+            </label>
+            <label>
+              Azure firewall
+              <select
+                name="azureFirewallFlavor"
+                id="azure-firewall-flavor"
+              ></select>
+            </label>
+            <label>
+              Azure load balancer
+              <select
+                name="azureLoadBalancerFlavor"
+                id="azure-lb-flavor"
+              ></select>
+            </label>
+            <label>
+              GCP VPC
+              <select
+                name="gcpVpcFlavor"
+                id="gcp-vpc-flavor"
+              ></select>
+            </label>
+            <label>
+              GCP firewall
+              <select
+                name="gcpFirewallFlavor"
+                id="gcp-firewall-flavor"
+              ></select>
+            </label>
+            <label>
+              GCP load balancer
+              <select
+                name="gcpLoadBalancerFlavor"
+                id="gcp-lb-flavor"
+              ></select>
+            </label>
             <label>
               DR uplift (% of compute + storage + SQL)
               <input
@@ -372,8 +430,11 @@
             pricing (cached; falls back to defaults); SQL pricing is disabled.
             Backups assume 15-day retention with 10% daily delta changes and
             use the same per-GB rate when enabled. DR uplift applies to compute
-            + storage + backups + SQL (egress excluded). Egress uses base
-            internet out pricing for the first tier. SQL license add-on is
+            + storage + backups + SQL (egress excluded). Network add-ons pull
+            base hourly rates from provider pricing APIs/price lists (no data
+            processing or per-rule charges). Egress uses base internet out
+            pricing for the first tier. SQL license
+            add-on is
             estimated per vCPU-hour and can be overridden. AWS compute uses
             Windows BYOL pricing; SQL is added via the license input. Kubernetes
             mode uses Linux nodes and adds premium control plane fees (EKS
@@ -385,7 +446,9 @@
             the 10 Gbps floor. Reserved tiers use 1-year and 3-year no-upfront
             terms and apply to compute only; GCP reserved tiers are not
             included. AWS reserved pricing is set to Convertible (no upfront).
-            Data and egress disk math treats 1 TB as 1024 GB.
+            Data and egress disk math treats 1 TB as 1024 GB. If a network
+            flavor has no hourly SKU in the pricing API, it is treated as $0
+            and called out in the provider note.
           </p>
         </section>
       </section>

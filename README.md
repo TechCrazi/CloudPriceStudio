@@ -10,6 +10,8 @@ Constraints:
 - Windows-only pricing.
 - No local or temp disks (managed disk only).
 - Disk tier selectable (Premium SSD or Max performance) and 10+ Gbps network floor.
+- Optional network add-ons with provider-specific flavors: VPC/VNet, managed
+  firewall, and load balancer.
 - Minimum 8 vCPU and 8 GB RAM.
 - Pricing tiers show on-demand plus 1-year and 3-year reserved (no upfront).
 - AWS reserved type is fixed to Convertible (no upfront).
@@ -92,6 +94,12 @@ regions so most requests hit in-memory caches instead of live API calls.
 - OS disk input is in GB; data disk input is in TB (1 TB = 1024 GB).
 - Egress input is in TB (1 TB = 1024 GB) with a 1 TB minimum; VM mode scales
   egress by VM count.
+- Network add-ons use provider pricing APIs/price lists for base hourly rates.
+  Data processing, per-rule, and LCU-style usage charges are not included.
+  If a flavor has no hourly SKU, the app treats it as $0 and flags the provider
+  note.
+- AWS load balancer flavors use the base ELB hourly SKU from the public price
+  list (ALB/NLB/GWLB usage-based charges are excluded).
 - DR uplift applies to compute + storage + backups + SQL (egress excluded).
 - VM count scales all monthly totals.
 - Kubernetes mode uses Linux nodes and adds premium control plane fees for

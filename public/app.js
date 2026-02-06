@@ -24,6 +24,15 @@ const workloadSelect = form.querySelector("[name='workload']");
 const awsInstanceSelect = document.getElementById("aws-instance");
 const azureInstanceSelect = document.getElementById("azure-instance");
 const gcpInstanceSelect = document.getElementById("gcp-instance");
+const awsVpcSelect = document.getElementById("aws-vpc-flavor");
+const awsFirewallSelect = document.getElementById("aws-firewall-flavor");
+const awsLbSelect = document.getElementById("aws-lb-flavor");
+const azureVpcSelect = document.getElementById("azure-vnet-flavor");
+const azureFirewallSelect = document.getElementById("azure-firewall-flavor");
+const azureLbSelect = document.getElementById("azure-lb-flavor");
+const gcpVpcSelect = document.getElementById("gcp-vpc-flavor");
+const gcpFirewallSelect = document.getElementById("gcp-firewall-flavor");
+const gcpLbSelect = document.getElementById("gcp-lb-flavor");
 const diskTierSelect = form.querySelector("[name='diskTier']");
 const sqlEditionSelect = form.querySelector("[name='sqlEdition']");
 const sqlRateInput = form.querySelector("[name='sqlLicenseRate']");
@@ -420,12 +429,24 @@ function updateProvider(target, provider, region, options = {}) {
         controlPlaneMonthly
       )}${perHostLabel}`;
     }
+    const networkItems = Array.isArray(provider.networkAddons?.items)
+      ? provider.networkAddons.items
+      : [];
+    let networkLine = null;
+    if (networkItems.length) {
+      const labels = networkItems.map((item) => item.label);
+      const networkMonthly = breakdownTotals.networkMonthly;
+      networkLine = `Network ${formatMoney(networkMonthly)} (${labels.join(
+        " + "
+      )})`;
+    }
     const breakdownLines = [
       `Compute ${formatMoney(breakdownTotals.computeMonthly)}`,
       controlPlaneLine,
       `Storage ${formatMoney(breakdownTotals.storageMonthly)} ${storageInfo}`.trim(),
       `Backups ${formatMoney(breakdownTotals.backupMonthly)} ${backupInfo}`.trim(),
       `DR ${formatMoney(breakdownTotals.drMonthly)} ${drInfo}`.trim(),
+      networkLine,
       `Egress ${formatMoney(breakdownTotals.egressMonthly)}`,
       sqlLine,
     ].filter(Boolean);
@@ -453,6 +474,9 @@ function updateProvider(target, provider, region, options = {}) {
   const noteParts = [];
   if (provider.message) {
     noteParts.push(provider.message);
+  }
+  if (provider.networkAddons?.note) {
+    noteParts.push(provider.networkAddons.note);
   }
   if (options.mode !== "k8s" && provider.sqlNote) {
     noteParts.push(provider.sqlNote);
@@ -546,6 +570,7 @@ async function loadSizeOptions() {
   sizeOptions = await response.json();
   updateCpuOptions();
   updateInstanceOptions();
+  updateNetworkAddonOptions();
 }
 
 function setSelectOptions(select, options, currentValue) {
@@ -560,6 +585,27 @@ function setSelectOptions(select, options, currentValue) {
     select.value = currentValue.toString();
   } else if (options.length) {
     select.value = options[0].toString();
+  }
+}
+
+function setSelectOptionsWithLabels(select, options, currentValue) {
+  if (!(select instanceof HTMLSelectElement)) {
+    return;
+  }
+  select.innerHTML = "";
+  options.forEach((optionValue) => {
+    const option = document.createElement("option");
+    option.value = optionValue.key;
+    option.textContent = optionValue.label;
+    select.appendChild(option);
+  });
+  if (
+    currentValue &&
+    options.some((optionValue) => optionValue.key === currentValue)
+  ) {
+    select.value = currentValue;
+  } else if (options.length) {
+    select.value = options[0].key;
   }
 }
 
@@ -590,6 +636,16 @@ function collectProviderSizes(providerKey, flavorKeys) {
     });
   });
   return sizes;
+}
+
+function getNetworkAddonLabel(providerKey, addonKey, flavorKey) {
+  const options =
+    sizeOptions?.networkAddons?.providers?.[providerKey]?.[addonKey];
+  if (!Array.isArray(options)) {
+    return null;
+  }
+  const match = options.find((option) => option.key === flavorKey);
+  return match?.label || null;
 }
 
 function buildCpuOptions() {
@@ -686,6 +742,60 @@ function updateInstanceOptions() {
   setInstanceOptions(gcpInstanceSelect, gcpSizes, gcpInstanceSelect.value);
 }
 
+function updateNetworkAddonOptions() {
+  const networkAddons = sizeOptions?.networkAddons;
+  if (!networkAddons) {
+    return;
+  }
+  const providers = networkAddons.providers || {};
+  const defaults = networkAddons.defaults || {};
+  setSelectOptionsWithLabels(
+    awsVpcSelect,
+    providers.aws?.vpc || [],
+    awsVpcSelect?.value || defaults.aws?.vpc
+  );
+  setSelectOptionsWithLabels(
+    awsFirewallSelect,
+    providers.aws?.firewall || [],
+    awsFirewallSelect?.value || defaults.aws?.firewall
+  );
+  setSelectOptionsWithLabels(
+    awsLbSelect,
+    providers.aws?.loadBalancer || [],
+    awsLbSelect?.value || defaults.aws?.loadBalancer
+  );
+  setSelectOptionsWithLabels(
+    azureVpcSelect,
+    providers.azure?.vpc || [],
+    azureVpcSelect?.value || defaults.azure?.vpc
+  );
+  setSelectOptionsWithLabels(
+    azureFirewallSelect,
+    providers.azure?.firewall || [],
+    azureFirewallSelect?.value || defaults.azure?.firewall
+  );
+  setSelectOptionsWithLabels(
+    azureLbSelect,
+    providers.azure?.loadBalancer || [],
+    azureLbSelect?.value || defaults.azure?.loadBalancer
+  );
+  setSelectOptionsWithLabels(
+    gcpVpcSelect,
+    providers.gcp?.vpc || [],
+    gcpVpcSelect?.value || defaults.gcp?.vpc
+  );
+  setSelectOptionsWithLabels(
+    gcpFirewallSelect,
+    providers.gcp?.firewall || [],
+    gcpFirewallSelect?.value || defaults.gcp?.firewall
+  );
+  setSelectOptionsWithLabels(
+    gcpLbSelect,
+    providers.gcp?.loadBalancer || [],
+    gcpLbSelect?.value || defaults.gcp?.loadBalancer
+  );
+}
+
 function serializeForm(formElement) {
   const data = Object.fromEntries(new FormData(formElement).entries());
   return {
@@ -704,6 +814,15 @@ function serializeForm(formElement) {
     egressTb: Number.parseFloat(data.egressTb),
     hours: Number.parseFloat(data.hours),
     backupEnabled: data.backupEnabled === "on",
+    awsVpcFlavor: data.awsVpcFlavor,
+    awsFirewallFlavor: data.awsFirewallFlavor,
+    awsLoadBalancerFlavor: data.awsLoadBalancerFlavor,
+    azureVpcFlavor: data.azureVpcFlavor,
+    azureFirewallFlavor: data.azureFirewallFlavor,
+    azureLoadBalancerFlavor: data.azureLoadBalancerFlavor,
+    gcpVpcFlavor: data.gcpVpcFlavor,
+    gcpFirewallFlavor: data.gcpFirewallFlavor,
+    gcpLoadBalancerFlavor: data.gcpLoadBalancerFlavor,
     vmCount: Number.parseInt(data.vmCount, 10),
     drPercent: Number.parseFloat(data.drPercent),
     sqlLicenseRate: Number.parseFloat(data.sqlLicenseRate),
@@ -748,6 +867,28 @@ async function fetchAndRender() {
     DISK_TIER_LABELS[diskTierSelect?.value];
   if (diskTierLabel) {
     noteParts.push(`Disk tier: ${diskTierLabel}.`);
+  }
+  const networkSummaries = [];
+  const input = data.input || {};
+  const providerKeys = ["aws", "azure", "gcp"];
+  providerKeys.forEach((providerKey) => {
+    const entries = [
+      ["vpc", input[`${providerKey}VpcFlavor`]],
+      ["firewall", input[`${providerKey}FirewallFlavor`]],
+      ["loadBalancer", input[`${providerKey}LoadBalancerFlavor`]],
+    ];
+    const labels = entries
+      .map(([addonKey, flavorKey]) =>
+        getNetworkAddonLabel(providerKey, addonKey, flavorKey)
+      )
+      .filter((label) => label && label.toLowerCase() !== "none");
+    if (labels.length) {
+      const providerLabel = getProviderLabelForMode(providerKey, mode);
+      networkSummaries.push(`${providerLabel}: ${labels.join(", ")}`);
+    }
+  });
+  if (networkSummaries.length) {
+    noteParts.push(`Network add-ons: ${networkSummaries.join(" | ")}.`);
   }
   if (vmCount && vmCount > 1) {
     const countLabel = mode === "k8s" ? "nodes" : "VMs";
@@ -834,6 +975,7 @@ function buildCsv(data) {
             : "",
         Storage_Monthly: totals?.storageMonthly ?? "",
         Backup_Monthly: totals?.backupMonthly ?? "",
+        Network_Monthly: totals?.networkMonthly ?? "",
         DR_Monthly: totals?.drMonthly ?? "",
         Egress_Monthly: totals?.egressMonthly ?? "",
         SQL_Monthly: totals?.sqlMonthly ?? "",
@@ -845,6 +987,15 @@ function buildCsv(data) {
         OS_Disk_GB: input.osDiskGb ?? "",
         Data_Disk_TB: input.dataDiskTb ?? "",
         Backups_Enabled: input.backupEnabled ? "Yes" : "No",
+        AWS_VPC: input.awsVpcFlavor ?? "",
+        AWS_Firewall: input.awsFirewallFlavor ?? "",
+        AWS_Load_Balancer: input.awsLoadBalancerFlavor ?? "",
+        Azure_VNet: input.azureVpcFlavor ?? "",
+        Azure_Firewall: input.azureFirewallFlavor ?? "",
+        Azure_Load_Balancer: input.azureLoadBalancerFlavor ?? "",
+        GCP_VPC: input.gcpVpcFlavor ?? "",
+        GCP_Firewall: input.gcpFirewallFlavor ?? "",
+        GCP_Load_Balancer: input.gcpLoadBalancerFlavor ?? "",
         Backup_Snapshot_GB: provider.data?.backup?.snapshotGb ?? "",
         DR_Percent: input.drPercent ?? "",
         Egress_TB: input.egressTb ?? "",
@@ -920,6 +1071,16 @@ window.addEventListener("load", async () => {
     setInstanceOptions(awsInstanceSelect, [], "");
     setInstanceOptions(azureInstanceSelect, [], "");
     setInstanceOptions(gcpInstanceSelect, [], "");
+    const fallbackOptions = [{ key: "none", label: "None" }];
+    setSelectOptionsWithLabels(awsVpcSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(awsFirewallSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(awsLbSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(azureVpcSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(azureFirewallSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(azureLbSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(gcpVpcSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(gcpFirewallSelect, fallbackOptions, "none");
+    setSelectOptionsWithLabels(gcpLbSelect, fallbackOptions, "none");
   }
   handleCompare();
 });
