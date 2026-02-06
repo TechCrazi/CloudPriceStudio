@@ -250,4 +250,10 @@ slim build \
 docker login
 docker push ghcr.io/techcrazi/cloudpricestudio:slim-amd64
 docker push ghcr.io/techcrazi/cloudpricestudio:slim-arm64
+
+docker manifest create ghcr.io/techcrazi/cloudpricestudio:slim \
+  --amend ghcr.io/techcrazi/cloudpricestudio:slim-amd64 \
+  --amend ghcr.io/techcrazi/cloudpricestudio:slim-arm64
+
+docker manifest push ghcr.io/techcrazi/cloudpricestudio:slim
 ```
