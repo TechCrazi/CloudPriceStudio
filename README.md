@@ -1,7 +1,5 @@
 # Cloud Price Studio
 
-This is the v1 baseline. We will iterate on v2 in a follow-up branch.
-
 Compare AWS, Azure, and GCP VM pricing by CPU, RAM, region, OS disk (GB), data disk
 (TB), egress (TB), and SQL Server edition. The app selects the closest VM size by
 flavor and shows monthly totals.
@@ -29,15 +27,17 @@ Open `http://localhost:3000`.
 
 ## Docker
 
+### Build Image
 ```bash
 docker build --no-cache -t ghcr.io/techcrazi/cloudpricestudio:latest .
 ```
-
+### Push to GHCR
 ```bash
+docker login ghcr.io
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/techcrazi/cloudpricestudio:latest . --push
 ```
 
-
+### Docker Run Container with API Keys
 ```bash
 docker run --rm -p 3000:3000 \
   -e AWS_ACCESS_KEY_ID=... \
@@ -47,6 +47,7 @@ docker run --rm -p 3000:3000 \
   ghcr.io/techcrazi/cloudpricestudio:latest
 ```
 
+### Docker Run Container with API Keys & AWS Config Map
 ```bash
 docker run --rm -p 3000:3000 \
   -v ~/.aws:/root/.aws:ro \
@@ -57,7 +58,9 @@ docker run --rm -p 3000:3000 \
   ghcr.io/techcrazi/cloudpricestudio:latest
 ```
 
+#### Local App UI
 Open `http://localhost:3000`.
+
 
 ## Pricing provider
 
@@ -69,6 +72,9 @@ Use the Pricing provider dropdown to choose between:
 
 API mode requires AWS/GCP credentials; when missing, the UI shows "API key missing".
 Azure Retail Prices API is public.
+Network add-ons (VPC/VNet, firewall, load balancer) always use provider pricing
+APIs/price lists; GCP add-ons require a GCP API key even in Retail mode and will
+show $0 with a provider note when missing.
 
 ### AWS API credentials
 
@@ -180,7 +186,7 @@ wsl --install -d Ubuntu
 
   - Click Apply & Restart
 
-  - SSH into Ubunut WSL
+  - SSH into Ubuntu WSL
   - Install Slim
   ```bash
   curl -sL https://raw.githubusercontent.com/slimtoolkit/slim/master/scripts/install-slim.sh | sudo -E bash -
@@ -201,7 +207,7 @@ slim build \
   --env GCP_API_KEY="GCP-API-Key" 
 ```
 
-  - Orignal Image: 281.51 MB
+  - Original Image: 281.51 MB
   - Slim Image: 189.86 MB
 
 
@@ -218,7 +224,7 @@ slim build \
   --env GCP_PRICING_API_KEY="GCP-Pricing-API-Key" \
   --env GCP_API_KEY="GCP-API-Key" 
 ```
-  - Orignal Image: 225.42 MB
+  - Original Image: 225.42 MB
   - Slim Image: 189.86 MB
 
 
