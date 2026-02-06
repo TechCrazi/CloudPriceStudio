@@ -30,13 +30,20 @@ Open `http://localhost:3000`.
 ## Docker
 
 ```bash
-docker build -t cloud-price .
+docker build --no-cache -t cloud-price .
 ```
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/techcrazi/cloudpricestudio:latest . --push
+```
+
 
 ```bash
 docker run --rm -p 3000:3000 \
   -e AWS_ACCESS_KEY_ID=... \
   -e AWS_SECRET_ACCESS_KEY=... \
+  -e GCP_PRICING_API_KEY=... \
+  -e GCP_API_KEY=... \
   cloud-price
 ```
 
@@ -127,3 +134,112 @@ regions so most requests hit in-memory caches instead of live API calls.
   GCP network performance is reported as Variable in the snapshot.
 - If a request exceeds the curated size list, the app uses the largest
   available size and flags it in the UI.
+
+
+
+
+## Container Scan via Trivy
+
+#### Install Trivy
+```bash
+brew install trivy
+```
+
+#### Scan Image
+```bash
+trivy image ghcr.io/techcrazi/cloudpricestudio:latest
+```
+
+
+## Container Scan via Slim
+
+#### Install Slim MAC
+```bash
+brew install docker-slim
+```
+
+#### Install Slim Windows
+ - Enable WSL on Windows Desktop
+ - Install Docker Desktop
+ - Install Ubuntu WSL image
+
+```powershell
+wsl --install -d Ubuntu
+```
+ - Update Docker Desktop Settings
+    
+  - Open Docker Desktop → Settings
+  - Go to:
+  - Resources → WSL Integration
+
+  - Turn ON:
+	  -  Enable integration with my default WSL distro
+	  -  Ubuntu
+
+  - Click Apply & Restart
+
+  - SSH into Ubunut WSL
+  - Install Slim
+  ```bash
+  curl -sL https://raw.githubusercontent.com/slimtoolkit/slim/master/scripts/install-slim.sh | sudo -E bash -
+  ```
+
+
+##### Scan & Build Image AMD64 (On Intel or AMD Processor)
+```bash
+slim build \
+  --target ghcr.io/techcrazi/cloudpricestudio:latest \
+  --tag ghcr.io/techcrazi/cloudpricestudio:slim-amd64 \
+  --image-build-arch amd64 \
+  --publish-port 3000:3000 \
+  --include-path '/app' \
+  --env AWS_ACCESS_KEY_ID="AWS-API-Key" \
+  --env AWS_SECRET_ACCESS_KEY="AWS-API-Secret" \
+  --env GCP_PRICING_API_KEY="GCP-Pricing-API-Key" \
+  --env GCP_API_KEY="GCP-API-Key" 
+```
+
+  - Orignal Image: 281.51 MB
+  - Slim Image: 189.86 MB
+
+
+##### Scan & Build Image ARM64 (On Apple or ARM Processor)
+```bash
+slim build \
+  --target ghcr.io/techcrazi/cloudpricestudio:latest \
+  --tag ghcr.io/techcrazi/cloudpricestudio:slim-arm64 \
+  --image-build-arch arm64 \
+  --publish-port 3000:3000 \
+  --include-path '/app' \
+  --env AWS_ACCESS_KEY_ID="AWS-API-Key" \
+  --env AWS_SECRET_ACCESS_KEY="AWS-API-Secret" \
+  --env GCP_PRICING_API_KEY="GCP-Pricing-API-Key" \
+  --env GCP_API_KEY="GCP-API-Key" 
+```
+  - Orignal Image: 225.42 MB
+  - Slim Image: 189.86 MB
+
+
+
+##### Image Testing
+```bash
+slim build \
+  --target ghcr.io/techcrazi/cloudpricestudio:latest \
+  --tag ghcr.io/techcrazi/cloudpricestudio:slim-arm64 \
+  --image-build-arch arm64 \
+  --publish-port 3000:3000 \
+  --continue-after=enter \
+  --include-path '/app' \
+  --env AWS_ACCESS_KEY_ID="AWS-API-Key" \
+  --env AWS_SECRET_ACCESS_KEY="AWS-API-Secret" \
+  --env GCP_PRICING_API_KEY="GCP-Pricing-API-Key" \
+  --env GCP_API_KEY="GCP-API-Key" 
+```
+
+
+##### Push Slim Image to GHCR
+```bash
+docker login
+docker push ghcr.io/techcrazi/cloudpricestudio:slim-amd64
+docker push ghcr.io/techcrazi/cloudpricestudio:slim-arm64
+```
