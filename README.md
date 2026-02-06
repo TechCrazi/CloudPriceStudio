@@ -1,0 +1,107 @@
+# Cloud Price Studio (v1)
+
+This is the v1 baseline. We will iterate on v2 in a follow-up branch.
+
+Compare AWS, Azure, and GCP VM pricing by CPU, RAM, region, OS disk (GB), data disk
+(TB), egress (TB), and SQL Server edition. The app selects the closest VM size by
+flavor and shows monthly totals.
+
+Constraints:
+- Windows-only pricing.
+- No local or temp disks (managed disk only).
+- Premium disk pricing and 10+ Gbps network floor.
+- Minimum 8 vCPU and 8 GB RAM.
+- Pricing tiers show on-demand plus 1-year and 3-year reserved (no upfront).
+- AWS reserved type is fixed to Convertible (no upfront).
+- VM workload profiles: General purpose, SQL Server, and Web Server.
+- VM flavors are provider-recommended families per workload (AWS/Azure/GCP).
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Docker
+
+```bash
+docker build -t cloud-price .
+```
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e AWS_ACCESS_KEY_ID=... \
+  -e AWS_SECRET_ACCESS_KEY=... \
+  cloud-price
+```
+
+```bash
+docker run --rm -p 3000:3000 \
+  -v ~/.aws:/root/.aws:ro \
+  -e AWS_PROFILE=profile-name \
+  -e AWS_SDK_LOAD_CONFIG=1 \
+  cloud-price
+```
+
+Open `http://localhost:3000`.
+
+## Pricing provider
+
+Use the Pricing provider dropdown to choose between:
+
+- Retail (Vantage): uses public pricing snapshots from `instances.vantage.sh`.
+- API (cloud provider): uses AWS Pricing API, Azure Retail Prices API, and
+  GCP Cloud Billing Catalog API.
+
+API mode requires AWS/GCP credentials; when missing, the UI shows "API key missing".
+Azure Retail Prices API is public.
+
+### AWS API credentials
+
+- `AWS_PROFILE`, or
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+
+### GCP API credentials
+
+- `GCP_PRICING_API_KEY`, `GCP_API_KEY`, or `GOOGLE_API_KEY`
+
+Retail (Vantage) mode does not require credentials.
+
+## Notes
+
+- Storage defaults: AWS io2, Azure Premium SSD, and GCP SSD PD per-GB estimates.
+- Backups use 15-day retention with a 10% daily delta when enabled.
+- Snapshot storage uses the same per-GB rate as primary storage.
+- OS disk input is in GB; data disk input is in TB (1 TB = 1024 GB).
+- Egress input is in TB (1 TB = 1024 GB) with a 1 TB minimum; VM mode scales
+  egress by VM count.
+- DR uplift applies to compute + storage + backups + SQL (egress excluded).
+- VM count scales all monthly totals.
+- Kubernetes mode uses Linux nodes and adds premium control plane fees for
+  EKS ($0.50/hr), AKS ($0.60/hr), and GKE ($0.50/hr). VM count is treated as
+  node count (minimum 3).
+- Kubernetes mode has no workload profile and limits flavors to K8s-optimized
+  families (general or compute).
+- Kubernetes mode disables SQL pricing and pulls shared file storage rates
+  (EFS/Azure Files/Filestore) from public provider pricing (AWS EFS price list,
+  Azure Retail Premium Files, GCP Filestore pricing page). Results are cached
+  and fall back to defaults if lookups fail. It enforces a 32 GB minimum OS
+  disk size.
+- Egress defaults: base internet out pricing for the first tier.
+- Reserved tiers use AWS convertible no-upfront rates from the public snapshot.
+  Azure reservation terms are converted from term totals into monthly-equivalent
+  hourly rates for both Retail API and Vantage snapshot sources.
+- Compute rates are displayed hourly for all providers.
+- Reserved tiers adjust compute only; storage, egress, and SQL add-on remain
+  on-demand.
+- SQL Server add-on for AWS/Azure/GCP uses a default per vCPU-hour rate. Adjust
+  the input to match your licensing program. AWS compute is Windows BYOL.
+- AWS API mode falls back to the AWS price list when terms are missing or when
+  the API rate is below the official price list for the same Windows SKU.
+- Network floor is enforced for AWS and Azure via curated instance metadata.
+  GCP network performance is reported as Variable in the snapshot.
+- If a request exceeds the curated size list, the app uses the largest
+  available size and flags it in the UI.

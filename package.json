@@ -1,0 +1,16 @@
+{
+  "name": "cloud-price",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Compare AWS and Azure VM pricing with live inputs.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-pricing": "^3.524.0",
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2"
+  }
+}
