@@ -22,6 +22,7 @@ const BACKUP_RETENTION_DAYS = 15;
 const BACKUP_DAILY_DELTA_PERCENT = 10;
 const K8S_OS_DISK_MIN_GB = 32;
 const K8S_MIN_NODE_COUNT = 3;
+const VMWARE_VCPU_PER_SOCKET = 3;
 const K8S_CONTROL_PLANE_HOURLY = {
   aws: 0.5,
   azure: 0.6,
@@ -35,11 +36,23 @@ const REGION_MAP = {
     azure: { region: "eastus", location: "East US" },
     gcp: { region: "us-east1", location: "South Carolina" },
   },
+  "us-central": {
+    label: "US Central",
+    aws: { region: "us-east-2", location: "US East (Ohio)" },
+    azure: { region: "centralus", location: "Central US" },
+    gcp: { region: "us-central1", location: "Iowa" },
+  },
   "us-west": {
     label: "US West",
     aws: { region: "us-west-2", location: "US West (Oregon)" },
     azure: { region: "westus2", location: "West US 2" },
     gcp: { region: "us-west1", location: "Oregon" },
+  },
+  "us-west-1": {
+    label: "US West (N. California)",
+    aws: { region: "us-west-1", location: "US West (N. California)" },
+    azure: { region: "westus", location: "West US" },
+    gcp: { region: "us-west2", location: "Los Angeles" },
   },
   "ca-central": {
     label: "Canada Central",
@@ -53,6 +66,18 @@ const REGION_MAP = {
     azure: { region: "westeurope", location: "West Europe" },
     gcp: { region: "europe-west1", location: "Belgium" },
   },
+  "eu-central": {
+    label: "EU Central",
+    aws: { region: "eu-central-1", location: "EU (Frankfurt)" },
+    azure: { region: "germanywestcentral", location: "Germany West Central" },
+    gcp: { region: "europe-west3", location: "Frankfurt" },
+  },
+  "eu-uk": {
+    label: "UK South",
+    aws: { region: "eu-west-2", location: "EU (London)" },
+    azure: { region: "uksouth", location: "UK South" },
+    gcp: { region: "europe-west2", location: "London" },
+  },
   "eu-north": {
     label: "EU North",
     aws: { region: "eu-north-1", location: "EU (Stockholm)" },
@@ -65,11 +90,35 @@ const REGION_MAP = {
     azure: { region: "southeastasia", location: "Southeast Asia" },
     gcp: { region: "asia-southeast1", location: "Singapore" },
   },
+  "ap-jp": {
+    label: "Japan East",
+    aws: { region: "ap-northeast-1", location: "Asia Pacific (Tokyo)" },
+    azure: { region: "japaneast", location: "Japan East" },
+    gcp: { region: "asia-northeast1", location: "Tokyo" },
+  },
+  "ap-in": {
+    label: "India Central",
+    aws: { region: "ap-south-1", location: "Asia Pacific (Mumbai)" },
+    azure: { region: "centralindia", location: "Central India" },
+    gcp: { region: "asia-south1", location: "Mumbai" },
+  },
   "ap-au": {
     label: "Australia East",
     aws: { region: "ap-southeast-2", location: "Asia Pacific (Sydney)" },
     azure: { region: "australiaeast", location: "Australia East" },
     gcp: { region: "australia-southeast1", location: "Sydney" },
+  },
+  "sa-east": {
+    label: "South America (Sao Paulo)",
+    aws: { region: "sa-east-1", location: "South America (Sao Paulo)" },
+    azure: { region: "brazilsouth", location: "Brazil South" },
+    gcp: { region: "southamerica-east1", location: "Sao Paulo" },
+  },
+  "af-south": {
+    label: "Africa South",
+    aws: { region: "af-south-1", location: "Africa (Cape Town)" },
+    azure: { region: "southafricanorth", location: "South Africa North" },
+    gcp: { region: "africa-south1", location: "Johannesburg" },
   },
 };
 
@@ -653,12 +702,20 @@ const AZURE_RESERVATION_TERM_HOURS = {
 };
 const AZURE_VANTAGE_REGION_MAP = {
   eastus: "us-east",
+  centralus: "us-central",
+  westus: "us-west",
   westus2: "us-west-2",
   canadacentral: "canada-central",
   westeurope: "europe-west",
+  germanywestcentral: "germany-west-central",
+  uksouth: "united-kingdom-south",
   northeurope: "europe-north",
   southeastasia: "asia-pacific-southeast",
+  japaneast: "japan-east",
+  centralindia: "central-india",
   australiaeast: "australia-east",
+  brazilsouth: "brazil-south",
+  southafricanorth: "south-africa-north",
 };
 const GCP_FLAVOR_MAP = {
   general: ["General purpose"],
@@ -2837,6 +2894,7 @@ function computeTotals({
   egressRate,
   networkMonthly,
   sqlLicenseRate,
+  windowsLicenseMonthly,
   vcpu,
   drPercent,
   vmCount,
@@ -2874,6 +2932,9 @@ function computeTotals({
   const backupMonthly = backupBase * scale;
   const egressMonthly = egressBase * egressMultiplier;
   const sqlMonthly = sqlBase * scale;
+  const windowsLicenseMonthlyTotal = Number.isFinite(windowsLicenseMonthly)
+    ? windowsLicenseMonthly * scale
+    : 0;
   const networkBase = Number.isFinite(networkMonthly) ? networkMonthly : 0;
   const drRate = Number.isFinite(drPercent) ? drPercent / 100 : 0;
   const drMonthly =
@@ -2887,6 +2948,7 @@ function computeTotals({
     backupMonthly +
     egressMonthly +
     sqlMonthly +
+    windowsLicenseMonthlyTotal +
     drMonthly +
     networkBase +
     controlPlane;
@@ -2897,6 +2959,7 @@ function computeTotals({
     backupMonthly,
     egressMonthly,
     sqlMonthly,
+    windowsLicenseMonthly: windowsLicenseMonthlyTotal,
     networkMonthly: networkBase,
     drMonthly,
     total,
@@ -2975,7 +3038,7 @@ app.post("/api/compare", async (req, res) => {
       (BACKUP_DAILY_DELTA_PERCENT / 100);
   const snapshotBaseGb = mode === "k8s" ? osDiskGb : storageGb;
   const snapshotGb = backupEnabled ? snapshotBaseGb * snapshotMultiplier : 0;
-  const egressTb = Math.max(1, toNumber(body.egressTb, 1));
+  const egressTb = Math.max(0, toNumber(body.egressTb, 0));
   const egressGb = egressTb * 1024;
   const hours = Math.max(1, toNumber(body.hours, HOURS_IN_MONTH));
   const drPercent = Math.max(0, toNumber(body.drPercent, 0));
@@ -3013,6 +3076,70 @@ app.post("/api/compare", async (req, res) => {
       : sqlEdition === "none"
       ? 0
       : toNumber(body.sqlLicenseRate, SQL_LICENSE_RATES[sqlEdition]);
+  const privateEnabled = toBoolean(body.privateEnabled);
+  const privateVmwareMonthly = Math.max(
+    0,
+    toNumber(body.privateVmwareMonthly, 0)
+  );
+  const privateWindowsLicenseMonthly = Math.max(
+    0,
+    toNumber(body.privateWindowsLicenseMonthly, 0)
+  );
+  const privateNodeCount = Math.max(
+    2,
+    Math.round(toNumber(body.privateNodeCount, 2))
+  );
+  const privateNodeCpu = Math.max(0, toNumber(body.privateNodeCpu, 0));
+  const privateNodeRam = Math.max(0, toNumber(body.privateNodeRam, 0));
+  const privateNodeStorageTb = Math.max(
+    0,
+    toNumber(body.privateNodeStorageTb, 0)
+  );
+  const privateNodeVcpuCapacity =
+    privateNodeCpu > 0 ? privateNodeCpu * VMWARE_VCPU_PER_SOCKET : 0;
+  const privateVmOsDiskGb = Math.max(
+    1,
+    toNumber(body.privateVmOsDiskGb, osDiskGb)
+  );
+  const privateVmMemoryOverride = toNumber(body.privateVmMemory, null);
+  const privateSanUsableTb = Math.max(
+    0,
+    toNumber(body.privateSanUsableTb, 0)
+  );
+  const privateSanTotalMonthly = Math.max(
+    0,
+    toNumber(body.privateSanTotalMonthly, 0)
+  );
+  let privateStoragePerTb = Math.max(
+    0,
+    toNumber(body.privateStoragePerTb, 0)
+  );
+  if (
+    privateStoragePerTb === 0 &&
+    privateSanUsableTb > 0 &&
+    privateSanTotalMonthly > 0
+  ) {
+    privateStoragePerTb = privateSanTotalMonthly / privateSanUsableTb;
+  }
+  const privateNetworkMonthly = Math.max(
+    0,
+    toNumber(body.privateNetworkMonthly, 0)
+  );
+  const privateFirewallMonthly = Math.max(
+    0,
+    toNumber(body.privateFirewallMonthly, 0)
+  );
+  const privateLoadBalancerMonthly = Math.max(
+    0,
+    toNumber(body.privateLoadBalancerMonthly, 0)
+  );
+  const privateNetworkMonthlyTotal =
+    privateNetworkMonthly + privateFirewallMonthly + privateLoadBalancerMonthly;
+  const privateStorageRate =
+    privateStoragePerTb > 0 ? privateStoragePerTb / 1024 : 0;
+  let privateHourlyRate = null;
+  let privateVmPerNode = 1;
+  let privateCapacityNote = null;
 
   const sizeConstraints = {
     minCpu: MIN_CPU,
@@ -3021,6 +3148,8 @@ app.post("/api/compare", async (req, res) => {
     requireNetwork: true,
   };
   const region = REGION_MAP[regionKey];
+  const privateRegion = { location: "Private DC" };
+  const regionPayload = { ...region, private: privateRegion };
   const logContext = {
     requestId,
     mode,
@@ -3545,6 +3674,80 @@ app.post("/api/compare", async (req, res) => {
   }
   addSelectionNote("GCP", gcpInstanceType, gcpSelection);
 
+  const privateInstance = {
+    type: "Private custom",
+    vcpu: cpu,
+    memory:
+      Number.isFinite(privateVmMemoryOverride)
+        ? privateVmMemoryOverride
+        : awsSize?.memory ?? azureSize?.memory ?? gcpSize?.memory ?? null,
+    networkGbps: null,
+    networkLabel: "Custom",
+    localDisk: false,
+  };
+  const privateVmMemory = privateInstance.memory;
+  const privateCapacityInputs =
+    privateNodeCpu > 0 || privateNodeRam > 0 || privateNodeStorageTb > 0;
+  if (privateEnabled) {
+    const capacityLimits = [];
+    if (privateNodeVcpuCapacity > 0 && cpu > 0) {
+      capacityLimits.push(
+        Math.floor(privateNodeVcpuCapacity / cpu)
+      );
+    }
+    if (
+      privateNodeRam > 0 &&
+      Number.isFinite(privateVmMemory) &&
+      privateVmMemory > 0
+    ) {
+      capacityLimits.push(Math.floor(privateNodeRam / privateVmMemory));
+    }
+    const nodeStorageGb =
+      privateNodeStorageTb > 0 ? privateNodeStorageTb * 1024 : 0;
+    if (nodeStorageGb > 0 && privateVmOsDiskGb > 0) {
+      capacityLimits.push(
+        Math.floor(nodeStorageGb / privateVmOsDiskGb)
+      );
+    }
+    if (capacityLimits.length) {
+      const minCapacity = Math.min(...capacityLimits);
+      if (Number.isFinite(minCapacity) && minCapacity > 0) {
+        privateVmPerNode = minCapacity;
+      }
+    }
+    const privateClusterVmwareMonthly =
+      privateVmwareMonthly * privateNodeCount;
+    const privateUsableNodes = Math.max(privateNodeCount - 1, 1);
+    const privateClusterVmCapacity = privateVmPerNode * privateUsableNodes;
+    privateHourlyRate =
+      privateClusterVmCapacity > 0
+        ? privateClusterVmwareMonthly / hours / privateClusterVmCapacity
+        : null;
+    if (privateCapacityInputs) {
+      privateCapacityNote = `Compute assumes ${privateVmPerNode} VM${
+        privateVmPerNode === 1 ? "" : "s"
+      } per node, ${privateNodeCount} nodes with N+1 spare (${privateUsableNodes} usable).`;
+    }
+  }
+  const privateNetworkItems = [];
+  if (privateNetworkMonthly > 0) {
+    privateNetworkItems.push({ key: "network", label: "Network" });
+  }
+  if (privateFirewallMonthly > 0) {
+    privateNetworkItems.push({ key: "firewall", label: "Firewall" });
+  }
+  if (privateLoadBalancerMonthly > 0) {
+    privateNetworkItems.push({ key: "loadBalancer", label: "Load balancer" });
+  }
+  const privateNetworkAddons = {
+    items: privateNetworkItems,
+    monthlyTotal: privateNetworkMonthlyTotal,
+    note:
+      privateEnabled && privateNetworkItems.length
+        ? "Manual network inputs."
+        : null,
+  };
+
   const dataStorageRates =
     mode === "k8s" ? sharedStorageRates : diskTier.storageRates;
   const awsControlPlaneMonthly =
@@ -3708,8 +3911,35 @@ app.post("/api/compare", async (req, res) => {
     dataScale,
   });
 
+  const privateTotals = privateEnabled
+    ? computeTotalsOrNull({
+        hourlyRate: privateHourlyRate,
+        osDiskGb,
+        dataDiskGb,
+        snapshotGb,
+        egressGb,
+        hours,
+        storageRate: privateStorageRate,
+        dataStorageRate: privateStorageRate,
+        snapshotRate: privateStorageRate,
+        egressRate: 0,
+        networkMonthly: privateNetworkMonthlyTotal,
+        sqlLicenseRate,
+        windowsLicenseMonthly: privateWindowsLicenseMonthly,
+        vcpu: cpu,
+        drPercent,
+        vmCount,
+        controlPlaneMonthly: 0,
+        egressScale,
+        osScale,
+        dataScale,
+      })
+    : null;
+
   const gcpReserved1Totals = null;
   const gcpReserved3Totals = null;
+  const privateReserved1Totals = null;
+  const privateReserved3Totals = null;
   const azureOnDemandSource =
     useApiPricing ? "azure-retail-consumption" : "public-snapshot";
   const azureReservedSource =
@@ -3757,8 +3987,27 @@ app.post("/api/compare", async (req, res) => {
       gcpVpcFlavor,
       gcpFirewallFlavor,
       gcpLoadBalancerFlavor,
+      privateEnabled,
+      privateVmwareMonthly,
+      privateWindowsLicenseMonthly,
+      privateNodeCount,
+      privateStoragePerTb,
+      privateNetworkMonthly,
+      privateFirewallMonthly,
+      privateLoadBalancerMonthly,
+      privateNetworkMonthlyTotal,
+      privateNodeCpu,
+      privateNodeRam,
+      privateNodeStorageTb,
+      privateVmOsDiskGb,
+      privateVmMemory: Number.isFinite(privateVmMemoryOverride)
+        ? privateVmMemoryOverride
+        : null,
+      privateSanUsableTb,
+      privateSanTotalMonthly,
+      privateVmPerNode,
     },
-    region,
+    region: regionPayload,
     aws: {
       ...awsResponse,
       family: awsFamily?.label || "AWS",
@@ -3905,6 +4154,69 @@ app.post("/api/compare", async (req, res) => {
       storageRate: diskTier.storageRates.gcp,
       snapshotRate: diskTier.snapshotRates.gcp,
       egressRate: EGRESS_RATES.gcp,
+      egress: {
+        egressTb,
+        egressGb,
+      },
+      sqlNote:
+        mode === "k8s"
+          ? null
+          : sqlEdition === "none"
+          ? "No SQL Server license."
+          : "SQL license add-on estimated per vCPU-hour.",
+    },
+    private: {
+      status: privateEnabled ? "manual" : "off",
+      message: privateEnabled
+        ? ["Manual private cloud inputs.", privateCapacityNote]
+            .filter(Boolean)
+            .join(" ")
+        : "Enable private cloud to include manual pricing.",
+      enabled: privateEnabled,
+      instance: privateInstance,
+      hourlyRate: privateHourlyRate,
+      vmPerNode: privateVmPerNode,
+      windowsLicenseMonthly: privateWindowsLicenseMonthly,
+      nodeCount: privateNodeCount,
+      source: "manual",
+      family: "Private cloud",
+      storage: {
+        osDiskGb,
+        dataDiskTb,
+        dataDiskGb,
+        totalGb: storageGb,
+      },
+      backup: {
+        enabled: backupEnabled,
+        snapshotGb,
+        retentionDays: BACKUP_RETENTION_DAYS,
+        dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
+      },
+      networkAddons: privateNetworkAddons,
+      dr: {
+        percent: drPercent,
+      },
+      totals: privateTotals,
+      pricingTiers: {
+        onDemand: {
+          hourlyRate: privateHourlyRate,
+          totals: privateTotals,
+          source: "manual",
+        },
+        reserved1yr: {
+          hourlyRate: null,
+          totals: privateReserved1Totals,
+          source: "n/a",
+        },
+        reserved3yr: {
+          hourlyRate: null,
+          totals: privateReserved3Totals,
+          source: "n/a",
+        },
+      },
+      storageRate: privateStorageRate,
+      snapshotRate: privateStorageRate,
+      egressRate: 0,
       egress: {
         egressTb,
         egressGb,

@@ -60,7 +60,7 @@ body {
 }
 
 .app {
-  max-width: 1400px;
+  max-width: 1760px;
   margin: 0 auto;
   padding: 56px 24px 80px;
 }
@@ -78,6 +78,31 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   margin-bottom: 24px;
+}
+
+.view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.view-tab {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-tab.active {
+  background: linear-gradient(135deg, var(--accent), var(--highlight));
+  color: #1b120f;
+  box-shadow: 0 8px 20px rgba(255, 138, 91, 0.25);
 }
 
 .mode-tab {
@@ -125,7 +150,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(560px, 2.05fr);
+  grid-template-columns: minmax(320px, 0.8fr) minmax(720px, 2.4fr);
   gap: 24px;
 }
 
@@ -163,6 +188,86 @@ body {
   gap: 16px;
 }
 
+.input-panel {
+  display: contents;
+}
+
+.input-panel.is-hidden {
+  display: none;
+}
+
+.scenario-actions,
+.scenario-note {
+  grid-column: 1 / -1;
+}
+
+.scenario-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scenario-note {
+  margin: 0;
+  min-height: auto;
+  color: var(--accent-2);
+  font-size: 0.85rem;
+}
+
+.private-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.capacity-table {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 14px 12px;
+  margin: 0 -6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.capacity-row {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(5, minmax(56px, 1fr));
+  gap: 8px;
+  align-items: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.capacity-row strong {
+  color: var(--text);
+}
+
+.capacity-head {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.private-metric {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.private-metric strong {
+  color: var(--text);
+  margin-left: 6px;
+}
+
+.scenario-note.negative {
+  color: var(--accent);
+}
+
 .form-section {
   grid-column: 1 / -1;
   margin-top: 6px;
@@ -179,6 +284,12 @@ label {
   font-size: 0.9rem;
   color: var(--muted);
   gap: 8px;
+}
+
+.input-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.8;
 }
 
 .checkbox-field {
@@ -211,6 +322,13 @@ select {
   color: var(--text);
   font-size: 0.95rem;
   outline: none;
+}
+
+.instance-filter {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  width: 100%;
 }
 
 input:focus,
@@ -274,8 +392,16 @@ select:focus {
 
 .results-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
+}
+
+.results-grid.is-hidden {
+  display: none;
+}
+
+.results-grid.single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .provider-card {
@@ -340,6 +466,34 @@ select:focus {
 .metric strong {
   font-size: 1rem;
   font-weight: 600;
+}
+
+.private-specs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.private-specs label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.private-specs input {
+  padding: 6px 8px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.private-instance {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .price-tiers {
@@ -407,6 +561,21 @@ select:focus {
   font-weight: 600;
 }
 
+.scenario-delta {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(255, 196, 107, 0.12);
+  color: var(--highlight);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.scenario-delta.negative {
+  background: rgba(255, 138, 91, 0.12);
+  color: var(--accent);
+}
+
 .delta.negative {
   background: rgba(255, 138, 91, 0.12);
   color: var(--accent);
@@ -436,13 +605,13 @@ select:focus {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1400px) {
   .results-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 900px) {
   .app {
     padding: 40px 18px 64px;
   }

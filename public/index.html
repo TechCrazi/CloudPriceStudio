@@ -37,6 +37,9 @@
         <button type="button" class="mode-tab" data-mode="k8s">
           K8s
         </button>
+        <button type="button" class="mode-tab" data-mode="private">
+          Private-Price
+        </button>
       </div>
       <section class="layout">
         <form id="pricing-form" class="card form-card">
@@ -49,6 +52,7 @@
             </p>
           </div>
           <div class="form-grid">
+            <div class="input-panel" id="cloud-panel">
             <label id="workload-field">
               Workload profile
               <select name="workload" id="workload-select">
@@ -75,17 +79,33 @@
               Region group
               <select name="regionKey">
                 <option value="us-east">US East (N. Virginia / East US)</option>
+                <option value="us-central">
+                  US Central (Ohio / Central US / Iowa)
+                </option>
                 <option value="us-west">US West (Oregon / West US 2)</option>
+                <option value="us-west-1">
+                  US West (N. California / West US / Los Angeles)
+                </option>
                 <option value="ca-central">
                   Canada Central (Canada (Central) / Canada Central / Montreal)
                 </option>
                 <option value="eu-west">EU West (Ireland / West Europe)</option>
+                <option value="eu-central">
+                  EU Central (Frankfurt / Germany West Central)
+                </option>
+                <option value="eu-uk">UK South (London)</option>
                 <option value="eu-north">EU North (Stockholm / North Europe)</option>
                 <option value="ap-sg">
                   Asia Pacific (Singapore / Southeast Asia)
                 </option>
+                <option value="ap-jp">Japan East (Tokyo)</option>
+                <option value="ap-in">India Central (Mumbai)</option>
                 <option value="ap-au">
                   Australia (Sydney / Australia East)
+                </option>
+                <option value="sa-east">South America (Sao Paulo)</option>
+                <option value="af-south">
+                  Africa South (Cape Town / Johannesburg)
                 </option>
               </select>
             </label>
@@ -129,7 +149,7 @@
                 type="number"
                 name="dataDiskTb"
                 min="0"
-                step="0.1"
+                step="0.01"
                 value="1"
               />
             </label>
@@ -142,7 +162,7 @@
               <input
                 type="number"
                 name="egressTb"
-                min="1"
+                min="0"
                 step="0.1"
                 value="1"
               />
@@ -235,6 +255,255 @@
                 value="0"
               />
             </label>
+            <div class="form-section">Scenarios</div>
+            <label>
+              Scenario name
+              <input
+                type="text"
+                id="scenario-name"
+                placeholder="Prod baseline"
+              />
+            </label>
+            <label>
+              Saved scenarios
+              <select id="scenario-list"></select>
+            </label>
+            <div class="scenario-actions">
+              <button type="button" class="secondary-btn" id="save-scenario">
+                Save
+              </button>
+              <button type="button" class="secondary-btn" id="load-scenario">
+                Load
+              </button>
+              <button type="button" class="secondary-btn" id="clone-scenario">
+                Clone
+              </button>
+              <button type="button" class="secondary-btn" id="compare-scenario">
+                Compare
+              </button>
+              <button type="button" class="secondary-btn" id="delete-scenario">
+                Delete
+              </button>
+            </div>
+            <p id="scenario-note" class="form-note scenario-note"></p>
+            </div>
+            <div class="input-panel is-hidden" id="private-panel">
+              <div class="form-section">Private cloud (manual)</div>
+              <label class="checkbox-field">
+                <input
+                  type="checkbox"
+                  name="privateEnabled"
+                  id="private-enabled"
+                />
+                <span>Include private cloud</span>
+              </label>
+              <div class="form-section">Private hardware</div>
+              <label>
+                Node CPU capacity
+                <span class="input-hint">VMware standard: 3 vCPU per socket.</span>
+                <input
+                  type="number"
+                  name="privateNodeCpu"
+                  min="1"
+                  step="1"
+                  value="1"
+                />
+              </label>
+              <label>
+                Node RAM capacity (GB)
+                <input
+                  type="number"
+                  name="privateNodeRam"
+                  min="1"
+                  step="1"
+                  value="128"
+                />
+              </label>
+              <label>
+                Node usable storage (TB)
+                <input
+                  type="number"
+                  name="privateNodeStorageTb"
+                  min="0"
+                  step="0.1"
+                  value="2"
+                />
+              </label>
+              <label>
+                VM OS disk size (GB)
+                <input
+                  type="number"
+                  name="privateVmOsDiskGb"
+                  min="1"
+                  step="1"
+                  value="256"
+                />
+              </label>
+              <div class="form-section">VM capacity (per node + N+1)</div>
+              <div class="capacity-table">
+                <div class="capacity-row capacity-head">
+                  <span>Flavor</span>
+                  <span>vCPU</span>
+                  <span>RAM</span>
+                  <span>OS</span>
+                  <span>VMs / node</span>
+                  <span>VMs (N+1)</span>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 8/16</span>
+                  <span>8</span>
+                  <span>16 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-8-16">-</strong>
+                  <strong id="private-capacity-8-16-total">-</strong>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 12/24</span>
+                  <span>12</span>
+                  <span>24 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-12-24">-</strong>
+                  <strong id="private-capacity-12-24-total">-</strong>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 16/32</span>
+                  <span>16</span>
+                  <span>32 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-16-32">-</strong>
+                  <strong id="private-capacity-16-32-total">-</strong>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 24/48</span>
+                  <span>24</span>
+                  <span>48 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-24-48">-</strong>
+                  <strong id="private-capacity-24-48-total">-</strong>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 48/64</span>
+                  <span>48</span>
+                  <span>64 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-48-64">-</strong>
+                  <strong id="private-capacity-48-64-total">-</strong>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 64/128</span>
+                  <span>64</span>
+                  <span>128 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-64-128">-</strong>
+                  <strong id="private-capacity-64-128-total">-</strong>
+                </div>
+                <div class="capacity-row">
+                  <span>Standard 128/512</span>
+                  <span>128</span>
+                  <span>512 GB</span>
+                  <span class="private-os-size">256 GB</span>
+                  <strong id="private-capacity-128-512">-</strong>
+                  <strong id="private-capacity-128-512-total">-</strong>
+                </div>
+              </div>
+              <div class="form-section">SAN storage</div>
+              <label>
+                Usable SAN storage (TB)
+                <input
+                  type="number"
+                  name="privateSanUsableTb"
+                  min="0"
+                  step="0.1"
+                  value="0"
+                />
+              </label>
+              <label>
+                SAN total monthly cost ($)
+                <input
+                  type="number"
+                  name="privateSanTotalMonthly"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <div class="private-metric">
+                SAN cost per TB:
+                <strong id="private-san-rate">-</strong>
+              </div>
+              <label>
+                VMware per node ($/month)
+                <input
+                  type="number"
+                  name="privateVmwareMonthly"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <label>
+                VMware node count (N+1)
+                <input
+                  type="number"
+                  name="privateNodeCount"
+                  min="2"
+                  step="1"
+                  value="2"
+                />
+              </label>
+              <label>
+                Windows license per VM ($/month)
+                <input
+                  type="number"
+                  name="privateWindowsLicenseMonthly"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <input
+                type="hidden"
+                name="privateStoragePerTb"
+                id="private-storage-per-tb"
+                value="0"
+              />
+              <label>
+                Private network ($/month)
+                <input
+                  type="number"
+                  name="privateNetworkMonthly"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <label>
+                Private firewall ($/month)
+                <input
+                  type="number"
+                  name="privateFirewallMonthly"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <label>
+                Private load balancer ($/month)
+                <input
+                  type="number"
+                  name="privateLoadBalancerMonthly"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <div class="private-actions">
+                <button type="button" class="secondary-btn" id="save-private">
+                  Save private pricing
+                </button>
+              </div>
+              <p id="private-save-note" class="form-note scenario-note"></p>
+            </div>
           </div>
           <div class="form-actions">
             <button type="submit" class="primary-btn">Compare pricing</button>
@@ -251,7 +520,24 @@
               Live compute rates + estimated storage, egress, and SQL.
             </p>
           </div>
-          <div class="results-grid">
+          <div class="view-tabs is-hidden" id="vm-view-tabs">
+            <button type="button" class="view-tab active" data-view="compare">
+              Compare
+            </button>
+            <button type="button" class="view-tab" data-view="aws">
+              AWS
+            </button>
+            <button type="button" class="view-tab" data-view="azure">
+              Azure
+            </button>
+            <button type="button" class="view-tab" data-view="gcp">
+              GCP
+            </button>
+            <button type="button" class="view-tab" data-view="private">
+              Private
+            </button>
+          </div>
+          <div class="results-grid" id="compare-grid">
             <article class="provider-card" id="aws-card">
               <div class="provider-head">
                 <div>
@@ -263,6 +549,12 @@
               <div class="metrics">
                 <div class="metric">
                   <span>Instance</span>
+                  <input
+                    type="text"
+                    class="instance-filter"
+                    id="aws-instance-filter"
+                    placeholder="Filter instances"
+                  />
                   <select
                     class="provider-select"
                     id="aws-instance"
@@ -319,6 +611,12 @@
               <div class="metrics">
                 <div class="metric">
                   <span>Instance</span>
+                  <input
+                    type="text"
+                    class="instance-filter"
+                    id="azure-instance-filter"
+                    placeholder="Filter instances"
+                  />
                   <select
                     class="provider-select"
                     id="azure-instance"
@@ -375,6 +673,12 @@
               <div class="metrics">
                 <div class="metric">
                   <span>Instance</span>
+                  <input
+                    type="text"
+                    class="instance-filter"
+                    id="gcp-instance-filter"
+                    placeholder="Filter instances"
+                  />
                   <select
                     class="provider-select"
                     id="gcp-instance"
@@ -420,8 +724,212 @@
               <p class="breakdown" id="gcp-breakdown"></p>
               <p class="provider-note" id="gcp-note"></p>
             </article>
+            <article class="provider-card is-hidden" id="private-card">
+              <div class="provider-head">
+                <div>
+                  <h3 id="private-title">Private</h3>
+                  <span class="provider-family" id="private-family"></span>
+                </div>
+                <span class="status-pill" id="private-status">manual</span>
+              </div>
+              <div class="metrics">
+                <div class="metric">
+                  <span>Instance</span>
+                  <strong id="private-instance">-</strong>
+                </div>
+                <div class="metric">
+                  <span>vCPU / RAM</span>
+                  <strong id="private-shape">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Region</span>
+                  <strong id="private-region">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Compute rate</span>
+                  <strong id="private-hourly">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Network</span>
+                  <strong id="private-network">-</strong>
+                </div>
+              </div>
+              <div class="price-tiers">
+                <div class="tier-card">
+                  <span>On-demand</span>
+                  <strong id="private-od-total">-</strong>
+                  <small id="private-od-rate">-</small>
+                </div>
+                <div class="tier-card">
+                  <span>1-year</span>
+                  <strong id="private-1y-total">-</strong>
+                  <small id="private-1y-rate">-</small>
+                </div>
+                <div class="tier-card">
+                  <span>3-year</span>
+                  <strong id="private-3y-total">-</strong>
+                  <small id="private-3y-rate">-</small>
+                </div>
+              </div>
+              <p class="tier-savings" id="private-savings"></p>
+              <p class="breakdown" id="private-breakdown"></p>
+              <p class="provider-note" id="private-note"></p>
+            </article>
           </div>
+          <div class="results-grid is-hidden" id="vendor-grid"></div>
+          <template id="vendor-card-template">
+            <article class="provider-card vendor-option-card">
+              <div class="provider-head">
+                <div>
+                  <h3 data-field="title">Option</h3>
+                  <span class="provider-family" data-field="family"></span>
+                </div>
+                <span class="status-pill" data-field="status">checking</span>
+              </div>
+              <div class="metrics">
+                <div class="metric">
+                  <span>Instance</span>
+                  <select
+                    class="provider-select"
+                    data-field="instanceSelect"
+                  ></select>
+                </div>
+                <div class="metric">
+                  <span>vCPU / RAM</span>
+                  <strong data-field="shape">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Region</span>
+                  <strong data-field="region">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Compute rate</span>
+                  <strong data-field="hourly">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Network</span>
+                  <strong data-field="network">-</strong>
+                </div>
+              </div>
+              <div class="price-tiers">
+                <div class="tier-card">
+                  <span>On-demand</span>
+                  <strong data-field="od-total">-</strong>
+                  <small data-field="od-rate">-</small>
+                </div>
+                <div class="tier-card">
+                  <span>1-year</span>
+                  <strong data-field="1y-total">-</strong>
+                  <small data-field="1y-rate">-</small>
+                </div>
+                <div class="tier-card">
+                  <span>3-year</span>
+                  <strong data-field="3y-total">-</strong>
+                  <small data-field="3y-rate">-</small>
+                </div>
+              </div>
+              <p class="tier-savings" data-field="savings"></p>
+              <p class="breakdown" data-field="breakdown"></p>
+              <p class="provider-note" data-field="note"></p>
+            </article>
+          </template>
+          <template id="private-option-template">
+            <article class="provider-card vendor-option-card">
+              <div class="provider-head">
+                <div>
+                  <h3 data-field="title">Option</h3>
+                  <span class="provider-family" data-field="family"></span>
+                </div>
+                <span class="status-pill" data-field="status">manual</span>
+              </div>
+              <div class="metrics">
+                <div class="metric">
+                  <span>Specs</span>
+                  <div class="private-specs">
+                    <label>
+                      vCPU
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value="8"
+                        data-field="spec-vcpu"
+                      />
+                    </label>
+                    <label>
+                      RAM (GB)
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value="16"
+                        data-field="spec-ram"
+                      />
+                    </label>
+                    <label>
+                      OS (GB)
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value="256"
+                        data-field="spec-os"
+                      />
+                    </label>
+                    <label>
+                      Data (GB)
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value="1024"
+                        data-field="spec-data"
+                      />
+                    </label>
+                  </div>
+                  <span class="private-instance" data-field="instance"></span>
+                </div>
+                <div class="metric">
+                  <span>vCPU / RAM</span>
+                  <strong data-field="shape">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Region</span>
+                  <strong data-field="region">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Compute rate</span>
+                  <strong data-field="hourly">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Network</span>
+                  <strong data-field="network">-</strong>
+                </div>
+              </div>
+              <div class="price-tiers">
+                <div class="tier-card">
+                  <span>On-demand</span>
+                  <strong data-field="od-total">-</strong>
+                  <small data-field="od-rate">-</small>
+                </div>
+                <div class="tier-card">
+                  <span>1-year</span>
+                  <strong data-field="1y-total">-</strong>
+                  <small data-field="1y-rate">-</small>
+                </div>
+                <div class="tier-card">
+                  <span>3-year</span>
+                  <strong data-field="3y-total">-</strong>
+                  <small data-field="3y-rate">-</small>
+                </div>
+              </div>
+              <p class="tier-savings" data-field="savings"></p>
+              <p class="breakdown" data-field="breakdown"></p>
+              <p class="provider-note" data-field="note"></p>
+            </article>
+          </template>
           <div class="delta" id="delta"></div>
+          <div class="scenario-delta is-hidden" id="scenario-delta"></div>
           <p class="disclaimer">
             Storage uses the selected disk tier (Premium SSD or Max performance
             with an uplift for ultra tiers; per-IOPS charges are not modeled).

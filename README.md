@@ -10,11 +10,17 @@ Constraints:
 - Disk tier selectable (Premium SSD or Max performance) and 10+ Gbps network floor.
 - Optional network add-ons with provider-specific flavors: VPC/VNet, managed
   firewall, and load balancer.
+- Optional private cloud provider with manual VMware/SAN and network/LB inputs.
 - Minimum 8 vCPU and 8 GB RAM.
 - Pricing tiers show on-demand plus 1-year and 3-year reserved (no upfront).
 - AWS reserved type is fixed to Convertible (no upfront).
 - VM workload profiles: General purpose, SQL Server, and Web Server.
 - VM flavors are provider-recommended families per workload (AWS/Azure/GCP).
+- VM view tabs: Compare plus per-provider tabs with up to four options per
+  vendor (auto-picked instances with manual overrides; private options accept
+  manual vCPU/RAM/OS/data specs).
+- Private-Price tab stores manual pricing plus node capacity inputs and
+  calculates SAN cost per TB and VMs per node (including N+1 capacity).
 
 ## Run
 
@@ -87,6 +93,11 @@ show $0 with a provider note when missing.
 
 Retail (Vantage) mode does not require credentials.
 
+## Scenarios
+
+Save, clone, and compare input profiles. Scenarios are stored in browser
+localStorage and can be loaded later from the dropdown.
+
 ## Pricing cache warm-up
 
 On startup, the app preloads pricing data for the supported instance sizes and
@@ -104,10 +115,17 @@ regions so most requests hit in-memory caches instead of live API calls.
   modeled.
 - Disk tier defaults to Max performance in the UI and can be switched back to
   Premium SSD.
+- Private cloud pricing uses manual inputs; Node CPU capacity is treated as
+  physical sockets and converted using the VMware standard (3 vCPU per
+  socket). VMware per node is converted from monthly to hourly for compute and
+  multiplied by the VMware node count. Capacity uses N+1 (one node reserved
+  as hot spare). Storage uses the SAN $/TB-month rate. Optional Windows
+  license per VM is added monthly. Egress is set to $0 for private cloud.
 - Backups use 15-day retention with a 10% daily delta when enabled.
 - Snapshot storage uses the same per-GB rate as primary storage.
-- OS disk input is in GB; data disk input is in TB (1 TB = 1024 GB).
-- Egress input is in TB (1 TB = 1024 GB) with a 1 TB minimum; VM mode scales
+- OS disk input is in GB; data disk input is in TB (1 TB = 1024 GB) and accepts
+  decimals (e.g., 0.01 TB).
+- Egress input is in TB (1 TB = 1024 GB) and can be set to 0; VM mode scales
   egress by VM count.
 - Network add-ons use provider pricing APIs/price lists for base hourly rates.
   Data processing, per-rule, and LCU-style usage charges are not included.
@@ -142,6 +160,9 @@ regions so most requests hit in-memory caches instead of live API calls.
   GCP network performance is reported as Variable in the snapshot.
 - If a request exceeds the curated size list, the app uses the largest
   available size and flags it in the UI.
+- Instance dropdowns include quick filters above each provider list.
+- Region groups include US Central, US West (N. California), EU Central, UK
+  South, Japan East, India Central, South America, and Africa South.
 
 
 
