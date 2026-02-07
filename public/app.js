@@ -19,7 +19,6 @@ const sqlRateField = document.getElementById("sql-rate-field");
 const awsTitle = document.getElementById("aws-title");
 const azureTitle = document.getElementById("azure-title");
 const gcpTitle = document.getElementById("gcp-title");
-const privateTitle = document.getElementById("private-title");
 const cpuSelect = form.querySelector("[name='cpu']");
 const workloadSelect = form.querySelector("[name='workload']");
 const awsInstanceSelect = document.getElementById("aws-instance");
@@ -47,20 +46,36 @@ const dataDiskInput = form.querySelector("[name='dataDiskTb']");
 const backupEnabledInput = form.querySelector("[name='backupEnabled']");
 const drPercentInput = form.querySelector("[name='drPercent']");
 const privateEnabledInput = document.getElementById("private-enabled");
-const privateVmwareInput = form.querySelector("[name='privateVmwareMonthly']");
-const privateWindowsLicenseInput = form.querySelector(
+const privateVmwareInput = document.querySelector(
+  "[name='privateVmwareMonthly']"
+);
+const privateWindowsLicenseInput = document.querySelector(
   "[name='privateWindowsLicenseMonthly']"
 );
-const privateNodeCountInput = form.querySelector("[name='privateNodeCount']");
-const privateNetworkInput = form.querySelector("[name='privateNetworkMonthly']");
-const privateFirewallInput = form.querySelector("[name='privateFirewallMonthly']");
-const privateLoadBalancerInput = form.querySelector("[name='privateLoadBalancerMonthly']");
-const privateNodeCpuInput = form.querySelector("[name='privateNodeCpu']");
-const privateNodeRamInput = form.querySelector("[name='privateNodeRam']");
-const privateNodeStorageInput = form.querySelector("[name='privateNodeStorageTb']");
-const privateVmOsDiskInput = form.querySelector("[name='privateVmOsDiskGb']");
-const privateSanUsableInput = form.querySelector("[name='privateSanUsableTb']");
-const privateSanTotalInput = form.querySelector("[name='privateSanTotalMonthly']");
+const privateNodeCountInput = document.querySelector("[name='privateNodeCount']");
+const privateNetworkInput = document.querySelector(
+  "[name='privateNetworkMonthly']"
+);
+const privateFirewallInput = document.querySelector(
+  "[name='privateFirewallMonthly']"
+);
+const privateLoadBalancerInput = document.querySelector(
+  "[name='privateLoadBalancerMonthly']"
+);
+const privateNodeCpuInput = document.querySelector("[name='privateNodeCpu']");
+const privateNodeRamInput = document.querySelector("[name='privateNodeRam']");
+const privateNodeStorageInput = document.querySelector(
+  "[name='privateNodeStorageTb']"
+);
+const privateVmOsDiskInput = document.querySelector(
+  "[name='privateVmOsDiskGb']"
+);
+const privateSanUsableInput = document.querySelector(
+  "[name='privateSanUsableTb']"
+);
+const privateSanTotalInput = document.querySelector(
+  "[name='privateSanTotalMonthly']"
+);
 const privateSanRate = document.getElementById("private-san-rate");
 const privateStoragePerTbInput = document.getElementById(
   "private-storage-per-tb"
@@ -96,7 +111,6 @@ const deleteScenarioButton = document.getElementById("delete-scenario");
 const awsInstanceFilter = document.getElementById("aws-instance-filter");
 const azureInstanceFilter = document.getElementById("azure-instance-filter");
 const gcpInstanceFilter = document.getElementById("gcp-instance-filter");
-const privateCard = document.getElementById("private-card");
 const awsCard = document.getElementById("aws-card");
 const azureCard = document.getElementById("azure-card");
 const gcpCard = document.getElementById("gcp-card");
@@ -104,12 +118,162 @@ const compareGrid = document.getElementById("compare-grid");
 const vendorGrid = document.getElementById("vendor-grid");
 const vendorCardTemplate = document.getElementById("vendor-card-template");
 const privateOptionTemplate = document.getElementById("private-option-template");
+const privateCompareTemplate = document.getElementById(
+  "private-compare-template"
+);
+const privateCompareContainer = document.getElementById("private-compare-cards");
 const viewTabs = document.getElementById("vm-view-tabs");
 const viewTabButtons = document.querySelectorAll(".view-tab");
 const cloudPanel = document.getElementById("cloud-panel");
 const privatePanel = document.getElementById("private-panel");
+const layout = document.querySelector(".layout");
+const formCard = document.querySelector(".form-card");
 const privateSaveButton = document.getElementById("save-private");
 const privateSaveNote = document.getElementById("private-save-note");
+const privateProviderNameInput = document.getElementById(
+  "private-provider-name"
+);
+const privateProviderList = document.getElementById("private-provider-list");
+const loadPrivateProviderButton = document.getElementById(
+  "load-private-provider"
+);
+const deletePrivateProviderButton = document.getElementById(
+  "delete-private-provider"
+);
+const resultsTabs = document.getElementById("results-tabs");
+const resultsTabButtons = document.querySelectorAll(".results-tab");
+const pricingPanel = document.getElementById("pricing-panel");
+const savedComparePanel = document.getElementById("saved-compare-panel");
+const savedCompareTable = document.getElementById("saved-compare-table");
+const savedCompareNote = document.getElementById("saved-compare-note");
+const savedCompareRefresh = document.getElementById("saved-compare-refresh");
+const savedCompareExport = document.getElementById("saved-compare-export");
+const insightPanel = document.getElementById("insight-panel");
+const insightChart = document.getElementById("insight-chart");
+const insightNote = document.getElementById("insight-note");
+const commitPanel = document.getElementById("commit-panel");
+const commitNote = document.getElementById("commit-note");
+const commitDiscountInputs = {
+  aws: document.querySelector("[data-commit-discount='aws']"),
+  azure: document.querySelector("[data-commit-discount='azure']"),
+  gcp: document.querySelector("[data-commit-discount='gcp']"),
+};
+const commitFields = {
+  aws: {
+    base: {
+      compute: document.querySelector("[data-commit='aws-base-compute']"),
+      control: document.querySelector("[data-commit='aws-base-control']"),
+      storage: document.querySelector("[data-commit='aws-base-storage']"),
+      backup: document.querySelector("[data-commit='aws-base-backup']"),
+      egress: document.querySelector("[data-commit='aws-base-egress']"),
+      network: document.querySelector("[data-commit='aws-base-network']"),
+      sql: document.querySelector("[data-commit='aws-base-sql']"),
+      windows: document.querySelector("[data-commit='aws-base-windows']"),
+      dr: document.querySelector("[data-commit='aws-base-dr']"),
+      total: document.querySelector("[data-commit='aws-base-total']"),
+    },
+    commit: {
+      compute: document.querySelector("[data-commit='aws-commit-compute']"),
+      control: document.querySelector("[data-commit='aws-commit-control']"),
+      storage: document.querySelector("[data-commit='aws-commit-storage']"),
+      backup: document.querySelector("[data-commit='aws-commit-backup']"),
+      egress: document.querySelector("[data-commit='aws-commit-egress']"),
+      network: document.querySelector("[data-commit='aws-commit-network']"),
+      sql: document.querySelector("[data-commit='aws-commit-sql']"),
+      windows: document.querySelector("[data-commit='aws-commit-windows']"),
+      dr: document.querySelector("[data-commit='aws-commit-dr']"),
+      savings: document.querySelector("[data-commit='aws-commit-savings']"),
+      total: document.querySelector("[data-commit='aws-commit-total']"),
+    },
+    note: document.querySelector("[data-commit='aws-note']"),
+  },
+  azure: {
+    base: {
+      compute: document.querySelector("[data-commit='azure-base-compute']"),
+      control: document.querySelector("[data-commit='azure-base-control']"),
+      storage: document.querySelector("[data-commit='azure-base-storage']"),
+      backup: document.querySelector("[data-commit='azure-base-backup']"),
+      egress: document.querySelector("[data-commit='azure-base-egress']"),
+      network: document.querySelector("[data-commit='azure-base-network']"),
+      sql: document.querySelector("[data-commit='azure-base-sql']"),
+      windows: document.querySelector("[data-commit='azure-base-windows']"),
+      dr: document.querySelector("[data-commit='azure-base-dr']"),
+      total: document.querySelector("[data-commit='azure-base-total']"),
+    },
+    commit: {
+      compute: document.querySelector("[data-commit='azure-commit-compute']"),
+      control: document.querySelector("[data-commit='azure-commit-control']"),
+      storage: document.querySelector("[data-commit='azure-commit-storage']"),
+      backup: document.querySelector("[data-commit='azure-commit-backup']"),
+      egress: document.querySelector("[data-commit='azure-commit-egress']"),
+      network: document.querySelector("[data-commit='azure-commit-network']"),
+      sql: document.querySelector("[data-commit='azure-commit-sql']"),
+      windows: document.querySelector("[data-commit='azure-commit-windows']"),
+      dr: document.querySelector("[data-commit='azure-commit-dr']"),
+      savings: document.querySelector("[data-commit='azure-commit-savings']"),
+      total: document.querySelector("[data-commit='azure-commit-total']"),
+    },
+    note: document.querySelector("[data-commit='azure-note']"),
+  },
+  gcp: {
+    base: {
+      compute: document.querySelector("[data-commit='gcp-base-compute']"),
+      control: document.querySelector("[data-commit='gcp-base-control']"),
+      storage: document.querySelector("[data-commit='gcp-base-storage']"),
+      backup: document.querySelector("[data-commit='gcp-base-backup']"),
+      egress: document.querySelector("[data-commit='gcp-base-egress']"),
+      network: document.querySelector("[data-commit='gcp-base-network']"),
+      sql: document.querySelector("[data-commit='gcp-base-sql']"),
+      windows: document.querySelector("[data-commit='gcp-base-windows']"),
+      dr: document.querySelector("[data-commit='gcp-base-dr']"),
+      total: document.querySelector("[data-commit='gcp-base-total']"),
+    },
+    commit: {
+      compute: document.querySelector("[data-commit='gcp-commit-compute']"),
+      control: document.querySelector("[data-commit='gcp-commit-control']"),
+      storage: document.querySelector("[data-commit='gcp-commit-storage']"),
+      backup: document.querySelector("[data-commit='gcp-commit-backup']"),
+      egress: document.querySelector("[data-commit='gcp-commit-egress']"),
+      network: document.querySelector("[data-commit='gcp-commit-network']"),
+      sql: document.querySelector("[data-commit='gcp-commit-sql']"),
+      windows: document.querySelector("[data-commit='gcp-commit-windows']"),
+      dr: document.querySelector("[data-commit='gcp-commit-dr']"),
+      savings: document.querySelector("[data-commit='gcp-commit-savings']"),
+      total: document.querySelector("[data-commit='gcp-commit-total']"),
+    },
+    note: document.querySelector("[data-commit='gcp-note']"),
+  },
+};
+const commitInsightFields = {
+  aws: {
+    base: document.querySelector("[data-commit-insight-base='aws']"),
+    commit: document.querySelector("[data-commit-insight-commit='aws']"),
+    save: document.querySelector("[data-commit-insight-save='aws']"),
+    baseBar: document.querySelector("[data-commit-insight-bar='aws-base']"),
+    commitBar: document.querySelector("[data-commit-insight-bar='aws-commit']"),
+  },
+  azure: {
+    base: document.querySelector("[data-commit-insight-base='azure']"),
+    commit: document.querySelector("[data-commit-insight-commit='azure']"),
+    save: document.querySelector("[data-commit-insight-save='azure']"),
+    baseBar: document.querySelector("[data-commit-insight-bar='azure-base']"),
+    commitBar: document.querySelector("[data-commit-insight-bar='azure-commit']"),
+  },
+  gcp: {
+    base: document.querySelector("[data-commit-insight-base='gcp']"),
+    commit: document.querySelector("[data-commit-insight-commit='gcp']"),
+    save: document.querySelector("[data-commit-insight-save='gcp']"),
+    baseBar: document.querySelector("[data-commit-insight-bar='gcp-base']"),
+    commitBar: document.querySelector("[data-commit-insight-bar='gcp-commit']"),
+  },
+};
+const vendorSubtabs = document.getElementById("vendor-subtabs");
+const vendorSubtabButtons = document.querySelectorAll(".vendor-subtab");
+const vendorRegionPanel = document.getElementById("vendor-region-panel");
+const vendorRegionPicker = document.getElementById("vendor-region-picker");
+const vendorRegionTable = document.getElementById("region-compare-table");
+const vendorRegionNote = document.getElementById("region-compare-note");
+const runRegionCompareButton = document.getElementById("run-region-compare");
 
 const SQL_DEFAULTS = {
   none: 0,
@@ -122,6 +286,9 @@ const DISK_TIER_LABELS = {
 };
 const SCENARIO_STORAGE_KEY = "cloud-price-scenarios";
 const PRIVATE_STORAGE_KEY = "cloud-price-private";
+const PRIVATE_PROVIDERS_KEY = "cloud-price-private-providers";
+const PRIVATE_COMPARE_KEY = "cloud-price-private-compare";
+const PRIVATE_COMPARE_SLOTS = 2;
 const VMWARE_VCPU_PER_SOCKET = 3;
 const MAX_VENDOR_OPTIONS = 4;
 let sqlRateTouched = false;
@@ -130,6 +297,11 @@ let lastPricing = null;
 let currentMode = "vm";
 let activePanel = "vm";
 let currentView = "compare";
+let currentResultsTab = "pricing";
+let currentVendorView = "options";
+let savedCompareRows = [];
+let privateProviderStore = { activeId: null, providers: [] };
+let privateCompareSelections = [];
 const vendorOptionState = {
   aws: [],
   azure: [],
@@ -187,6 +359,34 @@ const MODE_COPY = {
     azureTitle: "AKS",
     gcpTitle: "GKE",
     privateTitle: "Private",
+  },
+};
+
+const COMMIT_COMPONENTS = [
+  { key: "compute", field: "computeMonthly" },
+  { key: "control", field: "controlPlaneMonthly" },
+  { key: "storage", field: "storageMonthly" },
+  { key: "backup", field: "backupMonthly" },
+  { key: "egress", field: "egressMonthly" },
+  { key: "network", field: "networkMonthly" },
+  { key: "sql", field: "sqlMonthly" },
+  { key: "windows", field: "windowsLicenseMonthly" },
+  { key: "dr", field: "drMonthly" },
+];
+
+const RESULTS_TAB_COPY = {
+  saved: {
+    title: "Saved Compare",
+    subtitle: "Run saved scenarios in a multi-provider dashboard.",
+  },
+  insight: {
+    title: "Insight",
+    subtitle: "Cost-driver breakdown across compute, storage, egress, and licenses.",
+  },
+  commit: {
+    title: "Cloud Commit",
+    subtitle:
+      "Apply per-provider discounts to compute only and compare committed totals.",
   },
 };
 
@@ -269,32 +469,6 @@ const fields = {
     breakdown: document.getElementById("gcp-breakdown"),
     note: document.getElementById("gcp-note"),
   },
-  private: {
-    status: document.getElementById("private-status"),
-    family: document.getElementById("private-family"),
-    instance: document.getElementById("private-instance"),
-    shape: document.getElementById("private-shape"),
-    region: document.getElementById("private-region"),
-    hourly: document.getElementById("private-hourly"),
-    network: document.getElementById("private-network"),
-    tiers: {
-      onDemand: {
-        total: document.getElementById("private-od-total"),
-        rate: document.getElementById("private-od-rate"),
-      },
-      year1: {
-        total: document.getElementById("private-1y-total"),
-        rate: document.getElementById("private-1y-rate"),
-      },
-      year3: {
-        total: document.getElementById("private-3y-total"),
-        rate: document.getElementById("private-3y-rate"),
-      },
-    },
-    savings: document.getElementById("private-savings"),
-    breakdown: document.getElementById("private-breakdown"),
-    note: document.getElementById("private-note"),
-  },
 };
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -344,17 +518,13 @@ function setMode(mode) {
   const copy = MODE_COPY[currentMode];
   formTitle.textContent = copy.formTitle;
   formSubtitle.textContent = copy.formSubtitle;
-  resultsTitle.textContent = copy.resultsTitle;
-  resultsSubtitle.textContent = copy.resultsSubtitle;
   cpuLabel.textContent = copy.cpuLabel;
   vmCountLabel.textContent = copy.countLabel;
   egressLabel.textContent = copy.egressLabel;
   awsTitle.textContent = copy.awsTitle;
   azureTitle.textContent = copy.azureTitle;
   gcpTitle.textContent = copy.gcpTitle;
-  if (privateTitle) {
-    privateTitle.textContent = copy.privateTitle;
-  }
+  updateResultsHeading();
 
   const isK8s = currentMode === "k8s";
   workloadField.classList.toggle("is-hidden", isK8s);
@@ -397,6 +567,101 @@ function setMode(mode) {
   updateViewTabsVisibility();
 }
 
+function updateResultsHeading() {
+  if (!resultsTitle || !resultsSubtitle) {
+    return;
+  }
+  if (activePanel === "private") {
+    resultsTitle.textContent = "Private cloud profiles";
+    resultsSubtitle.textContent =
+      "Create and save private provider profiles for VM comparisons.";
+    return;
+  }
+  if (currentResultsTab === "saved") {
+    resultsTitle.textContent = RESULTS_TAB_COPY.saved.title;
+    resultsSubtitle.textContent = RESULTS_TAB_COPY.saved.subtitle;
+    return;
+  }
+  if (currentResultsTab === "insight") {
+    resultsTitle.textContent = RESULTS_TAB_COPY.insight.title;
+    resultsSubtitle.textContent = RESULTS_TAB_COPY.insight.subtitle;
+    return;
+  }
+  if (currentResultsTab === "commit") {
+    resultsTitle.textContent = RESULTS_TAB_COPY.commit.title;
+    resultsSubtitle.textContent = RESULTS_TAB_COPY.commit.subtitle;
+    return;
+  }
+  const copy = MODE_COPY[currentMode] || MODE_COPY.vm;
+  resultsTitle.textContent = copy.resultsTitle;
+  resultsSubtitle.textContent = copy.resultsSubtitle;
+}
+
+function updateResultsTabsVisibility() {
+  if (!resultsTabs) {
+    return;
+  }
+  const showTabs = activePanel !== "private";
+  resultsTabs.classList.toggle("is-hidden", !showTabs);
+  if (!showTabs && currentResultsTab !== "pricing") {
+    currentResultsTab = "pricing";
+    if (pricingPanel) {
+      pricingPanel.classList.remove("is-hidden");
+    }
+    if (savedComparePanel) {
+      savedComparePanel.classList.add("is-hidden");
+    }
+    if (insightPanel) {
+      insightPanel.classList.add("is-hidden");
+    }
+    updateResultsHeading();
+  }
+}
+
+function setResultsTab(tab, options = {}) {
+  const nextTab =
+    tab === "saved" || tab === "insight" || tab === "commit"
+      ? tab
+      : "pricing";
+  currentResultsTab = nextTab;
+  resultsTabButtons.forEach((button) => {
+    button.classList.toggle(
+      "active",
+      button.dataset.results === nextTab
+    );
+  });
+  if (pricingPanel) {
+    pricingPanel.classList.toggle("is-hidden", nextTab !== "pricing");
+  }
+  if (savedComparePanel) {
+    savedComparePanel.classList.toggle("is-hidden", nextTab !== "saved");
+  }
+  if (insightPanel) {
+    insightPanel.classList.toggle("is-hidden", nextTab !== "insight");
+  }
+  if (commitPanel) {
+    commitPanel.classList.toggle("is-hidden", nextTab !== "commit");
+  }
+  updateResultsHeading();
+  updateViewTabsVisibility();
+  updateVendorSubtabs();
+  if (nextTab === "pricing") {
+    setView(currentView);
+  }
+  if (options.silent) {
+    return;
+  }
+  if (nextTab === "saved") {
+    refreshSavedCompare();
+  }
+  if (nextTab === "insight") {
+    renderInsight(lastPricing);
+  }
+  if (nextTab === "commit") {
+    renderCommit(lastPricing);
+  }
+}
+
 function setPanel(panel) {
   const nextPanel =
     panel === "private" ? "private" : panel === "k8s" ? "k8s" : "vm";
@@ -411,10 +676,26 @@ function setPanel(panel) {
     if (privatePanel) {
       privatePanel.classList.remove("is-hidden");
     }
-    formTitle.textContent = "Private pricing inputs";
-    formSubtitle.textContent =
-      "Set manual VMware, SAN, and network costs to compare against cloud totals.";
-    updateViewTabsVisibility();
+    if (formCard) {
+      formCard.classList.add("is-hidden");
+    }
+    if (layout) {
+      layout.classList.add("single");
+    }
+    if (pricingPanel) {
+      pricingPanel.classList.add("is-hidden");
+    }
+    if (savedComparePanel) {
+      savedComparePanel.classList.add("is-hidden");
+    }
+    if (insightPanel) {
+      insightPanel.classList.add("is-hidden");
+    }
+    if (commitPanel) {
+      commitPanel.classList.add("is-hidden");
+    }
+    updateResultsTabsVisibility();
+    updateResultsHeading();
     return;
   }
   if (cloudPanel) {
@@ -423,8 +704,15 @@ function setPanel(panel) {
   if (privatePanel) {
     privatePanel.classList.add("is-hidden");
   }
+  if (formCard) {
+    formCard.classList.remove("is-hidden");
+  }
+  if (layout) {
+    layout.classList.remove("single");
+  }
   setMode(nextPanel);
-  updateViewTabsVisibility();
+  updateResultsTabsVisibility();
+  setResultsTab(currentResultsTab, { silent: true });
   setView(currentView);
 }
 
@@ -432,9 +720,10 @@ function updateViewTabsVisibility() {
   if (!viewTabs) {
     return;
   }
-  const showTabs = activePanel === "vm" && currentMode === "vm";
+  const showTabs =
+    activePanel !== "private" && currentResultsTab === "pricing";
   viewTabs.classList.toggle("is-hidden", !showTabs);
-  if (!showTabs && currentView !== "compare") {
+  if (!showTabs && activePanel === "private" && currentView !== "compare") {
     currentView = "compare";
     setView("compare");
   }
@@ -450,7 +739,6 @@ function setView(view) {
     button.classList.toggle("active", button.dataset.view === nextView);
   });
   const showAll = nextView === "compare";
-  const shouldShowPrivate = nextView === "private" || showAll;
   if (awsCard) {
     awsCard.classList.toggle("is-hidden", !(showAll || nextView === "aws"));
   }
@@ -459,9 +747,6 @@ function setView(view) {
   }
   if (gcpCard) {
     gcpCard.classList.toggle("is-hidden", !(showAll || nextView === "gcp"));
-  }
-  if (privateCard) {
-    privateCard.classList.toggle("is-hidden", !shouldShowPrivate);
   }
   if (compareGrid) {
     compareGrid.classList.toggle("single", !showAll);
@@ -473,6 +758,48 @@ function setView(view) {
   delta.classList.toggle("is-hidden", !showAll);
   if (scenarioDelta) {
     scenarioDelta.classList.toggle("is-hidden", !showAll);
+  }
+  updateVendorSubtabs();
+}
+
+function updateVendorSubtabs() {
+  if (!vendorSubtabs || !vendorRegionPanel) {
+    return;
+  }
+  const isProviderView =
+    currentView === "aws" || currentView === "azure" || currentView === "gcp";
+  const showSubtabs = currentResultsTab === "pricing" && isProviderView;
+  vendorSubtabs.classList.toggle("is-hidden", !showSubtabs);
+  if (!showSubtabs) {
+    vendorRegionPanel.classList.add("is-hidden");
+    return;
+  }
+  setVendorSubtab(currentVendorView, { silent: true });
+}
+
+function setVendorSubtab(view, options = {}) {
+  const nextView = view === "regions" ? "regions" : "options";
+  currentVendorView = nextView;
+  vendorSubtabButtons.forEach((button) => {
+    button.classList.toggle(
+      "active",
+      button.dataset.vendorView === nextView
+    );
+  });
+  const isProviderView =
+    currentView === "aws" || currentView === "azure" || currentView === "gcp";
+  if (!isProviderView || currentResultsTab !== "pricing") {
+    return;
+  }
+  const showOptions = nextView === "options";
+  if (vendorGrid) {
+    vendorGrid.classList.toggle("is-hidden", !showOptions);
+  }
+  if (vendorRegionPanel) {
+    vendorRegionPanel.classList.toggle("is-hidden", showOptions);
+  }
+  if (!options.silent && nextView === "regions") {
+    runRegionCompare();
   }
 }
 
@@ -1100,6 +1427,619 @@ async function comparePricing(payload) {
   return response.json();
 }
 
+function buildRegionChecklist() {
+  if (!vendorRegionPicker || !regionSelect) {
+    return;
+  }
+  vendorRegionPicker.innerHTML = "";
+  const options = Array.from(regionSelect.options);
+  const defaults = new Set();
+  if (regionSelect.value) {
+    defaults.add(regionSelect.value);
+  }
+  options.forEach((option) => {
+    if (defaults.size < 3) {
+      defaults.add(option.value);
+    }
+  });
+  options.forEach((option) => {
+    const label = document.createElement("label");
+    label.className = "region-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = option.value;
+    checkbox.checked = defaults.has(option.value);
+    const text = document.createElement("span");
+    text.textContent = option.textContent;
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    vendorRegionPicker.appendChild(label);
+  });
+}
+
+function getSelectedRegionKeys() {
+  if (!vendorRegionPicker) {
+    return [];
+  }
+  const inputs = vendorRegionPicker.querySelectorAll(
+    "input[type='checkbox']"
+  );
+  return Array.from(inputs)
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+}
+
+function getRegionLabel(regionKey) {
+  if (!regionSelect) {
+    return regionKey;
+  }
+  const option = Array.from(regionSelect.options).find(
+    (item) => item.value === regionKey
+  );
+  return option ? option.textContent : regionKey;
+}
+
+function getPrimaryInstanceType(providerKey) {
+  const stored = Array.isArray(vendorOptionState[providerKey])
+    ? vendorOptionState[providerKey]
+    : [];
+  if (stored.length) {
+    return stored[0];
+  }
+  const select = getProviderSelect(providerKey);
+  return select?.value || "";
+}
+
+async function runRegionCompare() {
+  if (!vendorRegionTable || !vendorRegionNote) {
+    return;
+  }
+  const providerKey = currentView;
+  if (
+    providerKey !== "aws" &&
+    providerKey !== "azure" &&
+    providerKey !== "gcp"
+  ) {
+    return;
+  }
+  const selectedRegions = getSelectedRegionKeys();
+  if (selectedRegions.length < 3 || selectedRegions.length > 5) {
+    vendorRegionNote.textContent = "Select 3 to 5 regions to compare.";
+    vendorRegionNote.classList.add("negative");
+    return;
+  }
+  vendorRegionNote.classList.remove("negative");
+  vendorRegionNote.textContent = "Running region compare...";
+  const basePayload = serializeForm(form);
+  const instanceType = getPrimaryInstanceType(providerKey);
+  const results = await Promise.all(
+    selectedRegions.map(async (regionKey) => {
+      const payload = { ...basePayload, regionKey };
+      if (providerKey === "aws") {
+        payload.awsInstanceType = instanceType;
+      }
+      if (providerKey === "azure") {
+        payload.azureInstanceType = instanceType;
+      }
+      if (providerKey === "gcp") {
+        payload.gcpInstanceType = instanceType;
+      }
+      try {
+        const data = await comparePricing(payload);
+        return { regionKey, data };
+      } catch (error) {
+        return {
+          regionKey,
+          error: error?.message || "Pricing request failed.",
+        };
+      }
+    })
+  );
+  renderRegionCompareTable(results, providerKey);
+  vendorRegionNote.textContent = "Region compare updated.";
+}
+
+function renderRegionCompareTable(rows, providerKey) {
+  if (!vendorRegionTable) {
+    return;
+  }
+  vendorRegionTable.innerHTML = "";
+  if (!rows.length) {
+    vendorRegionTable.textContent = "No region results yet.";
+    return;
+  }
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Region", "On-demand", "1-year", "3-year", "Compute rate"].forEach(
+    (label) => {
+      const cell = document.createElement("th");
+      cell.textContent = label;
+      headRow.appendChild(cell);
+    }
+  );
+  head.appendChild(headRow);
+  table.appendChild(head);
+  const body = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    const regionCell = document.createElement("td");
+    const location =
+      row.data?.region?.[providerKey]?.location ||
+      getRegionLabel(row.regionKey);
+    regionCell.textContent = location;
+    tr.appendChild(regionCell);
+
+    if (row.error) {
+      const errorCell = document.createElement("td");
+      errorCell.textContent = row.error;
+      errorCell.colSpan = 4;
+      tr.appendChild(errorCell);
+      body.appendChild(tr);
+      return;
+    }
+
+    const provider = row.data?.[providerKey];
+    const onDemandTier = provider?.pricingTiers?.onDemand;
+    const onDemandTotal = onDemandTier?.totals?.total;
+    const year1Total = provider?.pricingTiers?.reserved1yr?.totals?.total;
+    const year3Total = provider?.pricingTiers?.reserved3yr?.totals?.total;
+    const hourlyRate = onDemandTier?.hourlyRate ?? provider?.hourlyRate;
+
+    [onDemandTotal, year1Total, year3Total].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = formatMonthly(value);
+      tr.appendChild(cell);
+    });
+    const rateCell = document.createElement("td");
+    rateCell.textContent = formatRate(hourlyRate);
+    tr.appendChild(rateCell);
+    body.appendChild(tr);
+  });
+  table.appendChild(body);
+  vendorRegionTable.appendChild(table);
+}
+
+async function refreshSavedCompare() {
+  if (!savedCompareTable || !savedCompareNote) {
+    return;
+  }
+  if (!scenarioStore.length) {
+    savedCompareRows = [];
+    renderSavedCompareTable([]);
+    savedCompareNote.textContent = "No saved scenarios yet.";
+    savedCompareNote.classList.remove("negative");
+    return;
+  }
+  savedCompareNote.textContent = `Running ${scenarioStore.length} scenarios...`;
+  savedCompareNote.classList.remove("negative");
+  const rows = [];
+  for (const scenario of scenarioStore) {
+    try {
+      const data = await comparePricing(scenario.input);
+      rows.push({ scenario, data });
+    } catch (error) {
+      rows.push({
+        scenario,
+        error: error?.message || "Pricing request failed.",
+      });
+    }
+  }
+  savedCompareRows = rows;
+  renderSavedCompareTable(rows);
+  const hasError = rows.some((row) => row.error);
+  savedCompareNote.textContent = hasError
+    ? "Saved compare updated with errors."
+    : "Saved compare updated.";
+  savedCompareNote.classList.toggle("negative", hasError);
+}
+
+function renderSavedCompareTable(rows) {
+  if (!savedCompareTable) {
+    return;
+  }
+  savedCompareTable.innerHTML = "";
+  if (!rows.length) {
+    savedCompareTable.textContent = "No saved scenarios to display.";
+    return;
+  }
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  [
+    "Scenario",
+    "Mode",
+    "Region",
+    "AWS",
+    "Azure",
+    "GCP",
+    "Private",
+    "Status",
+    "Actions",
+  ].forEach((label) => {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headRow.appendChild(cell);
+  });
+  head.appendChild(headRow);
+  table.appendChild(head);
+  const body = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    const input = row.data?.input || row.scenario.input || {};
+    const mode = input.mode || "vm";
+    const regionLabel = getRegionLabel(input.regionKey || "");
+    const awsTotal = row.data ? getScenarioProviderTotal(row.data, "aws") : null;
+    const azureTotal = row.data
+      ? getScenarioProviderTotal(row.data, "azure")
+      : null;
+    const gcpTotal = row.data ? getScenarioProviderTotal(row.data, "gcp") : null;
+    const privateTotal = row.data
+      ? getScenarioProviderTotal(row.data, "private")
+      : null;
+
+    [
+      row.scenario.name,
+      mode,
+      regionLabel,
+      formatMonthly(awsTotal),
+      formatMonthly(azureTotal),
+      formatMonthly(gcpTotal),
+      formatMonthly(privateTotal),
+      row.error ? row.error : "OK",
+    ].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value || "-";
+      tr.appendChild(cell);
+    });
+    const actionCell = document.createElement("td");
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.className = "table-action";
+    actionButton.textContent = "Delete";
+    actionButton.addEventListener("click", () => {
+      const confirmDelete = window.confirm(
+        `Delete scenario "${row.scenario.name}"?`
+      );
+      if (!confirmDelete) {
+        return;
+      }
+      const deletedName = deleteScenarioById(row.scenario.id);
+      savedCompareRows = savedCompareRows.filter(
+        (item) => item.scenario.id !== row.scenario.id
+      );
+      renderSavedCompareTable(savedCompareRows);
+      if (savedCompareNote) {
+        savedCompareNote.textContent = deletedName
+          ? `Deleted "${deletedName}".`
+          : "Scenario deleted.";
+        savedCompareNote.classList.remove("negative");
+      }
+    });
+    actionCell.appendChild(actionButton);
+    tr.appendChild(actionCell);
+    body.appendChild(tr);
+  });
+  table.appendChild(body);
+  savedCompareTable.appendChild(table);
+}
+
+function buildSavedCompareCsv(rows) {
+  const headers = [
+    "Scenario",
+    "Mode",
+    "Region",
+    "AWS_On_Demand",
+    "Azure_On_Demand",
+    "GCP_On_Demand",
+    "Private_On_Demand",
+    "Status",
+  ];
+  const lines = [headers.join(",")];
+  rows.forEach((row) => {
+    const input = row.data?.input || row.scenario.input || {};
+    const regionLabel = getRegionLabel(input.regionKey || "");
+    const line = [
+      row.scenario.name,
+      input.mode || "vm",
+      regionLabel,
+      row.data ? getScenarioProviderTotal(row.data, "aws") : "",
+      row.data ? getScenarioProviderTotal(row.data, "azure") : "",
+      row.data ? getScenarioProviderTotal(row.data, "gcp") : "",
+      row.data ? getScenarioProviderTotal(row.data, "private") : "",
+      row.error ? row.error : "OK",
+    ];
+    lines.push(line.map((value) => escapeCsv(value)).join(","));
+  });
+  return lines.join("\n");
+}
+
+function deleteScenarioById(id) {
+  const scenario = getScenarioById(id);
+  if (!scenario) {
+    return null;
+  }
+  scenarioStore = scenarioStore.filter((item) => item.id !== id);
+  persistScenarioStore(scenarioStore);
+  renderScenarioList();
+  if (scenarioList && scenarioList.value === id) {
+    scenarioList.value = "";
+  }
+  if (scenarioNameInput && scenarioNameInput.value === scenario.name) {
+    scenarioNameInput.value = "";
+  }
+  return scenario.name;
+}
+
+function buildInsightBuckets(totals) {
+  if (!totals || !Number.isFinite(totals.total)) {
+    return null;
+  }
+  const compute =
+    (totals.computeMonthly || 0) +
+    (totals.controlPlaneMonthly || 0) +
+    (totals.networkMonthly || 0) +
+    (totals.drMonthly || 0);
+  const storage = (totals.storageMonthly || 0) + (totals.backupMonthly || 0);
+  const egress = totals.egressMonthly || 0;
+  const licenses =
+    (totals.sqlMonthly || 0) + (totals.windowsLicenseMonthly || 0);
+  const total = compute + storage + egress + licenses;
+  return {
+    compute,
+    storage,
+    egress,
+    licenses,
+    total,
+  };
+}
+
+function renderInsight(data) {
+  if (!insightChart || !insightNote) {
+    return;
+  }
+  insightChart.innerHTML = "";
+  if (!data) {
+    insightNote.textContent = "Run a comparison to generate insights.";
+    return;
+  }
+  const mode = data.input?.mode || "vm";
+  const providers = [
+    { key: "aws", label: getProviderLabelForMode("aws", mode), data: data.aws },
+    {
+      key: "azure",
+      label: getProviderLabelForMode("azure", mode),
+      data: data.azure,
+    },
+    { key: "gcp", label: getProviderLabelForMode("gcp", mode), data: data.gcp },
+  ];
+  if (data.private?.enabled) {
+    providers.push({
+      key: "private",
+      label: getProviderLabelForMode("private", mode),
+      data: data.private,
+    });
+  }
+  const cards = providers
+    .map((provider) => {
+      const totals =
+        provider.data?.pricingTiers?.onDemand?.totals || provider.data?.totals;
+      const buckets = buildInsightBuckets(totals);
+      if (!buckets) {
+        return null;
+      }
+      return { provider, buckets };
+    })
+    .filter(Boolean);
+  if (!cards.length) {
+    insightNote.textContent = "No pricing data available for insights.";
+    return;
+  }
+  cards.forEach(({ provider, buckets }) => {
+    const card = document.createElement("div");
+    card.className = "insight-card";
+    const header = document.createElement("div");
+    header.className = "insight-card-header";
+    const title = document.createElement("h4");
+    title.textContent = provider.label;
+    const total = document.createElement("span");
+    total.textContent = formatMonthly(buckets.total);
+    header.appendChild(title);
+    header.appendChild(total);
+    const bar = document.createElement("div");
+    bar.className = "insight-bar";
+    const segments = [
+      { key: "compute", value: buckets.compute },
+      { key: "storage", value: buckets.storage },
+      { key: "egress", value: buckets.egress },
+      { key: "licenses", value: buckets.licenses },
+    ];
+    segments.forEach((segment) => {
+      const span = document.createElement("span");
+      span.className = `insight-segment ${segment.key}`;
+      const width =
+        buckets.total > 0 ? (segment.value / buckets.total) * 100 : 0;
+      span.style.width = `${Math.max(0, width)}%`;
+      bar.appendChild(span);
+    });
+    const metrics = document.createElement("div");
+    metrics.className = "insight-metrics";
+    const metricItems = [
+      ["Compute", buckets.compute],
+      ["Storage", buckets.storage],
+      ["Egress", buckets.egress],
+      ["Licenses", buckets.licenses],
+    ];
+    metricItems.forEach(([label, value]) => {
+      const item = document.createElement("div");
+      const text = document.createElement("span");
+      text.textContent = `${label}: `;
+      const amount = document.createElement("strong");
+      amount.textContent = formatMonthly(value);
+      item.appendChild(text);
+      item.appendChild(amount);
+      metrics.appendChild(item);
+    });
+    card.appendChild(header);
+    card.appendChild(bar);
+    card.appendChild(metrics);
+    insightChart.appendChild(card);
+  });
+  insightNote.textContent =
+    "Breakdown uses on-demand totals (compute, storage, egress, licenses).";
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(Math.max(value, 0), 100);
+}
+
+function getCommitDiscount(providerKey) {
+  const input = commitDiscountInputs[providerKey];
+  const raw = Number.parseFloat(input?.value);
+  const percent = clampPercent(raw);
+  if (input && Number.isFinite(percent)) {
+    input.value = percent.toString();
+  }
+  return percent;
+}
+
+function setCommitField(field, value) {
+  if (!field) {
+    return;
+  }
+  field.textContent = value;
+}
+
+function renderCommit(data) {
+  if (!commitPanel || !commitNote) {
+    return;
+  }
+  if (!data) {
+    commitNote.textContent =
+      "Run a comparison to generate cloud commit totals.";
+    return;
+  }
+  const mode = data.input?.mode || "vm";
+  const providerKeys = ["aws", "azure", "gcp"];
+  const summaries = providerKeys.map((providerKey) => {
+    const provider = data[providerKey];
+    const totals =
+      provider?.pricingTiers?.onDemand?.totals || provider?.totals;
+    const onDemandTotal = Number.isFinite(totals?.total) ? totals.total : null;
+    const computeMonthly = Number.isFinite(totals?.computeMonthly)
+      ? totals.computeMonthly
+      : null;
+    const discountPercent = getCommitDiscount(providerKey);
+    const discountAmount =
+      Number.isFinite(computeMonthly) && Number.isFinite(discountPercent)
+        ? (computeMonthly * discountPercent) / 100
+        : null;
+    const committedTotal =
+      Number.isFinite(onDemandTotal) && Number.isFinite(discountAmount)
+        ? onDemandTotal - discountAmount
+        : null;
+    return {
+      providerKey,
+      provider,
+      totals,
+      onDemandTotal,
+      computeMonthly,
+      discountAmount,
+      committedTotal,
+    };
+  });
+  const maxTotal = summaries.reduce((max, item) => {
+    if (Number.isFinite(item.onDemandTotal)) {
+      return Math.max(max, item.onDemandTotal);
+    }
+    return max;
+  }, 0);
+
+  summaries.forEach((summary) => {
+    const {
+      providerKey,
+      totals,
+      onDemandTotal,
+      discountAmount,
+      committedTotal,
+    } = summary;
+
+    const fields = commitFields[providerKey];
+    COMMIT_COMPONENTS.forEach((component) => {
+      const rawValue = Number.isFinite(totals?.[component.field])
+        ? totals[component.field]
+        : null;
+      const committedValue =
+        component.key === "compute" &&
+        Number.isFinite(rawValue) &&
+        Number.isFinite(discountAmount)
+          ? rawValue - discountAmount
+          : rawValue;
+      setCommitField(
+        fields?.base?.[component.key],
+        formatMonthly(rawValue)
+      );
+      setCommitField(
+        fields?.commit?.[component.key],
+        formatMonthly(committedValue)
+      );
+    });
+    setCommitField(fields?.base?.total, formatMonthly(onDemandTotal));
+    setCommitField(
+      fields?.commit?.savings,
+      formatMonthly(
+        Number.isFinite(discountAmount) ? -discountAmount : null
+      )
+    );
+    setCommitField(fields?.commit?.total, formatMonthly(committedTotal));
+    if (fields?.note) {
+      const region = data.region?.[providerKey]?.location || "";
+      const label = getProviderLabelForMode(providerKey, mode);
+      fields.note.textContent = region
+        ? `${label} ${region}. Discount applies to compute only.`
+        : "Discount applies to compute only.";
+    }
+    const insightFields = commitInsightFields[providerKey];
+    if (insightFields) {
+      const savings =
+        Number.isFinite(onDemandTotal) && Number.isFinite(committedTotal)
+          ? onDemandTotal - committedTotal
+          : null;
+      const baseWidth =
+        Number.isFinite(onDemandTotal) && maxTotal > 0
+          ? (onDemandTotal / maxTotal) * 100
+          : 0;
+      const commitWidth =
+        Number.isFinite(committedTotal) && maxTotal > 0
+          ? (committedTotal / maxTotal) * 100
+          : 0;
+      if (insightFields.baseBar) {
+        insightFields.baseBar.style.width = `${Math.max(0, baseWidth)}%`;
+      }
+      if (insightFields.commitBar) {
+        insightFields.commitBar.style.width = `${Math.max(0, commitWidth)}%`;
+      }
+      setCommitField(
+        insightFields.base,
+        `On-demand ${formatMonthly(onDemandTotal)}`
+      );
+      setCommitField(
+        insightFields.commit,
+        `Committed ${formatMonthly(committedTotal)}`
+      );
+      setCommitField(
+        insightFields.save,
+        `Savings ${formatMonthly(savings)}`
+      );
+    }
+  });
+  commitNote.textContent =
+    "Discounts apply to compute only. Storage, egress, network, SQL, and DR remain unchanged. Savings are visualized below.";
+}
+
 function loadScenarioStore() {
   if (!scenarioList) {
     return [];
@@ -1147,6 +2087,197 @@ function setPrivateNote(message, isError = false) {
   }
   privateSaveNote.textContent = message;
   privateSaveNote.classList.toggle("negative", isError);
+}
+
+function loadPrivateProviders() {
+  try {
+    const raw = localStorage.getItem(PRIVATE_PROVIDERS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && Array.isArray(parsed.providers)) {
+      return {
+        activeId: parsed.activeId || null,
+        providers: parsed.providers,
+      };
+    }
+  } catch (error) {
+    // Ignore storage errors.
+  }
+  const legacy = loadPrivateConfig();
+  if (legacy) {
+    const id = `prv-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}`;
+    return {
+      activeId: id,
+      providers: [
+        {
+          id,
+          name: "Private cloud",
+          config: legacy,
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    };
+  }
+  return { activeId: null, providers: [] };
+}
+
+function persistPrivateProviders(store) {
+  try {
+    localStorage.setItem(PRIVATE_PROVIDERS_KEY, JSON.stringify(store));
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function loadPrivateCompareSelections() {
+  try {
+    const raw = localStorage.getItem(PRIVATE_COMPARE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function persistPrivateCompareSelections(selections) {
+  try {
+    localStorage.setItem(
+      PRIVATE_COMPARE_KEY,
+      JSON.stringify(Array.isArray(selections) ? selections : [])
+    );
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function syncPrivateCompareSelections() {
+  const providerIds = privateProviderStore.providers.map(
+    (provider) => provider.id
+  );
+  let selections = Array.isArray(privateCompareSelections)
+    ? [...privateCompareSelections]
+    : [];
+  selections = selections.filter((id) => providerIds.includes(id));
+  providerIds.forEach((id) => {
+    if (selections.length >= PRIVATE_COMPARE_SLOTS) {
+      return;
+    }
+    if (!selections.includes(id)) {
+      selections.push(id);
+    }
+  });
+  while (selections.length < PRIVATE_COMPARE_SLOTS) {
+    selections.push("");
+  }
+  privateCompareSelections = selections.slice(0, PRIVATE_COMPARE_SLOTS);
+  persistPrivateCompareSelections(privateCompareSelections);
+  return privateCompareSelections;
+}
+
+function getPrivateProviderById(id) {
+  return privateProviderStore.providers.find((provider) => provider.id === id);
+}
+
+function renderPrivateProviderList(selectedId) {
+  if (!privateProviderList) {
+    return;
+  }
+  privateProviderList.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = privateProviderStore.providers.length
+    ? "Select provider"
+    : "No providers";
+  privateProviderList.appendChild(placeholder);
+  privateProviderStore.providers.forEach((provider) => {
+    const option = document.createElement("option");
+    option.value = provider.id;
+    option.textContent = provider.name;
+    privateProviderList.appendChild(option);
+  });
+  if (
+    selectedId &&
+    privateProviderStore.providers.some((provider) => provider.id === selectedId)
+  ) {
+    privateProviderList.value = selectedId;
+  }
+  syncPrivateCompareSelections();
+}
+
+function applyPrivateProvider(provider) {
+  if (!provider) {
+    return;
+  }
+  if (privateProviderNameInput) {
+    privateProviderNameInput.value = provider.name;
+  }
+  applyPrivateConfig(provider.config);
+}
+
+function savePrivateProvider(name, config) {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    setPrivateNote("Enter a private provider name.", true);
+    return null;
+  }
+  const now = new Date().toISOString();
+  const activeProvider = privateProviderStore.activeId
+    ? getPrivateProviderById(privateProviderStore.activeId)
+    : null;
+  const activeNameMatches =
+    activeProvider &&
+    activeProvider.name.toLowerCase() === trimmedName.toLowerCase();
+  const existingByName = privateProviderStore.providers.find(
+    (item) => item.name.toLowerCase() === trimmedName.toLowerCase()
+  );
+  let provider = null;
+  if (
+    existingByName &&
+    (!activeProvider || existingByName.id !== activeProvider.id)
+  ) {
+    provider = existingByName;
+  } else if (activeNameMatches) {
+    provider = activeProvider;
+  }
+  if (provider) {
+    provider.name = trimmedName;
+    provider.config = config;
+    provider.updatedAt = now;
+  } else {
+    const id = `prv-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}`;
+    provider = {
+      id,
+      name: trimmedName,
+      config,
+      createdAt: now,
+      updatedAt: now,
+    };
+    privateProviderStore.providers.push(provider);
+  }
+  privateProviderStore.activeId = provider.id;
+  persistPrivateProviders(privateProviderStore);
+  renderPrivateProviderList(provider.id);
+  return provider;
+}
+
+function deletePrivateProvider(id) {
+  const provider = getPrivateProviderById(id);
+  if (!provider) {
+    return null;
+  }
+  privateProviderStore.providers = privateProviderStore.providers.filter(
+    (item) => item.id !== id
+  );
+  if (privateProviderStore.activeId === id) {
+    privateProviderStore.activeId =
+      privateProviderStore.providers[0]?.id || null;
+  }
+  persistPrivateProviders(privateProviderStore);
+  renderPrivateProviderList(privateProviderStore.activeId);
+  return provider.name;
 }
 
 function getPrivateConfigFromForm() {
@@ -1223,6 +2354,247 @@ function applyPrivateConfig(config) {
   if (privateSanTotalInput && Number.isFinite(config.sanTotalMonthly)) {
     privateSanTotalInput.value = config.sanTotalMonthly.toString();
   }
+}
+
+function applyPrivateConfigToPayload(payload, config, options = {}) {
+  if (!config) {
+    return { ...payload, privateEnabled: false };
+  }
+  const forceEnable = options.forceEnable !== false;
+  const pickNumber = (value, fallback) =>
+    Number.isFinite(value) ? value : fallback;
+  const vmwareMonthly = pickNumber(
+    Number.parseFloat(config.vmwareMonthly),
+    payload.privateVmwareMonthly
+  );
+  const windowsMonthly = pickNumber(
+    Number.parseFloat(config.windowsLicenseMonthly),
+    payload.privateWindowsLicenseMonthly
+  );
+  const nodeCount = pickNumber(
+    Number.parseFloat(config.nodeCount),
+    payload.privateNodeCount
+  );
+  const storagePerTb = pickNumber(
+    Number.parseFloat(config.storagePerTb),
+    payload.privateStoragePerTb
+  );
+  const networkMonthly = pickNumber(
+    Number.parseFloat(config.networkMonthly),
+    payload.privateNetworkMonthly
+  );
+  const firewallMonthly = pickNumber(
+    Number.parseFloat(config.firewallMonthly),
+    payload.privateFirewallMonthly
+  );
+  const loadBalancerMonthly = pickNumber(
+    Number.parseFloat(config.loadBalancerMonthly),
+    payload.privateLoadBalancerMonthly
+  );
+  const nodeCpu = pickNumber(
+    Number.parseFloat(config.nodeCpu),
+    payload.privateNodeCpu
+  );
+  const nodeRam = pickNumber(
+    Number.parseFloat(config.nodeRam),
+    payload.privateNodeRam
+  );
+  const nodeStorageTb = pickNumber(
+    Number.parseFloat(config.nodeStorageTb),
+    payload.privateNodeStorageTb
+  );
+  const vmOsDiskGb = pickNumber(
+    Number.parseFloat(config.vmOsDiskGb),
+    payload.privateVmOsDiskGb
+  );
+  const sanUsableTb = pickNumber(
+    Number.parseFloat(config.sanUsableTb),
+    payload.privateSanUsableTb
+  );
+  const sanTotalMonthly = pickNumber(
+    Number.parseFloat(config.sanTotalMonthly),
+    payload.privateSanTotalMonthly
+  );
+  return {
+    ...payload,
+    privateEnabled: forceEnable ? true : Boolean(config.enabled),
+    privateVmwareMonthly: vmwareMonthly,
+    privateWindowsLicenseMonthly: windowsMonthly,
+    privateNodeCount: nodeCount,
+    privateStoragePerTb: storagePerTb,
+    privateNetworkMonthly: networkMonthly,
+    privateFirewallMonthly: firewallMonthly,
+    privateLoadBalancerMonthly: loadBalancerMonthly,
+    privateNodeCpu: nodeCpu,
+    privateNodeRam: nodeRam,
+    privateNodeStorageTb: nodeStorageTb,
+    privateVmOsDiskGb: vmOsDiskGb,
+    privateSanUsableTb: sanUsableTb,
+    privateSanTotalMonthly: sanTotalMonthly,
+  };
+}
+
+function fillPrivateProviderSelect(select, selectedId) {
+  if (!(select instanceof HTMLSelectElement)) {
+    return;
+  }
+  select.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = privateProviderStore.providers.length
+    ? "Select provider"
+    : "No providers saved";
+  select.appendChild(placeholder);
+  privateProviderStore.providers.forEach((provider) => {
+    const option = document.createElement("option");
+    option.value = provider.id;
+    option.textContent = provider.name;
+    select.appendChild(option);
+  });
+  if (selectedId) {
+    select.value = selectedId;
+  }
+}
+
+function createPrivateCompareCard(slotIndex, providerId) {
+  if (!privateCompareTemplate?.content?.firstElementChild) {
+    return null;
+  }
+  const card = privateCompareTemplate.content.firstElementChild.cloneNode(true);
+  card.dataset.privateSlot = (slotIndex + 1).toString();
+  const provider = providerId ? getPrivateProviderById(providerId) : null;
+  const title = card.querySelector("[data-field='title']");
+  if (title) {
+    title.textContent = provider
+      ? provider.name
+      : `Private ${slotIndex + 1}`;
+  }
+  const providerSelect = card.querySelector("[data-field='providerSelect']");
+  fillPrivateProviderSelect(providerSelect, providerId);
+  if (providerSelect) {
+    providerSelect.addEventListener("change", () => {
+      privateCompareSelections[slotIndex] = providerSelect.value;
+      persistPrivateCompareSelections(privateCompareSelections);
+      if (currentView === "compare" && currentResultsTab === "pricing") {
+        handleCompare();
+      }
+    });
+  }
+  return {
+    element: card,
+    fields: buildProviderFieldsFromCard(card),
+    providerId,
+    provider,
+  };
+}
+
+function buildPrivateCompareCards() {
+  if (!privateCompareContainer) {
+    return [];
+  }
+  const selections = syncPrivateCompareSelections();
+  privateCompareContainer.innerHTML = "";
+  return selections
+    .map((providerId, index) => {
+      const cardState = createPrivateCompareCard(index, providerId);
+      if (!cardState) {
+        return null;
+      }
+      privateCompareContainer.appendChild(cardState.element);
+      return cardState;
+    })
+    .filter(Boolean);
+}
+
+function setPrivateCompareEmpty(cardState, options) {
+  const note =
+    privateProviderStore.providers.length > 0
+      ? "Select a private provider to compare."
+      : "Save a private provider profile to compare.";
+  updateProvider(
+    cardState.fields,
+    {
+      status: "manual",
+      message: note,
+      family: "Private cloud",
+      instance: {},
+      pricingTiers: {},
+    },
+    { location: "Private DC" },
+    options
+  );
+}
+
+async function renderPrivateCompareCards(basePayload, baseData) {
+  const cards = buildPrivateCompareCards();
+  if (!cards.length) {
+    return;
+  }
+  const vmCount = baseData?.input?.vmCount ?? basePayload.vmCount;
+  const mode = baseData?.input?.mode ?? basePayload.mode ?? "vm";
+  const primaryProviderId = cards[0]?.providerId;
+  const primaryProvider =
+    primaryProviderId && getPrivateProviderById(primaryProviderId);
+  await Promise.all(
+    cards.map(async (cardState, index) => {
+      const provider = cardState.providerId
+        ? getPrivateProviderById(cardState.providerId)
+        : null;
+      if (!provider) {
+        setPrivateCompareEmpty(cardState, {
+          showMonthlyRate: false,
+          showReservationNote: false,
+          vmCount,
+          mode,
+        });
+        return;
+      }
+      if (
+        index === 0 &&
+        primaryProvider &&
+        primaryProvider.id === provider.id &&
+        baseData?.private
+      ) {
+        updateProvider(cardState.fields, baseData.private, baseData.region.private, {
+          showMonthlyRate: false,
+          showReservationNote: false,
+          vmCount,
+          mode,
+        });
+        return;
+      }
+      const payload = applyPrivateConfigToPayload(basePayload, provider.config, {
+        forceEnable: true,
+      });
+      try {
+        const data = await comparePricing(payload);
+        updateProvider(cardState.fields, data.private, data.region.private, {
+          showMonthlyRate: false,
+          showReservationNote: false,
+          vmCount,
+          mode,
+        });
+      } catch (error) {
+        updateProvider(
+          cardState.fields,
+          {
+            status: "error",
+            message: error?.message || "Private compare failed.",
+            family: "Private cloud",
+            instance: {},
+            pricingTiers: {},
+          },
+          { location: "Private DC" },
+          {
+            showMonthlyRate: false,
+            showReservationNote: false,
+            vmCount,
+            mode,
+          }
+        );
+      }
+    })
+  );
 }
 
 function setScenarioNote(message, isError = false) {
@@ -1828,9 +3200,10 @@ function updateNetworkAddonOptions() {
 
 function serializeForm(formElement) {
   const data = Object.fromEntries(new FormData(formElement).entries());
-  const sanUsableTb = Number.parseFloat(data.privateSanUsableTb);
-  const sanTotalMonthly = Number.parseFloat(data.privateSanTotalMonthly);
-  let privateStoragePerTb = Number.parseFloat(data.privateStoragePerTb);
+  const privateConfig = getPrivateConfigFromForm();
+  const sanUsableTb = Number.parseFloat(privateConfig.sanUsableTb);
+  const sanTotalMonthly = Number.parseFloat(privateConfig.sanTotalMonthly);
+  let privateStoragePerTb = Number.parseFloat(privateConfig.storagePerTb);
   if (
     Number.isFinite(sanUsableTb) &&
     sanUsableTb > 0 &&
@@ -1870,29 +3243,38 @@ function serializeForm(formElement) {
     vmCount: Number.parseInt(data.vmCount, 10),
     drPercent: Number.parseFloat(data.drPercent),
     sqlLicenseRate: Number.parseFloat(data.sqlLicenseRate),
-    privateEnabled: data.privateEnabled === "on",
-    privateVmwareMonthly: Number.parseFloat(data.privateVmwareMonthly),
+    privateEnabled: Boolean(privateConfig.enabled),
+    privateVmwareMonthly: Number.parseFloat(privateConfig.vmwareMonthly),
     privateWindowsLicenseMonthly: Number.parseFloat(
-      data.privateWindowsLicenseMonthly
+      privateConfig.windowsLicenseMonthly
     ),
-    privateNodeCount: Number.parseFloat(data.privateNodeCount),
+    privateNodeCount: Number.parseFloat(privateConfig.nodeCount),
     privateStoragePerTb: normalizedStoragePerTb,
-    privateNetworkMonthly: Number.parseFloat(data.privateNetworkMonthly),
-    privateFirewallMonthly: Number.parseFloat(data.privateFirewallMonthly),
+    privateNetworkMonthly: Number.parseFloat(privateConfig.networkMonthly),
+    privateFirewallMonthly: Number.parseFloat(privateConfig.firewallMonthly),
     privateLoadBalancerMonthly: Number.parseFloat(
-      data.privateLoadBalancerMonthly
+      privateConfig.loadBalancerMonthly
     ),
-    privateNodeCpu: Number.parseFloat(data.privateNodeCpu),
-    privateNodeRam: Number.parseFloat(data.privateNodeRam),
-    privateNodeStorageTb: Number.parseFloat(data.privateNodeStorageTb),
-    privateVmOsDiskGb: Number.parseFloat(data.privateVmOsDiskGb),
+    privateNodeCpu: Number.parseFloat(privateConfig.nodeCpu),
+    privateNodeRam: Number.parseFloat(privateConfig.nodeRam),
+    privateNodeStorageTb: Number.parseFloat(privateConfig.nodeStorageTb),
+    privateVmOsDiskGb: Number.parseFloat(privateConfig.vmOsDiskGb),
     privateSanUsableTb: sanUsableTb,
     privateSanTotalMonthly: sanTotalMonthly,
   };
 }
 
 async function fetchAndRender() {
-  const payload = serializeForm(form);
+  const basePayload = serializeForm(form);
+  const selections = syncPrivateCompareSelections();
+  const primaryProvider = selections[0]
+    ? getPrivateProviderById(selections[0])
+    : null;
+  const payload = applyPrivateConfigToPayload(
+    basePayload,
+    primaryProvider?.config,
+    { forceEnable: Boolean(primaryProvider) }
+  );
   const data = await comparePricing(payload);
   lastPricing = data;
   const vmCount = data.input?.vmCount ?? payload.vmCount;
@@ -1915,15 +3297,14 @@ async function fetchAndRender() {
     vmCount,
     mode,
   });
-  if (data.private) {
-    updateProvider(fields.private, data.private, data.region.private, {
-      showMonthlyRate: false,
-      showReservationNote: false,
-      vmCount,
-      mode,
-    });
-  }
   updateDelta(data.aws, data.azure, data.gcp, data.private);
+  if (
+    activePanel !== "private" &&
+    currentResultsTab === "pricing" &&
+    currentView === "compare"
+  ) {
+    await renderPrivateCompareCards(basePayload, data);
+  }
   const noteParts = [];
   if (data.notes?.constraints) {
     noteParts.push(data.notes.constraints);
@@ -1965,6 +3346,12 @@ async function fetchAndRender() {
     noteParts.push(`Totals include ${vmCount} ${countLabel}.`);
   }
   formNote.textContent = noteParts.join(" ");
+  if (currentResultsTab === "insight") {
+    renderInsight(data);
+  }
+  if (currentResultsTab === "commit") {
+    renderCommit(data);
+  }
   setView(currentView);
   return data;
 }
@@ -1977,13 +3364,31 @@ async function handleCompare(event) {
     scenarioDelta.classList.add("is-hidden");
     scenarioDelta.textContent = "";
   }
+  if (currentResultsTab === "saved") {
+    await refreshSavedCompare();
+    return;
+  }
+  const isRegionCompare =
+    currentVendorView === "regions" &&
+    (currentView === "aws" || currentView === "azure" || currentView === "gcp");
   formNote.textContent =
-    currentView === "compare"
+    currentView === "compare" ||
+    currentResultsTab === "insight" ||
+    currentResultsTab === "commit"
       ? "Fetching live prices..."
+      : isRegionCompare
+      ? "Fetching region compare..."
       : "Fetching vendor options...";
   try {
-    if (currentView === "compare") {
+    if (currentResultsTab === "insight" || currentResultsTab === "commit") {
       await fetchAndRender();
+    } else if (currentView === "compare") {
+      await fetchAndRender();
+    } else if (
+      currentVendorView === "regions" &&
+      (currentView === "aws" || currentView === "azure" || currentView === "gcp")
+    ) {
+      await runRegionCompare();
     } else {
       await fetchVendorOptions();
     }
@@ -2136,6 +3541,40 @@ async function handleExportCsv() {
   }
 }
 
+async function handleSavedCompareExport() {
+  if (!savedCompareNote) {
+    return;
+  }
+  try {
+    if (!savedCompareRows.length) {
+      await refreshSavedCompare();
+    }
+    if (!savedCompareRows.length) {
+      savedCompareNote.textContent = "No saved scenarios to export.";
+      savedCompareNote.classList.add("negative");
+      return;
+    }
+    savedCompareNote.classList.remove("negative");
+    savedCompareNote.textContent = "Preparing saved compare CSV...";
+    const csv = buildSavedCompareCsv(savedCompareRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.download = `cloud-price-saved-${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    savedCompareNote.textContent = "Saved compare CSV exported.";
+  } catch (error) {
+    savedCompareNote.textContent =
+      error?.message || "Could not export saved compare CSV.";
+    savedCompareNote.classList.add("negative");
+  }
+}
+
 function handleSaveScenario() {
   if (!scenarioNameInput) {
     return;
@@ -2168,6 +3607,9 @@ function handleSaveScenario() {
   }
   persistScenarioStore(scenarioStore);
   renderScenarioList(scenarioId);
+  if (currentResultsTab === "saved") {
+    refreshSavedCompare();
+  }
 }
 
 function handleLoadScenario() {
@@ -2226,9 +3668,10 @@ function handleDeleteScenario() {
     setScenarioNote("Select a scenario to delete.", true);
     return;
   }
-  scenarioStore = scenarioStore.filter((item) => item.id !== scenario.id);
-  persistScenarioStore(scenarioStore);
-  renderScenarioList();
+  deleteScenarioById(scenario.id);
+  if (currentResultsTab === "saved") {
+    refreshSavedCompare();
+  }
   if (scenarioNameInput) {
     scenarioNameInput.value = "";
   }
@@ -2269,17 +3712,52 @@ function handleSavePrivate() {
   }
   updatePrivateCapacity();
   const config = getPrivateConfigFromForm();
-  persistPrivateConfig(config);
-  if (!config.enabled) {
-    setPrivateNote("Private pricing saved. Enable private cloud to compare.");
-  } else {
-    setPrivateNote("Private pricing saved.");
+  const name = privateProviderNameInput?.value || "";
+  const provider = savePrivateProvider(name, config);
+  if (!provider) {
+    return;
   }
-  handleCompare();
+  if (!config.enabled) {
+    setPrivateNote(
+      `Saved "${provider.name}". Enable private cloud to compare.`,
+      false
+    );
+  } else {
+    setPrivateNote(`Saved "${provider.name}".`);
+  }
+  if (activePanel !== "private") {
+    handleCompare();
+  }
 }
 
 form.addEventListener("submit", handleCompare);
 exportButton.addEventListener("click", handleExportCsv);
+resultsTabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextTab = button.dataset.results;
+    setResultsTab(nextTab);
+  });
+});
+vendorSubtabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextView = button.dataset.vendorView;
+    setVendorSubtab(nextView);
+  });
+});
+if (runRegionCompareButton) {
+  runRegionCompareButton.addEventListener("click", runRegionCompare);
+}
+if (savedCompareRefresh) {
+  savedCompareRefresh.addEventListener("click", refreshSavedCompare);
+}
+if (savedCompareExport) {
+  savedCompareExport.addEventListener("click", handleSavedCompareExport);
+}
+Object.entries(commitDiscountInputs).forEach(([, input]) => {
+  if (input) {
+    input.addEventListener("input", () => renderCommit(lastPricing));
+  }
+});
 if (saveScenarioButton) {
   saveScenarioButton.addEventListener("click", handleSaveScenario);
 }
@@ -2297,6 +3775,68 @@ if (deleteScenarioButton) {
 }
 if (privateSaveButton) {
   privateSaveButton.addEventListener("click", handleSavePrivate);
+}
+if (loadPrivateProviderButton) {
+  loadPrivateProviderButton.addEventListener("click", () => {
+    const provider = getPrivateProviderById(privateProviderList?.value);
+    if (!provider) {
+      setPrivateNote("Select a private provider to load.", true);
+      return;
+    }
+    privateProviderStore.activeId = provider.id;
+    persistPrivateProviders(privateProviderStore);
+    applyPrivateProvider(provider);
+    updatePrivateCapacity();
+    setPrivateNote(`Loaded \"${provider.name}\".`);
+    if (activePanel !== "private") {
+      handleCompare();
+    }
+  });
+}
+if (deletePrivateProviderButton) {
+  deletePrivateProviderButton.addEventListener("click", () => {
+    const providerId = privateProviderList?.value;
+    if (!providerId) {
+      setPrivateNote("Select a private provider to delete.", true);
+      return;
+    }
+    const confirmed = window.confirm("Delete this private provider?");
+    if (!confirmed) {
+      return;
+    }
+    const deletedName = deletePrivateProvider(providerId);
+    if (deletedName && privateProviderStore.activeId) {
+      const activeProvider = getPrivateProviderById(
+        privateProviderStore.activeId
+      );
+      if (activeProvider) {
+        applyPrivateProvider(activeProvider);
+      } else if (privateProviderNameInput) {
+        privateProviderNameInput.value = "";
+      }
+    } else if (privateProviderNameInput) {
+      privateProviderNameInput.value = "";
+    }
+    updatePrivateCapacity();
+    setPrivateNote(
+      deletedName ? `Deleted \"${deletedName}\".` : "Private provider deleted."
+    );
+    if (activePanel !== "private") {
+      handleCompare();
+    }
+  });
+}
+if (privateProviderList) {
+  privateProviderList.addEventListener("change", () => {
+    const provider = getPrivateProviderById(privateProviderList.value);
+    if (!provider) {
+      return;
+    }
+    privateProviderStore.activeId = provider.id;
+    persistPrivateProviders(privateProviderStore);
+    applyPrivateProvider(provider);
+    updatePrivateCapacity();
+  });
 }
 viewTabButtons.forEach((button) => {
   button.addEventListener("click", () => {
@@ -2355,10 +3895,22 @@ sqlEditionSelect.addEventListener("change", () => {
 window.addEventListener("load", async () => {
   scenarioStore = loadScenarioStore();
   renderScenarioList();
-  const privateConfig = loadPrivateConfig();
-  applyPrivateConfig(privateConfig);
+  privateProviderStore = loadPrivateProviders();
+  privateCompareSelections = loadPrivateCompareSelections();
+  renderPrivateProviderList(privateProviderStore.activeId);
+  syncPrivateCompareSelections();
+  const activeProvider = privateProviderStore.activeId
+    ? getPrivateProviderById(privateProviderStore.activeId)
+    : null;
+  if (activeProvider) {
+    applyPrivateProvider(activeProvider);
+  } else {
+    const privateConfig = loadPrivateConfig();
+    applyPrivateConfig(privateConfig);
+  }
   updatePrivateCapacity();
   setPanel(modeInput.value);
+  buildRegionChecklist();
   try {
     await loadSizeOptions();
   } catch (error) {
