@@ -45,60 +45,6 @@ const egressInput = form.querySelector("[name='egressTb']");
 const dataDiskInput = form.querySelector("[name='dataDiskTb']");
 const backupEnabledInput = form.querySelector("[name='backupEnabled']");
 const drPercentInput = form.querySelector("[name='drPercent']");
-const privateEnabledInput = document.getElementById("private-enabled");
-const privateVmwareInput = document.querySelector(
-  "[name='privateVmwareMonthly']"
-);
-const privateWindowsLicenseInput = document.querySelector(
-  "[name='privateWindowsLicenseMonthly']"
-);
-const privateNodeCountInput = document.querySelector("[name='privateNodeCount']");
-const privateNetworkInput = document.querySelector(
-  "[name='privateNetworkMonthly']"
-);
-const privateFirewallInput = document.querySelector(
-  "[name='privateFirewallMonthly']"
-);
-const privateLoadBalancerInput = document.querySelector(
-  "[name='privateLoadBalancerMonthly']"
-);
-const privateNodeCpuInput = document.querySelector("[name='privateNodeCpu']");
-const privateNodeRamInput = document.querySelector("[name='privateNodeRam']");
-const privateNodeStorageInput = document.querySelector(
-  "[name='privateNodeStorageTb']"
-);
-const privateVmOsDiskInput = document.querySelector(
-  "[name='privateVmOsDiskGb']"
-);
-const privateSanUsableInput = document.querySelector(
-  "[name='privateSanUsableTb']"
-);
-const privateSanTotalInput = document.querySelector(
-  "[name='privateSanTotalMonthly']"
-);
-const privateSanRate = document.getElementById("private-san-rate");
-const privateStoragePerTbInput = document.getElementById(
-  "private-storage-per-tb"
-);
-const privateCapacityCounts = {
-  "8-16": document.getElementById("private-capacity-8-16"),
-  "12-24": document.getElementById("private-capacity-12-24"),
-  "16-32": document.getElementById("private-capacity-16-32"),
-  "24-48": document.getElementById("private-capacity-24-48"),
-  "48-64": document.getElementById("private-capacity-48-64"),
-  "64-128": document.getElementById("private-capacity-64-128"),
-  "128-512": document.getElementById("private-capacity-128-512"),
-};
-const privateCapacityTotals = {
-  "8-16": document.getElementById("private-capacity-8-16-total"),
-  "12-24": document.getElementById("private-capacity-12-24-total"),
-  "16-32": document.getElementById("private-capacity-16-32-total"),
-  "24-48": document.getElementById("private-capacity-24-48-total"),
-  "48-64": document.getElementById("private-capacity-48-64-total"),
-  "64-128": document.getElementById("private-capacity-64-128-total"),
-  "128-512": document.getElementById("private-capacity-128-512-total"),
-};
-const privateOsSizeLabels = document.querySelectorAll(".private-os-size");
 const scenarioNameInput = document.getElementById("scenario-name");
 const scenarioList = document.getElementById("scenario-list");
 const scenarioNote = document.getElementById("scenario-note");
@@ -108,6 +54,14 @@ const loadScenarioButton = document.getElementById("load-scenario");
 const cloneScenarioButton = document.getElementById("clone-scenario");
 const compareScenarioButton = document.getElementById("compare-scenario");
 const deleteScenarioButton = document.getElementById("delete-scenario");
+const importScenarioButton = document.getElementById("import-scenario");
+const importScenarioInput = document.getElementById("import-scenario-file");
+const importScenarioCsvButton = document.getElementById(
+  "import-scenario-csv"
+);
+const importScenarioCsvInput = document.getElementById(
+  "import-scenario-csv-file"
+);
 const awsInstanceFilter = document.getElementById("aws-instance-filter");
 const azureInstanceFilter = document.getElementById("azure-instance-filter");
 const gcpInstanceFilter = document.getElementById("gcp-instance-filter");
@@ -126,19 +80,27 @@ const viewTabs = document.getElementById("vm-view-tabs");
 const viewTabButtons = document.querySelectorAll(".view-tab");
 const cloudPanel = document.getElementById("cloud-panel");
 const privatePanel = document.getElementById("private-panel");
+const scenariosPanel = document.getElementById("scenarios-panel");
 const layout = document.querySelector(".layout");
 const formCard = document.querySelector(".form-card");
-const privateSaveButton = document.getElementById("save-private");
 const privateSaveNote = document.getElementById("private-save-note");
-const privateProviderNameInput = document.getElementById(
-  "private-provider-name"
+const privateProvidersList = document.getElementById(
+  "private-providers-list"
 );
-const privateProviderList = document.getElementById("private-provider-list");
-const loadPrivateProviderButton = document.getElementById(
-  "load-private-provider"
+const privateProviderTemplate = document.getElementById(
+  "private-provider-template"
 );
-const deletePrivateProviderButton = document.getElementById(
-  "delete-private-provider"
+const addPrivateProviderButton = document.getElementById(
+  "add-private-provider"
+);
+const exportPrivateProvidersButton = document.getElementById(
+  "export-private-providers"
+);
+const importPrivateProvidersButton = document.getElementById(
+  "import-private-providers"
+);
+const importPrivateProvidersInput = document.getElementById(
+  "import-private-providers-file"
 );
 const resultsTabs = document.getElementById("results-tabs");
 const resultsTabButtons = document.querySelectorAll(".results-tab");
@@ -147,7 +109,21 @@ const savedComparePanel = document.getElementById("saved-compare-panel");
 const savedCompareTable = document.getElementById("saved-compare-table");
 const savedCompareNote = document.getElementById("saved-compare-note");
 const savedCompareRefresh = document.getElementById("saved-compare-refresh");
-const savedCompareExport = document.getElementById("saved-compare-export");
+const savedCompareScenarioList = document.getElementById(
+  "saved-compare-scenarios"
+);
+const savedComparePrivateList = document.getElementById(
+  "saved-compare-private"
+);
+const savedComparePrivateRun = document.getElementById(
+  "saved-compare-private-run"
+);
+const savedComparePrivateTable = document.getElementById(
+  "saved-compare-private-table"
+);
+const savedComparePrivateNote = document.getElementById(
+  "saved-compare-private-note"
+);
 const insightPanel = document.getElementById("insight-panel");
 const insightChart = document.getElementById("insight-chart");
 const insightNote = document.getElementById("insight-note");
@@ -280,11 +256,14 @@ const SQL_DEFAULTS = {
   standard: 0.35,
   enterprise: 0.5,
 };
+const DEFAULT_RATE_EPSILON = 0.0001;
 const DISK_TIER_LABELS = {
   premium: "Premium SSD",
   max: "Max performance",
 };
 const SCENARIO_STORAGE_KEY = "cloud-price-scenarios";
+const SAVED_COMPARE_SCENARIOS_KEY = "cloud-price-saved-compare-scenarios";
+const SAVED_COMPARE_PRIVATE_KEY = "cloud-price-saved-compare-private";
 const PRIVATE_STORAGE_KEY = "cloud-price-private";
 const PRIVATE_PROVIDERS_KEY = "cloud-price-private-providers";
 const PRIVATE_COMPARE_KEY = "cloud-price-private-compare";
@@ -300,8 +279,12 @@ let currentView = "compare";
 let currentResultsTab = "pricing";
 let currentVendorView = "options";
 let savedCompareRows = [];
+let savedComparePrivateRows = [];
+let savedCompareScenarioSelections = null;
+let savedComparePrivateSelections = null;
 let privateProviderStore = { activeId: null, providers: [] };
 let privateCompareSelections = [];
+let privateProviderCards = new Map();
 const vendorOptionState = {
   aws: [],
   azure: [],
@@ -322,6 +305,83 @@ const PRIVATE_FLAVORS = [
   { key: "48-64", vcpu: 48, ram: 64 },
   { key: "64-128", vcpu: 64, ram: 128 },
   { key: "128-512", vcpu: 128, ram: 512 },
+];
+const DEFAULT_PRIVATE_CONFIG = {
+  enabled: false,
+  vmwareMonthly: 0,
+  windowsLicenseMonthly: 0,
+  nodeCount: 2,
+  storagePerTb: 0,
+  networkMonthly: 0,
+  firewallMonthly: 0,
+  loadBalancerMonthly: 0,
+  nodeCpu: 1,
+  nodeRam: 128,
+  nodeStorageTb: 2,
+  vmOsDiskGb: 256,
+  sanUsableTb: 0,
+  sanTotalMonthly: 0,
+};
+const SCENARIO_CSV_FIELDS = [
+  { key: "name", label: "Scenario", type: "string" },
+  { key: "mode", label: "Mode", type: "string" },
+  { key: "workload", label: "Workload", type: "string" },
+  { key: "regionKey", label: "Region_Key", type: "string" },
+  { key: "pricingProvider", label: "Pricing_Provider", type: "string" },
+  { key: "cpu", label: "vCPU", type: "number" },
+  { key: "vmCount", label: "VM_Count", type: "number" },
+  { key: "awsInstanceType", label: "AWS_Instance", type: "string" },
+  { key: "azureInstanceType", label: "Azure_Instance", type: "string" },
+  { key: "gcpInstanceType", label: "GCP_Instance", type: "string" },
+  { key: "diskTier", label: "Disk_Tier", type: "string" },
+  { key: "osDiskGb", label: "OS_Disk_GB", type: "number" },
+  { key: "dataDiskTb", label: "Data_Disk_TB", type: "number" },
+  { key: "egressTb", label: "Egress_TB", type: "number" },
+  { key: "hours", label: "Hours", type: "number" },
+  { key: "backupEnabled", label: "Backups_Enabled", type: "boolean" },
+  { key: "drPercent", label: "DR_Percent", type: "number" },
+  { key: "sqlEdition", label: "SQL_Edition", type: "string" },
+  { key: "sqlLicenseRate", label: "SQL_License_Rate", type: "number" },
+  { key: "awsVpcFlavor", label: "AWS_VPC", type: "string" },
+  { key: "awsFirewallFlavor", label: "AWS_Firewall", type: "string" },
+  { key: "awsLoadBalancerFlavor", label: "AWS_Load_Balancer", type: "string" },
+  { key: "azureVpcFlavor", label: "Azure_VNet", type: "string" },
+  { key: "azureFirewallFlavor", label: "Azure_Firewall", type: "string" },
+  { key: "azureLoadBalancerFlavor", label: "Azure_Load_Balancer", type: "string" },
+  { key: "gcpVpcFlavor", label: "GCP_VPC", type: "string" },
+  { key: "gcpFirewallFlavor", label: "GCP_Firewall", type: "string" },
+  { key: "gcpLoadBalancerFlavor", label: "GCP_Load_Balancer", type: "string" },
+  { key: "privateEnabled", label: "Private_Enabled", type: "boolean" },
+  { key: "privateVmwareMonthly", label: "Private_VMware_Monthly", type: "number" },
+  { key: "privateWindowsLicenseMonthly", label: "Private_Windows_License", type: "number" },
+  { key: "privateNodeCount", label: "Private_Node_Count", type: "number" },
+  { key: "privateStoragePerTb", label: "Private_SAN_per_TB", type: "number" },
+  { key: "privateNetworkMonthly", label: "Private_Network_Monthly", type: "number" },
+  { key: "privateFirewallMonthly", label: "Private_Firewall_Monthly", type: "number" },
+  { key: "privateLoadBalancerMonthly", label: "Private_Load_Balancer", type: "number" },
+  { key: "privateNodeCpu", label: "Private_Node_CPU", type: "number" },
+  { key: "privateNodeRam", label: "Private_Node_RAM", type: "number" },
+  { key: "privateNodeStorageTb", label: "Private_Node_Storage_TB", type: "number" },
+  { key: "privateVmOsDiskGb", label: "Private_VM_OS_GB", type: "number" },
+  { key: "privateSanUsableTb", label: "Private_SAN_Usable_TB", type: "number" },
+  { key: "privateSanTotalMonthly", label: "Private_SAN_Total_Monthly", type: "number" },
+];
+const PRIVATE_PROVIDER_CSV_FIELDS = [
+  { key: "name", label: "Provider", type: "string" },
+  { key: "enabled", label: "Enabled", type: "boolean" },
+  { key: "vmwareMonthly", label: "VMware_Monthly", type: "number" },
+  { key: "windowsLicenseMonthly", label: "Windows_License_Monthly", type: "number" },
+  { key: "nodeCount", label: "Node_Count", type: "number" },
+  { key: "nodeCpu", label: "Node_CPU", type: "number" },
+  { key: "nodeRam", label: "Node_RAM", type: "number" },
+  { key: "nodeStorageTb", label: "Node_Storage_TB", type: "number" },
+  { key: "vmOsDiskGb", label: "VM_OS_GB", type: "number" },
+  { key: "sanUsableTb", label: "SAN_Usable_TB", type: "number" },
+  { key: "sanTotalMonthly", label: "SAN_Total_Monthly", type: "number" },
+  { key: "storagePerTb", label: "SAN_per_TB", type: "number" },
+  { key: "networkMonthly", label: "Network_Monthly", type: "number" },
+  { key: "firewallMonthly", label: "Firewall_Monthly", type: "number" },
+  { key: "loadBalancerMonthly", label: "Load_Balancer_Monthly", type: "number" },
 ];
 let sqlState = {
   edition: sqlEditionSelect.value,
@@ -389,6 +449,17 @@ const RESULTS_TAB_COPY = {
       "Apply per-provider discounts to compute only and compare committed totals.",
   },
 };
+
+const SCENARIO_BREAKDOWN_COMPONENTS = [
+  { label: "Compute", field: "computeMonthly" },
+  { label: "Control plane", field: "controlPlaneMonthly" },
+  { label: "Storage", field: "storageMonthly" },
+  { label: "Backups", field: "backupMonthly" },
+  { label: "Network", field: "networkMonthly" },
+  { label: "Egress", field: "egressMonthly" },
+  { label: "Licenses", field: "licenseMonthly" },
+  { label: "DR", field: "drMonthly" },
+];
 
 const fields = {
   aws: {
@@ -504,6 +575,14 @@ function formatMonthly(value) {
   return `${currency.format(value)}/mo`;
 }
 
+function isDefaultSqlRate(rate, edition) {
+  const defaultRate = SQL_DEFAULTS[edition] ?? 0;
+  if (!Number.isFinite(rate)) {
+    return false;
+  }
+  return Math.abs(rate - defaultRate) <= DEFAULT_RATE_EPSILON;
+}
+
 function setMode(mode) {
   const nextMode = mode === "k8s" ? "k8s" : "vm";
   const wasK8s = currentMode === "k8s";
@@ -577,6 +656,12 @@ function updateResultsHeading() {
       "Create and save private provider profiles for VM comparisons.";
     return;
   }
+  if (activePanel === "scenarios") {
+    resultsTitle.textContent = "Scenarios Compare";
+    resultsSubtitle.textContent =
+      "Compare multiple public scenarios against private cloud providers.";
+    return;
+  }
   if (currentResultsTab === "saved") {
     resultsTitle.textContent = RESULTS_TAB_COPY.saved.title;
     resultsSubtitle.textContent = RESULTS_TAB_COPY.saved.subtitle;
@@ -601,18 +686,21 @@ function updateResultsTabsVisibility() {
   if (!resultsTabs) {
     return;
   }
-  const showTabs = activePanel !== "private";
+  const showTabs = activePanel !== "private" && activePanel !== "scenarios";
   resultsTabs.classList.toggle("is-hidden", !showTabs);
-  if (!showTabs && currentResultsTab !== "pricing") {
+  if (!showTabs) {
     currentResultsTab = "pricing";
     if (pricingPanel) {
-      pricingPanel.classList.remove("is-hidden");
+      pricingPanel.classList.add("is-hidden");
     }
     if (savedComparePanel) {
       savedComparePanel.classList.add("is-hidden");
     }
     if (insightPanel) {
       insightPanel.classList.add("is-hidden");
+    }
+    if (commitPanel) {
+      commitPanel.classList.add("is-hidden");
     }
     updateResultsHeading();
   }
@@ -664,17 +752,26 @@ function setResultsTab(tab, options = {}) {
 
 function setPanel(panel) {
   const nextPanel =
-    panel === "private" ? "private" : panel === "k8s" ? "k8s" : "vm";
+    panel === "private"
+      ? "private"
+      : panel === "scenarios"
+      ? "scenarios"
+      : panel === "k8s"
+      ? "k8s"
+      : "vm";
   activePanel = nextPanel;
   modeTabs.forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.mode === nextPanel);
   });
-  if (nextPanel === "private") {
+  if (nextPanel === "private" || nextPanel === "scenarios") {
     if (cloudPanel) {
       cloudPanel.classList.add("is-hidden");
     }
     if (privatePanel) {
-      privatePanel.classList.remove("is-hidden");
+      privatePanel.classList.toggle("is-hidden", nextPanel !== "private");
+    }
+    if (scenariosPanel) {
+      scenariosPanel.classList.toggle("is-hidden", nextPanel !== "scenarios");
     }
     if (formCard) {
       formCard.classList.add("is-hidden");
@@ -696,6 +793,7 @@ function setPanel(panel) {
     }
     updateResultsTabsVisibility();
     updateResultsHeading();
+    updateViewTabsVisibility();
     return;
   }
   if (cloudPanel) {
@@ -703,6 +801,9 @@ function setPanel(panel) {
   }
   if (privatePanel) {
     privatePanel.classList.add("is-hidden");
+  }
+  if (scenariosPanel) {
+    scenariosPanel.classList.add("is-hidden");
   }
   if (formCard) {
     formCard.classList.remove("is-hidden");
@@ -721,9 +822,15 @@ function updateViewTabsVisibility() {
     return;
   }
   const showTabs =
-    activePanel !== "private" && currentResultsTab === "pricing";
+    activePanel !== "private" &&
+    activePanel !== "scenarios" &&
+    currentResultsTab === "pricing";
   viewTabs.classList.toggle("is-hidden", !showTabs);
-  if (!showTabs && activePanel === "private" && currentView !== "compare") {
+  if (
+    !showTabs &&
+    (activePanel === "private" || activePanel === "scenarios") &&
+    currentView !== "compare"
+  ) {
     currentView = "compare";
     setView("compare");
   }
@@ -1133,10 +1240,12 @@ function resolveVendorInstanceTypes(providerKey, sizes) {
 }
 
 function buildPrivateOptionDefaults() {
-  const osDefault = Number.parseFloat(privateVmOsDiskInput?.value);
-  const osDisk = Number.isFinite(osDefault) && osDefault > 0
-    ? osDefault
-    : Number.parseFloat(osDiskInput?.value) || 256;
+  const primaryConfig = getPrimaryPrivateConfig();
+  const osDefault = Number.parseFloat(primaryConfig?.vmOsDiskGb);
+  const osDisk =
+    Number.isFinite(osDefault) && osDefault > 0
+      ? osDefault
+      : Number.parseFloat(osDiskInput?.value) || 256;
   const dataTb = Number.parseFloat(dataDiskInput?.value);
   const dataGb = Number.isFinite(dataTb) ? dataTb * 1024 : 1024;
   return PRIVATE_FLAVORS.slice(0, MAX_VENDOR_OPTIONS).map((flavor) => ({
@@ -1600,7 +1709,7 @@ function renderRegionCompareTable(rows, providerKey) {
   vendorRegionTable.appendChild(table);
 }
 
-async function refreshSavedCompare() {
+async function refreshSavedCompare(options = {}) {
   if (!savedCompareTable || !savedCompareNote) {
     return;
   }
@@ -1611,10 +1720,23 @@ async function refreshSavedCompare() {
     savedCompareNote.classList.remove("negative");
     return;
   }
-  savedCompareNote.textContent = `Running ${scenarioStore.length} scenarios...`;
+  const scenarioIds = Array.isArray(options.scenarioIds)
+    ? options.scenarioIds
+    : null;
+  const selectedScenarios = scenarioIds
+    ? scenarioStore.filter((scenario) => scenarioIds.includes(scenario.id))
+    : scenarioStore;
+  if (scenarioIds && !selectedScenarios.length) {
+    savedCompareRows = [];
+    renderSavedCompareTable([]);
+    savedCompareNote.textContent = "Select scenarios to compare.";
+    savedCompareNote.classList.add("negative");
+    return;
+  }
+  savedCompareNote.textContent = `Running ${selectedScenarios.length} scenarios...`;
   savedCompareNote.classList.remove("negative");
   const rows = [];
-  for (const scenario of scenarioStore) {
+  for (const scenario of selectedScenarios) {
     try {
       const data = await comparePricing(scenario.input);
       rows.push({ scenario, data });
@@ -1693,11 +1815,27 @@ function renderSavedCompareTable(rows) {
       tr.appendChild(cell);
     });
     const actionCell = document.createElement("td");
-    const actionButton = document.createElement("button");
-    actionButton.type = "button";
-    actionButton.className = "table-action";
-    actionButton.textContent = "Delete";
-    actionButton.addEventListener("click", () => {
+    const exportJsonButton = document.createElement("button");
+    exportJsonButton.type = "button";
+    exportJsonButton.className = "table-action";
+    exportJsonButton.textContent = "Export JSON";
+    exportJsonButton.addEventListener("click", () => {
+      handleExportScenario(row.scenario, savedCompareNote);
+    });
+
+    const exportCsvButton = document.createElement("button");
+    exportCsvButton.type = "button";
+    exportCsvButton.className = "table-action";
+    exportCsvButton.textContent = "Export CSV";
+    exportCsvButton.addEventListener("click", () => {
+      handleExportScenarioCsv(row.scenario, savedCompareNote);
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "table-action";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => {
       const confirmDelete = window.confirm(
         `Delete scenario "${row.scenario.name}"?`
       );
@@ -1716,12 +1854,308 @@ function renderSavedCompareTable(rows) {
         savedCompareNote.classList.remove("negative");
       }
     });
-    actionCell.appendChild(actionButton);
+    actionCell.appendChild(exportJsonButton);
+    actionCell.appendChild(exportCsvButton);
+    actionCell.appendChild(deleteButton);
     tr.appendChild(actionCell);
     body.appendChild(tr);
   });
   table.appendChild(body);
   savedCompareTable.appendChild(table);
+}
+
+function getSavedCompareRow(id) {
+  return savedCompareRows.find(
+    (row) => row.scenario?.id === id && row.data && !row.error
+  );
+}
+
+async function runSavedPrivateCompare() {
+  if (!savedComparePrivateTable || !savedComparePrivateNote) {
+    return;
+  }
+  const scenarioIds = resolveScenarioSelections();
+  if (!scenarioIds.length) {
+    savedComparePrivateRows = [];
+    renderSavedPrivateCompareTable([], []);
+    savedComparePrivateNote.textContent =
+      "Select scenarios to compare against private providers.";
+    savedComparePrivateNote.classList.add("negative");
+    return;
+  }
+  const privateIds = resolvePrivateSelections();
+  if (!privateIds.length) {
+    savedComparePrivateRows = [];
+    renderSavedPrivateCompareTable([], []);
+    savedComparePrivateNote.textContent =
+      "Select at least one private provider.";
+    savedComparePrivateNote.classList.add("negative");
+    return;
+  }
+  const scenarios = scenarioStore.filter((scenario) =>
+    scenarioIds.includes(scenario.id)
+  );
+  const privateProviders = privateIds
+    .map((id) => getPrivateProviderById(id))
+    .filter(Boolean);
+  if (!privateProviders.length) {
+    savedComparePrivateRows = [];
+    renderSavedPrivateCompareTable([], []);
+    savedComparePrivateNote.textContent = "No private providers selected.";
+    savedComparePrivateNote.classList.add("negative");
+    return;
+  }
+  savedComparePrivateNote.textContent = `Running ${scenarios.length} scenarios across ${privateProviders.length} providers...`;
+  savedComparePrivateNote.classList.remove("negative");
+  const rows = [];
+  for (const scenario of scenarios) {
+    const input = scenario.input || {};
+    let data = getSavedCompareRow(scenario.id)?.data || null;
+    let errorMessage = "";
+    if (!data) {
+      try {
+        data = await comparePricing(input);
+      } catch (error) {
+        errorMessage = error?.message || "Pricing request failed.";
+      }
+    }
+    const row = {
+      scenario,
+      data,
+      error: errorMessage,
+      privateTotals: {},
+      privateBreakdowns: {},
+      privateErrors: {},
+    };
+    const privateResults = await Promise.all(
+      privateProviders.map(async (provider) => {
+        const payload = applyPrivateConfigToPayload(
+          input,
+          provider.config,
+          { forceEnable: true }
+        );
+        try {
+          const privateData = await comparePricing(payload);
+          const totals = getScenarioProviderTotals(privateData, "private");
+          return {
+            id: provider.id,
+            total: Number.isFinite(totals?.total) ? totals.total : null,
+            totals,
+          };
+        } catch (error) {
+          return {
+            id: provider.id,
+            error: error?.message || "Private pricing failed.",
+          };
+        }
+      })
+    );
+    privateResults.forEach((result) => {
+      if (result.error) {
+        row.privateErrors[result.id] = result.error;
+        row.privateTotals[result.id] = null;
+        row.privateBreakdowns[result.id] = null;
+      } else {
+        row.privateTotals[result.id] = result.total;
+        row.privateBreakdowns[result.id] = result.totals || null;
+      }
+    });
+    rows.push(row);
+  }
+  savedComparePrivateRows = rows;
+  renderSavedPrivateCompareTable(rows, privateProviders);
+  const hasError = rows.some(
+    (row) =>
+      row.error ||
+      Object.values(row.privateErrors).some((value) => value)
+  );
+  savedComparePrivateNote.textContent = hasError
+    ? "Private vs public compare completed with errors."
+    : "Private vs public compare updated.";
+  savedComparePrivateNote.classList.toggle("negative", hasError);
+}
+
+function renderSavedPrivateCompareTable(rows, privateProviders) {
+  if (!savedComparePrivateTable) {
+    return;
+  }
+  savedComparePrivateTable.innerHTML = "";
+  if (!rows.length) {
+    savedComparePrivateTable.textContent = "No private compare results yet.";
+    return;
+  }
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const privateHeaders = privateProviders.map((provider) => provider.name);
+  [
+    "Scenario",
+    "Mode / Component",
+    "Region",
+    "AWS",
+    "Azure",
+    "GCP",
+    ...privateHeaders,
+    "Status",
+  ].forEach((label) => {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headRow.appendChild(cell);
+  });
+  head.appendChild(headRow);
+  table.appendChild(head);
+  const body = document.createElement("tbody");
+  const totals = {
+    aws: 0,
+    azure: 0,
+    gcp: 0,
+    private: {},
+  };
+  privateProviders.forEach((provider) => {
+    totals.private[provider.id] = 0;
+  });
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.className = "saved-compare-summary";
+    const input = row.data?.input || row.scenario.input || {};
+    const mode = input.mode || "vm";
+    const regionLabel = getRegionLabel(input.regionKey || "");
+    const awsTotal = row.data ? getScenarioProviderTotal(row.data, "aws") : null;
+    const azureTotal = row.data
+      ? getScenarioProviderTotal(row.data, "azure")
+      : null;
+    const gcpTotal = row.data ? getScenarioProviderTotal(row.data, "gcp") : null;
+    [
+      row.scenario.name,
+      mode,
+      regionLabel,
+      formatMonthly(awsTotal),
+      formatMonthly(azureTotal),
+      formatMonthly(gcpTotal),
+    ].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value || "-";
+      tr.appendChild(cell);
+    });
+    if (Number.isFinite(awsTotal)) {
+      totals.aws += awsTotal;
+    }
+    if (Number.isFinite(azureTotal)) {
+      totals.azure += azureTotal;
+    }
+    if (Number.isFinite(gcpTotal)) {
+      totals.gcp += gcpTotal;
+    }
+    privateProviders.forEach((provider) => {
+      const cell = document.createElement("td");
+      const total = row.privateTotals[provider.id];
+      if (row.privateErrors[provider.id]) {
+        cell.textContent = "ERR";
+      } else {
+        cell.textContent = formatMonthly(total);
+      }
+      tr.appendChild(cell);
+      if (Number.isFinite(total)) {
+        totals.private[provider.id] += total;
+      }
+    });
+    const statusCell = document.createElement("td");
+    const hasPrivateError = Object.values(row.privateErrors).some(Boolean);
+    statusCell.textContent = row.error
+      ? row.error
+      : hasPrivateError
+      ? "Partial"
+      : "OK";
+    tr.appendChild(statusCell);
+    body.appendChild(tr);
+
+    const awsTotals = row.data
+      ? getScenarioProviderTotals(row.data, "aws")
+      : null;
+    const azureTotals = row.data
+      ? getScenarioProviderTotals(row.data, "azure")
+      : null;
+    const gcpTotals = row.data
+      ? getScenarioProviderTotals(row.data, "gcp")
+      : null;
+    const privateTotals = row.privateBreakdowns || {};
+
+    SCENARIO_BREAKDOWN_COMPONENTS.forEach((component) => {
+      const componentValues = [
+        getScenarioComponentValue(awsTotals, component.field),
+        getScenarioComponentValue(azureTotals, component.field),
+        getScenarioComponentValue(gcpTotals, component.field),
+        ...privateProviders.map((provider) =>
+          getScenarioComponentValue(
+            privateTotals[provider.id],
+            component.field
+          )
+        ),
+      ];
+      if (!componentValues.some((value) => Number.isFinite(value))) {
+        return;
+      }
+      const detailRow = document.createElement("tr");
+      detailRow.className = "saved-compare-breakdown";
+      const scenarioCell = document.createElement("td");
+      scenarioCell.textContent = "";
+      detailRow.appendChild(scenarioCell);
+      const componentCell = document.createElement("td");
+      componentCell.textContent = component.label;
+      componentCell.className = "saved-compare-component";
+      detailRow.appendChild(componentCell);
+      const regionCell = document.createElement("td");
+      regionCell.textContent = "";
+      detailRow.appendChild(regionCell);
+      [
+        getScenarioComponentValue(awsTotals, component.field),
+        getScenarioComponentValue(azureTotals, component.field),
+        getScenarioComponentValue(gcpTotals, component.field),
+      ].forEach((value) => {
+        const cell = document.createElement("td");
+        cell.textContent = formatMonthly(value);
+        detailRow.appendChild(cell);
+      });
+      privateProviders.forEach((provider) => {
+        const cell = document.createElement("td");
+        const value = getScenarioComponentValue(
+          privateTotals[provider.id],
+          component.field
+        );
+        cell.textContent = formatMonthly(value);
+        detailRow.appendChild(cell);
+      });
+      const statusDetailCell = document.createElement("td");
+      statusDetailCell.textContent = "";
+      detailRow.appendChild(statusDetailCell);
+      body.appendChild(detailRow);
+    });
+  });
+  const totalRow = document.createElement("tr");
+  totalRow.className = "saved-compare-total";
+  [
+    "Total",
+    "-",
+    "-",
+    formatMonthly(totals.aws),
+    formatMonthly(totals.azure),
+    formatMonthly(totals.gcp),
+  ].forEach((value) => {
+    const cell = document.createElement("td");
+    cell.textContent = value || "-";
+    totalRow.appendChild(cell);
+  });
+  privateProviders.forEach((provider) => {
+    const cell = document.createElement("td");
+    cell.textContent = formatMonthly(totals.private[provider.id]);
+    totalRow.appendChild(cell);
+  });
+  const statusCell = document.createElement("td");
+  statusCell.textContent = "-";
+  totalRow.appendChild(statusCell);
+  body.appendChild(totalRow);
+  table.appendChild(body);
+  savedComparePrivateTable.appendChild(table);
 }
 
 function buildSavedCompareCsv(rows) {
@@ -2089,6 +2523,14 @@ function setPrivateNote(message, isError = false) {
   privateSaveNote.classList.toggle("negative", isError);
 }
 
+function setInlineNote(target, message, isError = false) {
+  if (!target) {
+    return;
+  }
+  target.textContent = message;
+  target.classList.toggle("negative", isError);
+}
+
 function loadPrivateProviders() {
   try {
     const raw = localStorage.getItem(PRIVATE_PROVIDERS_KEY);
@@ -2151,6 +2593,74 @@ function persistPrivateCompareSelections(selections) {
   }
 }
 
+function loadSavedCompareSelections(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function persistSavedCompareSelections(key, selections) {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify(Array.isArray(selections) ? selections : [])
+    );
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function resolveScenarioSelections() {
+  const ids = scenarioStore.map((scenario) => scenario.id);
+  if (!ids.length) {
+    return [];
+  }
+  let selections = Array.isArray(savedCompareScenarioSelections)
+    ? savedCompareScenarioSelections.filter((id) => ids.includes(id))
+    : null;
+  if (selections === null) {
+    selections = [...ids];
+  }
+  return selections;
+}
+
+function resolvePrivateSelections() {
+  const ids = privateProviderStore.providers.map((provider) => provider.id);
+  if (!ids.length) {
+    return [];
+  }
+  let selections = Array.isArray(savedComparePrivateSelections)
+    ? savedComparePrivateSelections.filter((id) => ids.includes(id))
+    : null;
+  if (selections === null) {
+    selections = [...ids];
+  }
+  return selections;
+}
+
+function updateScenarioSelections(nextSelections) {
+  savedCompareScenarioSelections = nextSelections;
+  persistSavedCompareSelections(
+    SAVED_COMPARE_SCENARIOS_KEY,
+    savedCompareScenarioSelections
+  );
+}
+
+function updatePrivateSelections(nextSelections) {
+  savedComparePrivateSelections = nextSelections;
+  persistSavedCompareSelections(
+    SAVED_COMPARE_PRIVATE_KEY,
+    savedComparePrivateSelections
+  );
+}
+
 function syncPrivateCompareSelections() {
   const providerIds = privateProviderStore.providers.map(
     (provider) => provider.id
@@ -2179,77 +2689,275 @@ function getPrivateProviderById(id) {
   return privateProviderStore.providers.find((provider) => provider.id === id);
 }
 
-function renderPrivateProviderList(selectedId) {
-  if (!privateProviderList) {
-    return;
-  }
-  privateProviderList.innerHTML = "";
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = privateProviderStore.providers.length
-    ? "Select provider"
-    : "No providers";
-  privateProviderList.appendChild(placeholder);
-  privateProviderStore.providers.forEach((provider) => {
-    const option = document.createElement("option");
-    option.value = provider.id;
-    option.textContent = provider.name;
-    privateProviderList.appendChild(option);
-  });
+function buildDefaultPrivateConfig() {
+  return { ...DEFAULT_PRIVATE_CONFIG };
+}
+
+function normalizePrivateConfig(config = {}) {
+  const toNumber = (value, fallback) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const normalized = {
+    ...DEFAULT_PRIVATE_CONFIG,
+    ...config,
+  };
+  normalized.enabled = Boolean(
+    Object.prototype.hasOwnProperty.call(config, "enabled")
+      ? config.enabled
+      : normalized.enabled
+  );
+  normalized.vmwareMonthly = toNumber(
+    config.vmwareMonthly,
+    normalized.vmwareMonthly
+  );
+  normalized.windowsLicenseMonthly = toNumber(
+    config.windowsLicenseMonthly,
+    normalized.windowsLicenseMonthly
+  );
+  normalized.nodeCount = toNumber(config.nodeCount, normalized.nodeCount);
+  normalized.nodeCpu = toNumber(config.nodeCpu, normalized.nodeCpu);
+  normalized.nodeRam = toNumber(config.nodeRam, normalized.nodeRam);
+  normalized.nodeStorageTb = toNumber(
+    config.nodeStorageTb,
+    normalized.nodeStorageTb
+  );
+  normalized.vmOsDiskGb = toNumber(config.vmOsDiskGb, normalized.vmOsDiskGb);
+  normalized.sanUsableTb = toNumber(
+    config.sanUsableTb,
+    normalized.sanUsableTb
+  );
+  normalized.sanTotalMonthly = toNumber(
+    config.sanTotalMonthly,
+    normalized.sanTotalMonthly
+  );
+  normalized.networkMonthly = toNumber(
+    config.networkMonthly,
+    normalized.networkMonthly
+  );
+  normalized.firewallMonthly = toNumber(
+    config.firewallMonthly,
+    normalized.firewallMonthly
+  );
+  normalized.loadBalancerMonthly = toNumber(
+    config.loadBalancerMonthly,
+    normalized.loadBalancerMonthly
+  );
+  let storagePerTb = toNumber(config.storagePerTb, normalized.storagePerTb);
   if (
-    selectedId &&
-    privateProviderStore.providers.some((provider) => provider.id === selectedId)
+    normalized.sanUsableTb > 0 &&
+    normalized.sanTotalMonthly > 0
   ) {
-    privateProviderList.value = selectedId;
+    storagePerTb = normalized.sanTotalMonthly / normalized.sanUsableTb;
   }
-  syncPrivateCompareSelections();
+  normalized.storagePerTb = storagePerTb;
+  return normalized;
 }
 
-function applyPrivateProvider(provider) {
-  if (!provider) {
+function getPrimaryPrivateProvider() {
+  const selection =
+    Array.isArray(privateCompareSelections) && privateCompareSelections.length
+      ? privateCompareSelections[0]
+      : "";
+  if (selection) {
+    const provider = getPrivateProviderById(selection);
+    if (provider) {
+      return provider;
+    }
+  }
+  if (privateProviderStore.activeId) {
+    const provider = getPrivateProviderById(privateProviderStore.activeId);
+    if (provider) {
+      return provider;
+    }
+  }
+  return privateProviderStore.providers[0] || null;
+}
+
+function getPrimaryPrivateConfig() {
+  const provider = getPrimaryPrivateProvider();
+  return normalizePrivateConfig(provider?.config || buildDefaultPrivateConfig());
+}
+
+function buildPrivateCardState(card) {
+  const fields = {};
+  card.querySelectorAll("[data-private-field]").forEach((element) => {
+    const key = element.dataset.privateField;
+    if (key) {
+      fields[key] = element;
+    }
+  });
+  const capacityCounts = {};
+  card.querySelectorAll("[data-private-capacity]").forEach((element) => {
+    const key = element.dataset.privateCapacity;
+    if (key) {
+      capacityCounts[key] = element;
+    }
+  });
+  const capacityTotals = {};
+  card.querySelectorAll("[data-private-capacity-total]").forEach((element) => {
+    const key = element.dataset.privateCapacityTotal;
+    if (key) {
+      capacityTotals[key] = element;
+    }
+  });
+  const osSizeLabels = card.querySelectorAll(".private-os-size");
+  return {
+    element: card,
+    fields,
+    capacityCounts,
+    capacityTotals,
+    osSizeLabels,
+    actions: {
+      save: card.querySelector("[data-private-action='save']"),
+      delete: card.querySelector("[data-private-action='delete']"),
+    },
+    providerId: card.dataset.providerId || "",
+    cardId: card.dataset.cardId || "",
+  };
+}
+
+function updatePrivateCardTitle(cardState) {
+  const nameValue = cardState.fields.name?.value?.trim() || "";
+  if (cardState.fields.title) {
+    cardState.fields.title.textContent = nameValue || "New provider";
+  }
+}
+
+function applyPrivateConfigToCard(cardState, config, nameValue) {
+  const normalized = normalizePrivateConfig(config);
+  if (cardState.fields.name && typeof nameValue === "string") {
+    cardState.fields.name.value = nameValue;
+  }
+  if (cardState.fields.enabled) {
+    cardState.fields.enabled.checked = normalized.enabled;
+  }
+  if (cardState.fields.vmwareMonthly) {
+    cardState.fields.vmwareMonthly.value = normalized.vmwareMonthly.toString();
+  }
+  if (cardState.fields.windowsLicenseMonthly) {
+    cardState.fields.windowsLicenseMonthly.value =
+      normalized.windowsLicenseMonthly.toString();
+  }
+  if (cardState.fields.nodeCount) {
+    cardState.fields.nodeCount.value = normalized.nodeCount.toString();
+  }
+  if (cardState.fields.storagePerTb) {
+    cardState.fields.storagePerTb.value = normalized.storagePerTb.toFixed(4);
+  }
+  if (cardState.fields.networkMonthly) {
+    cardState.fields.networkMonthly.value =
+      normalized.networkMonthly.toString();
+  }
+  if (cardState.fields.firewallMonthly) {
+    cardState.fields.firewallMonthly.value =
+      normalized.firewallMonthly.toString();
+  }
+  if (cardState.fields.loadBalancerMonthly) {
+    cardState.fields.loadBalancerMonthly.value =
+      normalized.loadBalancerMonthly.toString();
+  }
+  if (cardState.fields.nodeCpu) {
+    cardState.fields.nodeCpu.value = normalized.nodeCpu.toString();
+  }
+  if (cardState.fields.nodeRam) {
+    cardState.fields.nodeRam.value = normalized.nodeRam.toString();
+  }
+  if (cardState.fields.nodeStorageTb) {
+    cardState.fields.nodeStorageTb.value =
+      normalized.nodeStorageTb.toString();
+  }
+  if (cardState.fields.vmOsDiskGb) {
+    cardState.fields.vmOsDiskGb.value = normalized.vmOsDiskGb.toString();
+  }
+  if (cardState.fields.sanUsableTb) {
+    cardState.fields.sanUsableTb.value =
+      normalized.sanUsableTb.toString();
+  }
+  if (cardState.fields.sanTotalMonthly) {
+    cardState.fields.sanTotalMonthly.value =
+      normalized.sanTotalMonthly.toString();
+  }
+  updatePrivateCardTitle(cardState);
+}
+
+function readPrivateConfigFromCard(cardState) {
+  const toNumber = (value, fallback = 0) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return normalizePrivateConfig({
+    enabled: Boolean(cardState.fields.enabled?.checked),
+    vmwareMonthly: toNumber(cardState.fields.vmwareMonthly?.value),
+    windowsLicenseMonthly: toNumber(
+      cardState.fields.windowsLicenseMonthly?.value
+    ),
+    nodeCount: toNumber(
+      cardState.fields.nodeCount?.value,
+      DEFAULT_PRIVATE_CONFIG.nodeCount
+    ),
+    storagePerTb: toNumber(cardState.fields.storagePerTb?.value),
+    networkMonthly: toNumber(cardState.fields.networkMonthly?.value),
+    firewallMonthly: toNumber(cardState.fields.firewallMonthly?.value),
+    loadBalancerMonthly: toNumber(cardState.fields.loadBalancerMonthly?.value),
+    nodeCpu: toNumber(
+      cardState.fields.nodeCpu?.value,
+      DEFAULT_PRIVATE_CONFIG.nodeCpu
+    ),
+    nodeRam: toNumber(
+      cardState.fields.nodeRam?.value,
+      DEFAULT_PRIVATE_CONFIG.nodeRam
+    ),
+    nodeStorageTb: toNumber(cardState.fields.nodeStorageTb?.value),
+    vmOsDiskGb: toNumber(
+      cardState.fields.vmOsDiskGb?.value,
+      DEFAULT_PRIVATE_CONFIG.vmOsDiskGb
+    ),
+    sanUsableTb: toNumber(cardState.fields.sanUsableTb?.value),
+    sanTotalMonthly: toNumber(cardState.fields.sanTotalMonthly?.value),
+  });
+}
+
+function setPrivateCardProviderId(cardState, providerId) {
+  if (!providerId) {
     return;
   }
-  if (privateProviderNameInput) {
-    privateProviderNameInput.value = provider.name;
+  if (cardState.cardId && privateProviderCards.has(cardState.cardId)) {
+    privateProviderCards.delete(cardState.cardId);
   }
-  applyPrivateConfig(provider.config);
+  cardState.providerId = providerId;
+  cardState.cardId = providerId;
+  cardState.element.dataset.providerId = providerId;
+  cardState.element.dataset.cardId = providerId;
+  privateProviderCards.set(providerId, cardState);
 }
 
-function savePrivateProvider(name, config) {
+function upsertPrivateProvider(id, name, config) {
   const trimmedName = name.trim();
   if (!trimmedName) {
     setPrivateNote("Enter a private provider name.", true);
     return null;
   }
-  const now = new Date().toISOString();
-  const activeProvider = privateProviderStore.activeId
-    ? getPrivateProviderById(privateProviderStore.activeId)
-    : null;
-  const activeNameMatches =
-    activeProvider &&
-    activeProvider.name.toLowerCase() === trimmedName.toLowerCase();
   const existingByName = privateProviderStore.providers.find(
-    (item) => item.name.toLowerCase() === trimmedName.toLowerCase()
+    (item) =>
+      item.name.toLowerCase() === trimmedName.toLowerCase() && item.id !== id
   );
-  let provider = null;
-  if (
-    existingByName &&
-    (!activeProvider || existingByName.id !== activeProvider.id)
-  ) {
-    provider = existingByName;
-  } else if (activeNameMatches) {
-    provider = activeProvider;
+  if (existingByName) {
+    setPrivateNote("Provider name already exists.", true);
+    return null;
   }
+  const now = new Date().toISOString();
+  let provider = id ? getPrivateProviderById(id) : null;
   if (provider) {
     provider.name = trimmedName;
     provider.config = config;
     provider.updatedAt = now;
   } else {
-    const id = `prv-${Date.now().toString(36)}-${Math.random()
+    const providerId = `prv-${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 7)}`;
     provider = {
-      id,
+      id: providerId,
       name: trimmedName,
       config,
       createdAt: now,
@@ -2259,11 +2967,12 @@ function savePrivateProvider(name, config) {
   }
   privateProviderStore.activeId = provider.id;
   persistPrivateProviders(privateProviderStore);
-  renderPrivateProviderList(provider.id);
+  syncPrivateCompareSelections();
+  renderSavedCompareSelectors();
   return provider;
 }
 
-function deletePrivateProvider(id) {
+function removePrivateProvider(id) {
   const provider = getPrivateProviderById(id);
   if (!provider) {
     return null;
@@ -2276,84 +2985,159 @@ function deletePrivateProvider(id) {
       privateProviderStore.providers[0]?.id || null;
   }
   persistPrivateProviders(privateProviderStore);
-  renderPrivateProviderList(privateProviderStore.activeId);
+  syncPrivateCompareSelections();
+  renderSavedCompareSelectors();
   return provider.name;
 }
 
-function getPrivateConfigFromForm() {
-  return {
-    enabled: Boolean(privateEnabledInput?.checked),
-    vmwareMonthly: Number.parseFloat(privateVmwareInput?.value) || 0,
-    windowsLicenseMonthly:
-      Number.parseFloat(privateWindowsLicenseInput?.value) || 0,
-    nodeCount: Number.parseFloat(privateNodeCountInput?.value) || 0,
-    storagePerTb: Number.parseFloat(privateStoragePerTbInput?.value) || 0,
-    networkMonthly: Number.parseFloat(privateNetworkInput?.value) || 0,
-    firewallMonthly: Number.parseFloat(privateFirewallInput?.value) || 0,
-    loadBalancerMonthly:
-      Number.parseFloat(privateLoadBalancerInput?.value) || 0,
-    nodeCpu: Number.parseFloat(privateNodeCpuInput?.value) || 0,
-    nodeRam: Number.parseFloat(privateNodeRamInput?.value) || 0,
-    nodeStorageTb: Number.parseFloat(privateNodeStorageInput?.value) || 0,
-    vmOsDiskGb: Number.parseFloat(privateVmOsDiskInput?.value) || 0,
-    sanUsableTb: Number.parseFloat(privateSanUsableInput?.value) || 0,
-    sanTotalMonthly: Number.parseFloat(privateSanTotalInput?.value) || 0,
-  };
-}
-
-function applyPrivateConfig(config) {
-  if (!config) {
+function handleSavePrivateCard(cardState) {
+  updatePrivateCapacityForCard(cardState);
+  const config = readPrivateConfigFromCard(cardState);
+  const name = cardState.fields.name?.value || "";
+  const provider = upsertPrivateProvider(cardState.providerId, name, config);
+  if (!provider) {
     return;
   }
-  if (privateEnabledInput && typeof config.enabled === "boolean") {
-    privateEnabledInput.checked = config.enabled;
+  setPrivateCardProviderId(cardState, provider.id);
+  applyPrivateConfigToCard(cardState, provider.config, provider.name);
+  updatePrivateCapacityForCard(cardState);
+  setPrivateNote(
+    provider.config.enabled
+      ? `Saved "${provider.name}".`
+      : `Saved "${provider.name}". Enable private cloud to compare.`,
+    false
+  );
+  if (activePanel !== "private") {
+    handleCompare();
   }
-  if (privateVmwareInput && Number.isFinite(config.vmwareMonthly)) {
-    privateVmwareInput.value = config.vmwareMonthly.toString();
+}
+
+function handleDeletePrivateCard(cardState) {
+  if (cardState.providerId) {
+    const confirmed = window.confirm("Delete this private provider?");
+    if (!confirmed) {
+      return;
+    }
+    const deletedName = removePrivateProvider(cardState.providerId);
+    cardState.element.remove();
+    privateProviderCards.delete(cardState.cardId);
+    setPrivateNote(
+      deletedName
+        ? `Deleted "${deletedName}".`
+        : "Private provider deleted.",
+      false
+    );
+  } else {
+    cardState.element.remove();
+    privateProviderCards.delete(cardState.cardId);
+    setPrivateNote("Removed unsaved provider.", false);
   }
-  if (
-    privateWindowsLicenseInput &&
-    Number.isFinite(config.windowsLicenseMonthly)
-  ) {
-    privateWindowsLicenseInput.value =
-      config.windowsLicenseMonthly.toString();
+  if (privateProvidersList && !privateProvidersList.children.length) {
+    addPrivateProviderCard();
   }
-  if (privateNodeCountInput && Number.isFinite(config.nodeCount)) {
-    privateNodeCountInput.value = config.nodeCount.toString();
+  if (activePanel !== "private") {
+    handleCompare();
   }
-  if (privateStoragePerTbInput && Number.isFinite(config.storagePerTb)) {
-    privateStoragePerTbInput.value = config.storagePerTb.toString();
+}
+
+function createPrivateProviderCard(provider) {
+  if (!privateProviderTemplate?.content?.firstElementChild) {
+    return null;
   }
-  if (privateNetworkInput && Number.isFinite(config.networkMonthly)) {
-    privateNetworkInput.value = config.networkMonthly.toString();
+  const card = privateProviderTemplate.content.firstElementChild.cloneNode(true);
+  const cardState = buildPrivateCardState(card);
+  const cardId =
+    provider?.id ||
+    `draft-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}`;
+  cardState.cardId = cardId;
+  card.dataset.cardId = cardId;
+  if (provider?.id) {
+    cardState.providerId = provider.id;
+    card.dataset.providerId = provider.id;
   }
-  if (privateFirewallInput && Number.isFinite(config.firewallMonthly)) {
-    privateFirewallInput.value = config.firewallMonthly.toString();
+  privateProviderCards.set(cardId, cardState);
+  if (provider) {
+    applyPrivateConfigToCard(cardState, provider.config, provider.name);
+  } else {
+    applyPrivateConfigToCard(cardState, buildDefaultPrivateConfig(), "");
   }
-  if (
-    privateLoadBalancerInput &&
-    Number.isFinite(config.loadBalancerMonthly)
-  ) {
-    privateLoadBalancerInput.value = config.loadBalancerMonthly.toString();
+  updatePrivateCapacityForCard(cardState);
+  updatePrivateCardTitle(cardState);
+  if (cardState.fields.name) {
+    cardState.fields.name.addEventListener("input", () => {
+      updatePrivateCardTitle(cardState);
+    });
   }
-  if (privateNodeCpuInput && Number.isFinite(config.nodeCpu)) {
-    privateNodeCpuInput.value = config.nodeCpu.toString();
+  const capacityInputs = [
+    "nodeCpu",
+    "nodeRam",
+    "nodeStorageTb",
+    "vmOsDiskGb",
+    "sanUsableTb",
+    "sanTotalMonthly",
+    "nodeCount",
+  ];
+  capacityInputs.forEach((key) => {
+    const field = cardState.fields[key];
+    if (field) {
+      field.addEventListener("input", () => {
+        updatePrivateCapacityForCard(cardState);
+      });
+    }
+  });
+  if (cardState.actions.save) {
+    cardState.actions.save.addEventListener("click", () => {
+      handleSavePrivateCard(cardState);
+    });
   }
-  if (privateNodeRamInput && Number.isFinite(config.nodeRam)) {
-    privateNodeRamInput.value = config.nodeRam.toString();
+  if (cardState.actions.delete) {
+    cardState.actions.delete.addEventListener("click", () => {
+      handleDeletePrivateCard(cardState);
+    });
   }
-  if (privateNodeStorageInput && Number.isFinite(config.nodeStorageTb)) {
-    privateNodeStorageInput.value = config.nodeStorageTb.toString();
+  return cardState;
+}
+
+function renderPrivateProviderCards() {
+  if (!privateProvidersList) {
+    return;
   }
-  if (privateVmOsDiskInput && Number.isFinite(config.vmOsDiskGb)) {
-    privateVmOsDiskInput.value = config.vmOsDiskGb.toString();
+  privateProvidersList.innerHTML = "";
+  privateProviderCards = new Map();
+  if (privateProviderStore.providers.length) {
+    privateProviderStore.providers.forEach((provider) => {
+      const cardState = createPrivateProviderCard(provider);
+      if (cardState) {
+        privateProvidersList.appendChild(cardState.element);
+      }
+    });
+  } else {
+    const cardState = createPrivateProviderCard();
+    if (cardState) {
+      privateProvidersList.appendChild(cardState.element);
+    }
   }
-  if (privateSanUsableInput && Number.isFinite(config.sanUsableTb)) {
-    privateSanUsableInput.value = config.sanUsableTb.toString();
+  syncPrivateCompareSelections();
+  renderSavedCompareSelectors();
+}
+
+function addPrivateProviderCard() {
+  if (!privateProvidersList) {
+    return;
   }
-  if (privateSanTotalInput && Number.isFinite(config.sanTotalMonthly)) {
-    privateSanTotalInput.value = config.sanTotalMonthly.toString();
+  const cardState = createPrivateProviderCard();
+  if (!cardState) {
+    return;
   }
+  privateProvidersList.appendChild(cardState.element);
+  updatePrivateCapacityForCard(cardState);
+  cardState.element.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function getPrivateConfigFromForm() {
+  return getPrimaryPrivateConfig();
 }
 
 function applyPrivateConfigToPayload(payload, config, options = {}) {
@@ -2625,6 +3409,100 @@ function renderScenarioList(selectedId = "") {
   if (selectedId && scenarioStore.some((scenario) => scenario.id === selectedId)) {
     scenarioList.value = selectedId;
   }
+  renderSavedCompareSelectors();
+}
+
+function renderSavedCompareSelectors() {
+  renderSavedCompareScenarioList();
+  renderSavedComparePrivateList();
+}
+
+function renderSavedCompareScenarioList() {
+  if (!savedCompareScenarioList) {
+    return;
+  }
+  savedCompareScenarioList.innerHTML = "";
+  if (!scenarioStore.length) {
+    savedCompareScenarioList.textContent = "No saved scenarios.";
+    return;
+  }
+  const selections = resolveScenarioSelections();
+  if (Array.isArray(savedCompareScenarioSelections)) {
+    updateScenarioSelections(selections);
+  }
+  scenarioStore.forEach((scenario) => {
+    const label = document.createElement("label");
+    label.className = "checkbox-field saved-compare-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = scenario.id;
+    checkbox.checked = selections.includes(scenario.id);
+    checkbox.addEventListener("change", () => {
+      const nextSelections = Array.isArray(savedCompareScenarioSelections)
+        ? [...savedCompareScenarioSelections]
+        : resolveScenarioSelections();
+      if (checkbox.checked) {
+        if (!nextSelections.includes(scenario.id)) {
+          nextSelections.push(scenario.id);
+        }
+      } else {
+        const index = nextSelections.indexOf(scenario.id);
+        if (index >= 0) {
+          nextSelections.splice(index, 1);
+        }
+      }
+      updateScenarioSelections(nextSelections);
+    });
+    const name = document.createElement("span");
+    name.textContent = scenario.name;
+    label.appendChild(checkbox);
+    label.appendChild(name);
+    savedCompareScenarioList.appendChild(label);
+  });
+}
+
+function renderSavedComparePrivateList() {
+  if (!savedComparePrivateList) {
+    return;
+  }
+  savedComparePrivateList.innerHTML = "";
+  if (!privateProviderStore.providers.length) {
+    savedComparePrivateList.textContent = "No private providers saved.";
+    return;
+  }
+  const selections = resolvePrivateSelections();
+  if (Array.isArray(savedComparePrivateSelections)) {
+    updatePrivateSelections(selections);
+  }
+  privateProviderStore.providers.forEach((provider) => {
+    const label = document.createElement("label");
+    label.className = "checkbox-field saved-compare-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = provider.id;
+    checkbox.checked = selections.includes(provider.id);
+    checkbox.addEventListener("change", () => {
+      const nextSelections = Array.isArray(savedComparePrivateSelections)
+        ? [...savedComparePrivateSelections]
+        : resolvePrivateSelections();
+      if (checkbox.checked) {
+        if (!nextSelections.includes(provider.id)) {
+          nextSelections.push(provider.id);
+        }
+      } else {
+        const index = nextSelections.indexOf(provider.id);
+        if (index >= 0) {
+          nextSelections.splice(index, 1);
+        }
+      }
+      updatePrivateSelections(nextSelections);
+    });
+    const name = document.createElement("span");
+    name.textContent = provider.name;
+    label.appendChild(checkbox);
+    label.appendChild(name);
+    savedComparePrivateList.appendChild(label);
+  });
 }
 
 function getScenarioById(id) {
@@ -2692,8 +3570,15 @@ function applyScenarioInput(input) {
     sqlEditionSelect.value = input.sqlEdition;
   }
   if (Number.isFinite(input.sqlLicenseRate)) {
-    sqlRateInput.value = input.sqlLicenseRate.toString();
-    sqlRateTouched = true;
+    const rateValue = Number.parseFloat(input.sqlLicenseRate);
+    sqlRateInput.value = rateValue.toString();
+    const editionValue = sqlEditionSelect.value || "none";
+    sqlRateTouched = !isDefaultSqlRate(rateValue, editionValue);
+  } else {
+    const editionValue = sqlEditionSelect.value || "none";
+    const nextRate = SQL_DEFAULTS[editionValue] ?? 0;
+    sqlRateInput.value = nextRate.toString();
+    sqlRateTouched = false;
   }
   if (Number.isFinite(input.osDiskGb)) {
     osDiskInput.value = input.osDiskGb.toString();
@@ -2743,63 +3628,43 @@ function applyScenarioInput(input) {
   if (gcpLbSelect && input.gcpLoadBalancerFlavor) {
     gcpLbSelect.value = input.gcpLoadBalancerFlavor;
   }
-  if (privateEnabledInput) {
-    privateEnabledInput.checked = Boolean(input.privateEnabled);
+  applyScenarioPrivateConfig(input);
+}
+
+function applyScenarioPrivateConfig(input) {
+  if (!input) {
+    return;
   }
-  if (Number.isFinite(input.privateVmwareMonthly) && privateVmwareInput) {
-    privateVmwareInput.value = input.privateVmwareMonthly.toString();
+  const provider = getPrimaryPrivateProvider();
+  if (!provider) {
+    return;
   }
-  if (
-    Number.isFinite(input.privateWindowsLicenseMonthly) &&
-    privateWindowsLicenseInput
-  ) {
-    privateWindowsLicenseInput.value =
-      input.privateWindowsLicenseMonthly.toString();
+  const config = normalizePrivateConfig({
+    enabled: Boolean(input.privateEnabled),
+    vmwareMonthly: input.privateVmwareMonthly,
+    windowsLicenseMonthly: input.privateWindowsLicenseMonthly,
+    nodeCount: input.privateNodeCount,
+    storagePerTb: input.privateStoragePerTb,
+    networkMonthly: input.privateNetworkMonthly,
+    firewallMonthly: input.privateFirewallMonthly,
+    loadBalancerMonthly: input.privateLoadBalancerMonthly,
+    nodeCpu: input.privateNodeCpu,
+    nodeRam: input.privateNodeRam,
+    nodeStorageTb: input.privateNodeStorageTb,
+    vmOsDiskGb: input.privateVmOsDiskGb,
+    sanUsableTb: input.privateSanUsableTb,
+    sanTotalMonthly: input.privateSanTotalMonthly,
+  });
+  provider.config = config;
+  provider.updatedAt = new Date().toISOString();
+  privateProviderStore.activeId = provider.id;
+  persistPrivateProviders(privateProviderStore);
+  const cardState = privateProviderCards.get(provider.id);
+  if (cardState) {
+    applyPrivateConfigToCard(cardState, config, provider.name);
+    updatePrivateCapacityForCard(cardState);
   }
-  if (Number.isFinite(input.privateNodeCount) && privateNodeCountInput) {
-    privateNodeCountInput.value = input.privateNodeCount.toString();
-  }
-  if (
-    Number.isFinite(input.privateStoragePerTb) &&
-    privateStoragePerTbInput
-  ) {
-    privateStoragePerTbInput.value = input.privateStoragePerTb.toString();
-  }
-  if (Number.isFinite(input.privateNetworkMonthly) && privateNetworkInput) {
-    privateNetworkInput.value = input.privateNetworkMonthly.toString();
-  }
-  if (Number.isFinite(input.privateFirewallMonthly) && privateFirewallInput) {
-    privateFirewallInput.value = input.privateFirewallMonthly.toString();
-  }
-  if (
-    Number.isFinite(input.privateLoadBalancerMonthly) &&
-    privateLoadBalancerInput
-  ) {
-    privateLoadBalancerInput.value =
-      input.privateLoadBalancerMonthly.toString();
-  }
-  if (Number.isFinite(input.privateNodeCpu) && privateNodeCpuInput) {
-    privateNodeCpuInput.value = input.privateNodeCpu.toString();
-  }
-  if (Number.isFinite(input.privateNodeRam) && privateNodeRamInput) {
-    privateNodeRamInput.value = input.privateNodeRam.toString();
-  }
-  if (Number.isFinite(input.privateNodeStorageTb) && privateNodeStorageInput) {
-    privateNodeStorageInput.value = input.privateNodeStorageTb.toString();
-  }
-  if (Number.isFinite(input.privateVmOsDiskGb) && privateVmOsDiskInput) {
-    privateVmOsDiskInput.value = input.privateVmOsDiskGb.toString();
-  }
-  if (Number.isFinite(input.privateSanUsableTb) && privateSanUsableInput) {
-    privateSanUsableInput.value = input.privateSanUsableTb.toString();
-  }
-  if (
-    Number.isFinite(input.privateSanTotalMonthly) &&
-    privateSanTotalInput
-  ) {
-    privateSanTotalInput.value = input.privateSanTotalMonthly.toString();
-  }
-  updatePrivateCapacity();
+  syncPrivateCompareSelections();
 }
 
 function getScenarioProviderTotal(data, providerKey) {
@@ -2814,6 +3679,32 @@ function getScenarioProviderTotal(data, providerKey) {
     provider?.pricingTiers?.onDemand?.totals?.total ??
     provider?.totals?.total;
   return Number.isFinite(total) ? total : null;
+}
+
+function getScenarioProviderTotals(data, providerKey) {
+  if (!data) {
+    return null;
+  }
+  if (providerKey === "private" && !data.private?.enabled) {
+    return null;
+  }
+  const provider = data[providerKey];
+  return provider?.pricingTiers?.onDemand?.totals ?? provider?.totals ?? null;
+}
+
+function getScenarioComponentValue(totals, field) {
+  if (!totals) {
+    return null;
+  }
+  if (field === "licenseMonthly") {
+    const sql = Number.isFinite(totals.sqlMonthly) ? totals.sqlMonthly : 0;
+    const windows = Number.isFinite(totals.windowsLicenseMonthly)
+      ? totals.windowsLicenseMonthly
+      : 0;
+    return sql + windows;
+  }
+  const value = totals[field];
+  return Number.isFinite(value) ? value : null;
 }
 
 function buildScenarioComparison(currentData, scenarioData, scenarioName) {
@@ -3066,26 +3957,30 @@ function updateInstanceOptions() {
   refreshInstanceSelects();
 }
 
-function updatePrivateCapacity() {
-  const nodeCpuSockets = Number.parseFloat(privateNodeCpuInput?.value);
+function updatePrivateCapacityForCard(cardState) {
+  if (!cardState) {
+    return;
+  }
+  const fields = cardState.fields || {};
+  const nodeCpuSockets = Number.parseFloat(fields.nodeCpu?.value);
   const nodeVcpuCapacity =
     Number.isFinite(nodeCpuSockets) && nodeCpuSockets > 0
       ? nodeCpuSockets * VMWARE_VCPU_PER_SOCKET
       : 0;
-  const nodeCount = Number.parseFloat(privateNodeCountInput?.value);
+  const nodeCount = Number.parseFloat(fields.nodeCount?.value);
   const usableNodes =
     Number.isFinite(nodeCount) && nodeCount > 1
       ? nodeCount - 1
       : 1;
-  const nodeRam = Number.parseFloat(privateNodeRamInput?.value);
-  const nodeStorageTb = Number.parseFloat(privateNodeStorageInput?.value);
+  const nodeRam = Number.parseFloat(fields.nodeRam?.value);
+  const nodeStorageTb = Number.parseFloat(fields.nodeStorageTb?.value);
   const nodeStorageGb =
     Number.isFinite(nodeStorageTb) && nodeStorageTb > 0
       ? nodeStorageTb * 1024
       : null;
-  const vmOsGb = Number.parseFloat(privateVmOsDiskInput?.value) || 256;
-  if (privateOsSizeLabels.length) {
-    privateOsSizeLabels.forEach((label) => {
+  const vmOsGb = Number.parseFloat(fields.vmOsDiskGb?.value) || 256;
+  if (cardState.osSizeLabels?.length) {
+    cardState.osSizeLabels.forEach((label) => {
       label.textContent = `${vmOsGb} GB`;
     });
   }
@@ -3105,11 +4000,13 @@ function updatePrivateCapacity() {
       0,
       Math.min(maxByCpu, maxByRam, maxByStorage)
     );
-    const target = privateCapacityCounts[flavor.key];
+    const target = cardState.capacityCounts?.[flavor.key];
     if (target) {
-      target.textContent = Number.isFinite(maxCount) ? maxCount.toString() : "-";
+      target.textContent = Number.isFinite(maxCount)
+        ? maxCount.toString()
+        : "-";
     }
-    const totalTarget = privateCapacityTotals[flavor.key];
+    const totalTarget = cardState.capacityTotals?.[flavor.key];
     if (totalTarget) {
       const totalCount = Number.isFinite(maxCount)
         ? Math.max(0, Math.floor(maxCount * usableNodes))
@@ -3120,8 +4017,8 @@ function updatePrivateCapacity() {
     }
   });
 
-  const sanUsableTb = Number.parseFloat(privateSanUsableInput?.value);
-  const sanTotalMonthly = Number.parseFloat(privateSanTotalInput?.value);
+  const sanUsableTb = Number.parseFloat(fields.sanUsableTb?.value);
+  const sanTotalMonthly = Number.parseFloat(fields.sanTotalMonthly?.value);
   let perTb = 0;
   if (
     Number.isFinite(sanUsableTb) &&
@@ -3130,17 +4027,18 @@ function updatePrivateCapacity() {
     sanTotalMonthly > 0
   ) {
     perTb = sanTotalMonthly / sanUsableTb;
-  } else if (privateStoragePerTbInput) {
-    const storedRate = Number.parseFloat(privateStoragePerTbInput.value);
+  } else {
+    const storedRate = Number.parseFloat(fields.storagePerTb?.value);
     if (Number.isFinite(storedRate) && storedRate > 0) {
       perTb = storedRate;
     }
   }
-  if (privateStoragePerTbInput) {
-    privateStoragePerTbInput.value = perTb.toFixed(4);
+  if (fields.storagePerTb) {
+    fields.storagePerTb.value = perTb.toFixed(4);
   }
-  if (privateSanRate) {
-    privateSanRate.textContent = perTb > 0 ? `${formatMoney(perTb)}/TB-mo` : "N/A";
+  if (fields.sanRate) {
+    fields.sanRate.textContent =
+      perTb > 0 ? `${formatMoney(perTb)}/TB-mo` : "N/A";
   }
 }
 
@@ -3409,6 +4307,73 @@ function escapeCsv(value) {
   return text;
 }
 
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let value = "";
+  let inQuotes = false;
+  const pushValue = () => {
+    row.push(value);
+    value = "";
+  };
+  const pushRow = () => {
+    if (row.length || value) {
+      pushValue();
+      rows.push(row);
+      row = [];
+    }
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          value += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        value += char;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (char === ",") {
+      pushValue();
+      continue;
+    }
+    if (char === "\n") {
+      pushRow();
+      continue;
+    }
+    if (char === "\r") {
+      continue;
+    }
+    value += char;
+  }
+  pushRow();
+  return rows;
+}
+
+function normalizeCsvHeader(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseCsvBoolean(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (["true", "yes", "1", "on"].includes(text)) {
+    return true;
+  }
+  if (["false", "no", "0", "off"].includes(text)) {
+    return false;
+  }
+  return undefined;
+}
+
 function buildCsv(data) {
   const input = data.input || {};
   const mode = input.mode || "vm";
@@ -3541,21 +4506,18 @@ async function handleExportCsv() {
   }
 }
 
-async function handleSavedCompareExport() {
+function handleSavedCompareExport() {
   if (!savedCompareNote) {
     return;
   }
+  if (!savedCompareRows.length) {
+    savedCompareNote.textContent = "Run saved compare before exporting.";
+    savedCompareNote.classList.add("negative");
+    return;
+  }
+  savedCompareNote.classList.remove("negative");
+  savedCompareNote.textContent = "Preparing saved compare CSV...";
   try {
-    if (!savedCompareRows.length) {
-      await refreshSavedCompare();
-    }
-    if (!savedCompareRows.length) {
-      savedCompareNote.textContent = "No saved scenarios to export.";
-      savedCompareNote.classList.add("negative");
-      return;
-    }
-    savedCompareNote.classList.remove("negative");
-    savedCompareNote.textContent = "Preparing saved compare CSV...";
     const csv = buildSavedCompareCsv(savedCompareRows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -3572,6 +4534,432 @@ async function handleSavedCompareExport() {
     savedCompareNote.textContent =
       error?.message || "Could not export saved compare CSV.";
     savedCompareNote.classList.add("negative");
+  }
+}
+
+function sanitizeScenarioFilename(name) {
+  return name
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+function resolveScenarioForExport(scenario) {
+  if (scenario) {
+    return scenario;
+  }
+  const selectedId = scenarioList?.value;
+  return selectedId
+    ? getScenarioById(selectedId)
+    : getScenarioByName(scenarioNameInput?.value || "");
+}
+
+function buildCsvFieldIndex(headers, fields) {
+  const index = {};
+  headers.forEach((header, idx) => {
+    const normalized = normalizeCsvHeader(header);
+    fields.forEach((field) => {
+      if (
+        normalized === normalizeCsvHeader(field.label) ||
+        normalized === normalizeCsvHeader(field.key)
+      ) {
+        index[field.key] = idx;
+      }
+    });
+  });
+  return index;
+}
+
+function buildScenarioCsv(scenario) {
+  const headers = SCENARIO_CSV_FIELDS.map((field) => field.label);
+  const row = SCENARIO_CSV_FIELDS.map((field) => {
+    if (field.key === "name") {
+      return escapeCsv(scenario.name || "");
+    }
+    const value = scenario.input?.[field.key];
+    if (field.type === "boolean") {
+      return escapeCsv(value ? "true" : "false");
+    }
+    return escapeCsv(value ?? "");
+  });
+  return `${headers.join(",")}\n${row.join(",")}`;
+}
+
+function parseScenarioCsv(text) {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) {
+    return [];
+  }
+  const headers = rows[0];
+  const index = buildCsvFieldIndex(headers, SCENARIO_CSV_FIELDS);
+  return rows.slice(1).map((row) => {
+    const input = {};
+    let name = "";
+    SCENARIO_CSV_FIELDS.forEach((field) => {
+      const idx = index[field.key];
+      if (idx === undefined) {
+        return;
+      }
+      const raw = row[idx] ?? "";
+      if (field.key === "name") {
+        name = raw.trim();
+        return;
+      }
+      if (raw === "") {
+        return;
+      }
+      if (field.type === "number") {
+        const parsed = Number.parseFloat(raw);
+        if (Number.isFinite(parsed)) {
+          input[field.key] = parsed;
+        }
+        return;
+      }
+      if (field.type === "boolean") {
+        const parsed = parseCsvBoolean(raw);
+        if (parsed !== undefined) {
+          input[field.key] = parsed;
+        }
+        return;
+      }
+      input[field.key] = raw;
+    });
+    return { name, input };
+  }).filter((item) => item.name && Object.keys(item.input).length);
+}
+
+function handleExportScenario(scenario, noteTarget) {
+  const targetNote = noteTarget || savedCompareNote || scenarioNote;
+  const selectedScenario = resolveScenarioForExport(scenario);
+  if (!selectedScenario) {
+    setInlineNote(targetNote, "Select a scenario to export.", true);
+    return;
+  }
+  const payload = {
+    version: 1,
+    scenario: {
+      name: selectedScenario.name,
+      input: selectedScenario.input,
+      createdAt: selectedScenario.createdAt,
+      updatedAt: selectedScenario.updatedAt,
+    },
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const safeName =
+    sanitizeScenarioFilename(selectedScenario.name) || "scenario";
+  link.download = `cloud-price-${safeName}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  setInlineNote(targetNote, `Exported "${selectedScenario.name}".`);
+}
+
+function handleExportScenarioCsv(scenario, noteTarget) {
+  const targetNote = noteTarget || savedCompareNote || scenarioNote;
+  const selectedScenario = resolveScenarioForExport(scenario);
+  if (!selectedScenario) {
+    setInlineNote(targetNote, "Select a scenario to export.", true);
+    return;
+  }
+  const csv = buildScenarioCsv(selectedScenario);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const safeName =
+    sanitizeScenarioFilename(selectedScenario.name) || "scenario";
+  link.download = `cloud-price-${safeName}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  setInlineNote(
+    targetNote,
+    `Exported "${selectedScenario.name}" as CSV.`
+  );
+}
+
+async function handleImportScenarioFile(event) {
+  const targetNote = savedCompareNote || scenarioNote;
+  const file = event?.target?.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const items = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.scenarios)
+      ? parsed.scenarios
+      : parsed?.scenario
+      ? [parsed.scenario]
+      : parsed?.name && parsed?.input
+      ? [parsed]
+      : [];
+    if (!items.length) {
+      setInlineNote(targetNote, "No valid scenarios found in file.", true);
+      return;
+    }
+    let importedCount = 0;
+    const now = new Date().toISOString();
+    items.forEach((item) => {
+      const rawName = item?.name || "";
+      const input = item?.input;
+      if (!rawName || !input) {
+        return;
+      }
+      const trimmed = rawName.trim();
+      if (!trimmed) {
+        return;
+      }
+      const name = getScenarioByName(trimmed)
+        ? buildCloneName(trimmed)
+        : trimmed;
+      const scenarioId = `scn-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`;
+      scenarioStore.push({
+        id: scenarioId,
+        name,
+        input,
+        createdAt: item?.createdAt || now,
+        updatedAt: now,
+      });
+      importedCount += 1;
+    });
+    if (!importedCount) {
+      setInlineNote(targetNote, "No valid scenarios found in file.", true);
+      return;
+    }
+    persistScenarioStore(scenarioStore);
+    renderScenarioList();
+    setInlineNote(
+      targetNote,
+      `Imported ${importedCount} scenario(s).`
+    );
+  } catch (error) {
+    setInlineNote(
+      targetNote,
+      error?.message || "Could not import scenario file.",
+      true
+    );
+  } finally {
+    if (importScenarioInput) {
+      importScenarioInput.value = "";
+    }
+  }
+}
+
+async function handleImportScenarioCsvFile(event) {
+  const targetNote = savedCompareNote || scenarioNote;
+  const file = event?.target?.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    const items = parseScenarioCsv(text);
+    if (!items.length) {
+      setInlineNote(targetNote, "No valid scenarios found in CSV.", true);
+      return;
+    }
+    let importedCount = 0;
+    const now = new Date().toISOString();
+    items.forEach((item) => {
+      const trimmed = item.name.trim();
+      if (!trimmed) {
+        return;
+      }
+      const name = getScenarioByName(trimmed)
+        ? buildCloneName(trimmed)
+        : trimmed;
+      const scenarioId = `scn-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`;
+      scenarioStore.push({
+        id: scenarioId,
+        name,
+        input: item.input,
+        createdAt: now,
+        updatedAt: now,
+      });
+      importedCount += 1;
+    });
+    if (!importedCount) {
+      setInlineNote(targetNote, "No valid scenarios found in CSV.", true);
+      return;
+    }
+    persistScenarioStore(scenarioStore);
+    renderScenarioList();
+    setInlineNote(
+      targetNote,
+      `Imported ${importedCount} scenario(s) from CSV.`
+    );
+  } catch (error) {
+    setInlineNote(
+      targetNote,
+      error?.message || "Could not import scenario CSV.",
+      true
+    );
+  } finally {
+    if (importScenarioCsvInput) {
+      importScenarioCsvInput.value = "";
+    }
+  }
+}
+
+function buildPrivateProvidersCsv(providers) {
+  const headers = PRIVATE_PROVIDER_CSV_FIELDS.map((field) => field.label);
+  const lines = [headers.join(",")];
+  providers.forEach((provider) => {
+    const row = PRIVATE_PROVIDER_CSV_FIELDS.map((field) => {
+      if (field.key === "name") {
+        return escapeCsv(provider.name || "");
+      }
+      const value = provider.config?.[field.key];
+      if (field.type === "boolean") {
+        return escapeCsv(value ? "true" : "false");
+      }
+      return escapeCsv(value ?? "");
+    });
+    lines.push(row.join(","));
+  });
+  return lines.join("\n");
+}
+
+function parsePrivateProvidersCsv(text) {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) {
+    return [];
+  }
+  const headers = rows[0];
+  const index = buildCsvFieldIndex(headers, PRIVATE_PROVIDER_CSV_FIELDS);
+  return rows.slice(1).map((row) => {
+    const config = {};
+    let name = "";
+    PRIVATE_PROVIDER_CSV_FIELDS.forEach((field) => {
+      const idx = index[field.key];
+      if (idx === undefined) {
+        return;
+      }
+      const raw = row[idx] ?? "";
+      if (field.key === "name") {
+        name = raw.trim();
+        return;
+      }
+      if (raw === "") {
+        return;
+      }
+      if (field.type === "number") {
+        const parsed = Number.parseFloat(raw);
+        if (Number.isFinite(parsed)) {
+          config[field.key] = parsed;
+        }
+        return;
+      }
+      if (field.type === "boolean") {
+        const parsed = parseCsvBoolean(raw);
+        if (parsed !== undefined) {
+          config[field.key] = parsed;
+        }
+        return;
+      }
+      config[field.key] = raw;
+    });
+    return { name, config: normalizePrivateConfig(config) };
+  }).filter((item) => item.name);
+}
+
+function handleExportPrivateProvidersCsv() {
+  if (!privateSaveNote) {
+    return;
+  }
+  if (!privateProviderStore.providers.length) {
+    setPrivateNote("No private providers to export.", true);
+    return;
+  }
+  const csv = buildPrivateProvidersCsv(privateProviderStore.providers);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  link.download = `private-providers-${dateStamp}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  setPrivateNote("Private providers CSV exported.");
+}
+
+async function handleImportPrivateProvidersCsvFile(event) {
+  if (!privateSaveNote) {
+    return;
+  }
+  const file = event?.target?.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    const providers = parsePrivateProvidersCsv(text);
+    if (!providers.length) {
+      setPrivateNote("No valid private providers found in CSV.", true);
+      return;
+    }
+    let importedCount = 0;
+    const now = new Date().toISOString();
+    providers.forEach((item) => {
+      const trimmed = item.name.trim();
+      if (!trimmed) {
+        return;
+      }
+      const existing = privateProviderStore.providers.find(
+        (provider) =>
+          provider.name.toLowerCase() === trimmed.toLowerCase()
+      );
+      if (existing) {
+        existing.config = item.config;
+        existing.updatedAt = now;
+      } else {
+        const id = `prv-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 7)}`;
+        privateProviderStore.providers.push({
+          id,
+          name: trimmed,
+          config: item.config,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      importedCount += 1;
+    });
+    if (!importedCount) {
+      setPrivateNote("No valid private providers found in CSV.", true);
+      return;
+    }
+    persistPrivateProviders(privateProviderStore);
+    renderPrivateProviderCards();
+    setPrivateNote(`Imported ${importedCount} private provider(s).`);
+  } catch (error) {
+    setPrivateNote(
+      error?.message || "Could not import private providers CSV.",
+      true
+    );
+  } finally {
+    if (importPrivateProvidersInput) {
+      importPrivateProvidersInput.value = "";
+    }
   }
 }
 
@@ -3706,30 +5094,6 @@ async function handleCompareScenario() {
   }
 }
 
-function handleSavePrivate() {
-  if (!privateSaveNote) {
-    return;
-  }
-  updatePrivateCapacity();
-  const config = getPrivateConfigFromForm();
-  const name = privateProviderNameInput?.value || "";
-  const provider = savePrivateProvider(name, config);
-  if (!provider) {
-    return;
-  }
-  if (!config.enabled) {
-    setPrivateNote(
-      `Saved "${provider.name}". Enable private cloud to compare.`,
-      false
-    );
-  } else {
-    setPrivateNote(`Saved "${provider.name}".`);
-  }
-  if (activePanel !== "private") {
-    handleCompare();
-  }
-}
-
 form.addEventListener("submit", handleCompare);
 exportButton.addEventListener("click", handleExportCsv);
 resultsTabButtons.forEach((button) => {
@@ -3750,8 +5114,8 @@ if (runRegionCompareButton) {
 if (savedCompareRefresh) {
   savedCompareRefresh.addEventListener("click", refreshSavedCompare);
 }
-if (savedCompareExport) {
-  savedCompareExport.addEventListener("click", handleSavedCompareExport);
+if (savedComparePrivateRun) {
+  savedComparePrivateRun.addEventListener("click", runSavedPrivateCompare);
 }
 Object.entries(commitDiscountInputs).forEach(([, input]) => {
   if (input) {
@@ -3773,69 +5137,36 @@ if (compareScenarioButton) {
 if (deleteScenarioButton) {
   deleteScenarioButton.addEventListener("click", handleDeleteScenario);
 }
-if (privateSaveButton) {
-  privateSaveButton.addEventListener("click", handleSavePrivate);
-}
-if (loadPrivateProviderButton) {
-  loadPrivateProviderButton.addEventListener("click", () => {
-    const provider = getPrivateProviderById(privateProviderList?.value);
-    if (!provider) {
-      setPrivateNote("Select a private provider to load.", true);
-      return;
-    }
-    privateProviderStore.activeId = provider.id;
-    persistPrivateProviders(privateProviderStore);
-    applyPrivateProvider(provider);
-    updatePrivateCapacity();
-    setPrivateNote(`Loaded \"${provider.name}\".`);
-    if (activePanel !== "private") {
-      handleCompare();
-    }
+if (importScenarioButton && importScenarioInput) {
+  importScenarioButton.addEventListener("click", () => {
+    importScenarioInput.click();
   });
+  importScenarioInput.addEventListener("change", handleImportScenarioFile);
 }
-if (deletePrivateProviderButton) {
-  deletePrivateProviderButton.addEventListener("click", () => {
-    const providerId = privateProviderList?.value;
-    if (!providerId) {
-      setPrivateNote("Select a private provider to delete.", true);
-      return;
-    }
-    const confirmed = window.confirm("Delete this private provider?");
-    if (!confirmed) {
-      return;
-    }
-    const deletedName = deletePrivateProvider(providerId);
-    if (deletedName && privateProviderStore.activeId) {
-      const activeProvider = getPrivateProviderById(
-        privateProviderStore.activeId
-      );
-      if (activeProvider) {
-        applyPrivateProvider(activeProvider);
-      } else if (privateProviderNameInput) {
-        privateProviderNameInput.value = "";
-      }
-    } else if (privateProviderNameInput) {
-      privateProviderNameInput.value = "";
-    }
-    updatePrivateCapacity();
-    setPrivateNote(
-      deletedName ? `Deleted \"${deletedName}\".` : "Private provider deleted."
-    );
-    if (activePanel !== "private") {
-      handleCompare();
-    }
+if (importScenarioCsvButton && importScenarioCsvInput) {
+  importScenarioCsvButton.addEventListener("click", () => {
+    importScenarioCsvInput.click();
   });
+  importScenarioCsvInput.addEventListener("change", handleImportScenarioCsvFile);
 }
-if (privateProviderList) {
-  privateProviderList.addEventListener("change", () => {
-    const provider = getPrivateProviderById(privateProviderList.value);
-    if (!provider) {
-      return;
-    }
-    privateProviderStore.activeId = provider.id;
-    persistPrivateProviders(privateProviderStore);
-    applyPrivateProvider(provider);
-    updatePrivateCapacity();
+if (exportPrivateProvidersButton) {
+  exportPrivateProvidersButton.addEventListener(
+    "click",
+    handleExportPrivateProvidersCsv
+  );
+}
+if (importPrivateProvidersButton && importPrivateProvidersInput) {
+  importPrivateProvidersButton.addEventListener("click", () => {
+    importPrivateProvidersInput.click();
+  });
+  importPrivateProvidersInput.addEventListener(
+    "change",
+    handleImportPrivateProvidersCsvFile
+  );
+}
+if (addPrivateProviderButton) {
+  addPrivateProviderButton.addEventListener("click", () => {
+    addPrivateProviderCard();
   });
 }
 viewTabButtons.forEach((button) => {
@@ -3864,7 +5195,7 @@ modeTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     const nextPanel = tab.dataset.mode;
     setPanel(nextPanel);
-    if (nextPanel !== "private") {
+    if (nextPanel !== "private" && nextPanel !== "scenarios") {
       handleCompare();
     }
   });
@@ -3877,38 +5208,29 @@ cpuSelect.addEventListener("change", () => {
   updateInstanceOptions();
 });
 sqlRateInput.addEventListener("input", () => {
-  sqlRateTouched = true;
+  const rateValue = Number.parseFloat(sqlRateInput.value);
+  sqlRateTouched = !isDefaultSqlRate(rateValue, sqlEditionSelect.value);
 });
 sqlEditionSelect.addEventListener("change", () => {
   if (!sqlRateTouched) {
     const nextRate = SQL_DEFAULTS[sqlEditionSelect.value];
     sqlRateInput.value = nextRate.toString();
   }
+  const nextValue = Number.parseFloat(sqlRateInput.value);
+  sqlRateTouched = !isDefaultSqlRate(nextValue, sqlEditionSelect.value);
 });
-[privateNodeCpuInput, privateNodeRamInput, privateNodeStorageInput, privateVmOsDiskInput, privateSanUsableInput, privateSanTotalInput, privateNodeCountInput].forEach(
-  (input) => {
-    if (input) {
-      input.addEventListener("input", updatePrivateCapacity);
-    }
-  }
-);
 window.addEventListener("load", async () => {
   scenarioStore = loadScenarioStore();
+  savedCompareScenarioSelections = loadSavedCompareSelections(
+    SAVED_COMPARE_SCENARIOS_KEY
+  );
+  savedComparePrivateSelections = loadSavedCompareSelections(
+    SAVED_COMPARE_PRIVATE_KEY
+  );
   renderScenarioList();
   privateProviderStore = loadPrivateProviders();
   privateCompareSelections = loadPrivateCompareSelections();
-  renderPrivateProviderList(privateProviderStore.activeId);
-  syncPrivateCompareSelections();
-  const activeProvider = privateProviderStore.activeId
-    ? getPrivateProviderById(privateProviderStore.activeId)
-    : null;
-  if (activeProvider) {
-    applyPrivateProvider(activeProvider);
-  } else {
-    const privateConfig = loadPrivateConfig();
-    applyPrivateConfig(privateConfig);
-  }
-  updatePrivateCapacity();
+  renderPrivateProviderCards();
   setPanel(modeInput.value);
   buildRegionChecklist();
   try {
