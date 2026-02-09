@@ -309,6 +309,31 @@ const EGRESS_RATES = {
   azure: 0.087,
   gcp: 0.12,
 };
+const NETWORK_TRAFFIC_RATES = {
+  aws: { interVlan: 0.01, intraVlan: 0 },
+  azure: { interVlan: 0.01, intraVlan: 0 },
+  gcp: { interVlan: 0.01, intraVlan: 0 },
+};
+const NETWORK_ADDON_DATA_RATES = {
+  aws: { vpc: 0, gateway: 0.02, firewall: 0.01, loadBalancer: 0.008 },
+  azure: { vpc: 0, gateway: 0.018, firewall: 0.016, loadBalancer: 0.008 },
+  gcp: { vpc: 0, gateway: 0.018, firewall: 0.01, loadBalancer: 0.01 },
+};
+const STORAGE_CATEGORY_DEFAULT_RATES = {
+  aws: { object: 0.023, file: 0.3, table: 0.25, queue: 0 },
+  azure: { object: 0.018, file: 0.16, table: 0.06, queue: 0.06 },
+  gcp: { object: 0.02, file: 0.3, table: 0.17, queue: 0.08 },
+};
+const STORAGE_REPLICATION_DEFAULT_RATES = {
+  aws: 0.02,
+  azure: 0.02,
+  gcp: 0.02,
+};
+const STORAGE_PERFORMANCE_RATES = {
+  aws: { iopsMonthly: 0.005, throughputMonthly: 0.04 },
+  azure: { iopsMonthly: 0, throughputMonthly: 0 },
+  gcp: { iopsMonthly: 0, throughputMonthly: 0 },
+};
 const NETWORK_ADDON_OPTIONS = {
   aws: {
     vpc: [
@@ -322,6 +347,28 @@ const NETWORK_ADDON_OPTIONS = {
           serviceCode: "AmazonVPC",
           usagetypeIncludes: "TransitGateway-Hours",
           operationIncludes: "TransitGatewayVPC",
+        },
+      },
+    ],
+    gateway: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "transit-gateway",
+        label: "Transit Gateway",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AmazonVPC",
+          usagetypeIncludes: "TransitGateway-Hours",
+          operationIncludes: "TransitGatewayVPC",
+        },
+      },
+      {
+        key: "vpn-gateway",
+        label: "VPN Gateway",
+        pricing: {
+          type: "aws-price-list",
+          serviceCode: "AmazonVPC",
+          usagetypeIncludes: "VPNConnection-Hours",
         },
       },
     ],
@@ -503,6 +550,39 @@ const NETWORK_ADDON_OPTIONS = {
         },
       },
     ],
+    gateway: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "vpn-gw1",
+        label: "VPN Gateway VpnGw1",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw1",
+          meterNameIncludes: "VpnGw1",
+        },
+      },
+      {
+        key: "vpn-gw2",
+        label: "VPN Gateway VpnGw2",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw2",
+          meterNameIncludes: "VpnGw2",
+        },
+      },
+      {
+        key: "vpn-gw3",
+        label: "VPN Gateway VpnGw3",
+        pricing: {
+          type: "azure-retail",
+          serviceName: "VPN Gateway",
+          skuName: "VpnGw3",
+          meterNameIncludes: "VpnGw3",
+        },
+      },
+    ],
     firewall: [
       { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
       {
@@ -614,6 +694,18 @@ const NETWORK_ADDON_OPTIONS = {
         },
       },
     ],
+    gateway: [
+      { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
+      {
+        key: "cloud-vpn",
+        label: "Cloud VPN (HA)",
+        pricing: {
+          type: "gcp-billing",
+          serviceName: "Cloud VPN",
+          descriptionPatterns: ["VPN", "tunnel"],
+        },
+      },
+    ],
     firewall: [
       { key: "none", label: "None", pricing: { type: "static", hourly: 0 } },
       { key: "vpc-firewall", label: "VPC Firewall (rules)", pricing: { type: "static", hourly: 0 } },
@@ -660,9 +752,24 @@ const NETWORK_ADDON_OPTIONS = {
   },
 };
 const NETWORK_ADDON_DEFAULTS = {
-  aws: { vpc: "none", firewall: "none", loadBalancer: "none" },
-  azure: { vpc: "none", firewall: "none", loadBalancer: "none" },
-  gcp: { vpc: "none", firewall: "none", loadBalancer: "none" },
+  aws: {
+    vpc: "none",
+    gateway: "none",
+    firewall: "none",
+    loadBalancer: "none",
+  },
+  azure: {
+    vpc: "none",
+    gateway: "none",
+    firewall: "none",
+    loadBalancer: "none",
+  },
+  gcp: {
+    vpc: "none",
+    gateway: "none",
+    firewall: "none",
+    loadBalancer: "none",
+  },
 };
 
 const SQL_LICENSE_RATES = {
@@ -927,6 +1034,19 @@ function toNumber(value, fallback) {
 
 function toBoolean(value) {
   return value === true || value === "true" || value === "on";
+}
+
+function normalizeNetworkAddonFocus(value) {
+  if (value === "firewall") {
+    return "gateway";
+  }
+  if (value === "loadBalancer" || value === "gateway") {
+    return value;
+  }
+  if (value === "vpc") {
+    return value;
+  }
+  return "all";
 }
 
 
@@ -1933,6 +2053,237 @@ async function resolveK8sSharedStorageRates(region) {
   return { rates, sources };
 }
 
+async function resolveStorageFocusRates(region) {
+  const rates = {
+    aws: {
+      ...STORAGE_CATEGORY_DEFAULT_RATES.aws,
+      replication: STORAGE_REPLICATION_DEFAULT_RATES.aws,
+    },
+    azure: {
+      ...STORAGE_CATEGORY_DEFAULT_RATES.azure,
+      replication: STORAGE_REPLICATION_DEFAULT_RATES.azure,
+    },
+    gcp: {
+      ...STORAGE_CATEGORY_DEFAULT_RATES.gcp,
+      replication: STORAGE_REPLICATION_DEFAULT_RATES.gcp,
+    },
+  };
+  const sources = {
+    aws: {
+      object: "fallback-default",
+      file: "fallback-default",
+      table: "fallback-default",
+      queue: "fallback-default",
+      replication: "fallback-default",
+    },
+    azure: {
+      object: "fallback-default",
+      file: "fallback-default",
+      table: "fallback-default",
+      queue: "fallback-default",
+      replication: "fallback-default",
+    },
+    gcp: {
+      object: "fallback-default",
+      file: "fallback-default",
+      table: "fallback-default",
+      queue: "fallback-default",
+      replication: "fallback-default",
+    },
+  };
+
+  const tasks = [
+    {
+      provider: "aws",
+      key: "object",
+      run: () =>
+        getAwsServiceGbMonthRate({
+          serviceCode: "AmazonS3",
+          regionCode: region.aws.region,
+          location: region.aws.location,
+          matchers: {
+            usagetypeIncludes: /TimedStorage-ByteHrs/i,
+            operationIncludes: /StandardStorage/i,
+          },
+        }),
+      source: "aws-price-list",
+    },
+    {
+      provider: "aws",
+      key: "file",
+      run: () => getAwsEfsStandardRate(region.aws.region).then((v) => v.rate),
+      source: "aws-efs-price-list",
+    },
+    {
+      provider: "aws",
+      key: "table",
+      run: () =>
+        getAwsServiceGbMonthRate({
+          serviceCode: "AmazonDynamoDB",
+          regionCode: region.aws.region,
+          location: region.aws.location,
+          matchers: {
+            usagetypeIncludes: /TimedStorage-ByteHrs/i,
+          },
+        }),
+      source: "aws-price-list",
+    },
+    {
+      provider: "azure",
+      key: "object",
+      run: () =>
+        getAzureRetailGbMonthRate({
+          serviceName: "Storage",
+          region: region.azure.region,
+          productNameIncludes: /blob/i,
+          meterNameIncludes: /data stored/i,
+        }),
+      source: "azure-retail-api",
+    },
+    {
+      provider: "azure",
+      key: "file",
+      run: () => getAzurePremiumFilesRate(region.azure.region).then((v) => v.rate),
+      source: "azure-retail-premium-files",
+    },
+    {
+      provider: "azure",
+      key: "table",
+      run: () =>
+        getAzureRetailGbMonthRate({
+          serviceName: "Storage",
+          region: region.azure.region,
+          productNameIncludes: /table/i,
+          meterNameIncludes: /data stored/i,
+        }),
+      source: "azure-retail-api",
+    },
+    {
+      provider: "azure",
+      key: "queue",
+      run: () =>
+        getAzureRetailGbMonthRate({
+          serviceName: "Storage",
+          region: region.azure.region,
+          productNameIncludes: /queue/i,
+          meterNameIncludes: /data stored/i,
+        }),
+      source: "azure-retail-api",
+    },
+    {
+      provider: "gcp",
+      key: "object",
+      run: () =>
+        getGcpServiceGbMonthRate({
+          serviceName: "Cloud Storage",
+          region: region.gcp.region,
+          descriptionPatterns: [/standard/i, /storage/i],
+        }),
+      source: "gcp-cloud-billing",
+    },
+    {
+      provider: "gcp",
+      key: "file",
+      run: () => getGcpFilestoreEnterpriseRate().then((v) => v.rate),
+      source: "gcp-filestore-pricing-page",
+    },
+    {
+      provider: "gcp",
+      key: "table",
+      run: () =>
+        getGcpServiceGbMonthRate({
+          serviceName: "Cloud Bigtable",
+          region: region.gcp.region,
+          descriptionPatterns: [/storage/i],
+        }),
+      source: "gcp-cloud-billing",
+    },
+    {
+      provider: "gcp",
+      key: "queue",
+      run: () =>
+        getGcpServiceGbMonthRate({
+          serviceName: "Cloud Pub/Sub",
+          region: region.gcp.region,
+          descriptionPatterns: [/storage/i],
+        }),
+      source: "gcp-cloud-billing",
+    },
+  ];
+  const results = await Promise.allSettled(tasks.map((task) => task.run()));
+  results.forEach((result, index) => {
+    const task = tasks[index];
+    if (result.status !== "fulfilled") {
+      return;
+    }
+    const value = Number.parseFloat(result.value);
+    if (!Number.isFinite(value) || value <= 0) {
+      return;
+    }
+    rates[task.provider][task.key] = value;
+    sources[task.provider][task.key] = task.source;
+  });
+
+  return { rates, sources };
+}
+
+function computeStorageFocusTotals(profile, providerRates) {
+  const accountCount = Math.max(
+    1,
+    Math.round(toNumber(profile?.accountCount, 1))
+  );
+  const objectGb = Math.max(0, toNumber(profile?.objectTb, 0)) * 1024;
+  const fileGb = Math.max(0, toNumber(profile?.fileTb, 0)) * 1024;
+  const tableGb = Math.max(0, toNumber(profile?.tableTb, 0)) * 1024;
+  const queueGb = Math.max(0, toNumber(profile?.queueTb, 0)) * 1024;
+  const objectMonthly = objectGb * providerRates.object * accountCount;
+  const fileMonthly = fileGb * providerRates.file * accountCount;
+  const tableMonthly = tableGb * providerRates.table * accountCount;
+  const queueMonthly = queueGb * providerRates.queue * accountCount;
+  const storageMonthly =
+    objectMonthly + fileMonthly + tableMonthly + queueMonthly;
+  const replicationMonthly =
+    profile?.drEnabled
+      ? Math.max(0, toNumber(profile?.drDeltaTb, 0)) *
+        1024 *
+        providerRates.replication *
+        accountCount
+      : 0;
+  const total = storageMonthly + replicationMonthly;
+  return {
+    totals: {
+      computeMonthly: 0,
+      controlPlaneMonthly: 0,
+      storageMonthly,
+      backupMonthly: 0,
+      egressMonthly: replicationMonthly,
+      sqlMonthly: 0,
+      windowsLicenseMonthly: 0,
+      networkMonthly: 0,
+      interVlanMonthly: 0,
+      intraVlanMonthly: 0,
+      iopsMonthly: 0,
+      throughputMonthly: 0,
+      drMonthly: 0,
+      total,
+    },
+    breakdown: {
+      accountCount,
+      drEnabled: Boolean(profile?.drEnabled),
+      drDeltaTb: Math.max(0, toNumber(profile?.drDeltaTb, 0)),
+      objectTb: Math.max(0, toNumber(profile?.objectTb, 0)),
+      fileTb: Math.max(0, toNumber(profile?.fileTb, 0)),
+      tableTb: Math.max(0, toNumber(profile?.tableTb, 0)),
+      queueTb: Math.max(0, toNumber(profile?.queueTb, 0)),
+      objectMonthly,
+      fileMonthly,
+      tableMonthly,
+      queueMonthly,
+      replicationMonthly,
+    },
+  };
+}
+
 async function getAzureReservedPrice({ skuName, region, os, termYears }) {
   const cacheKey = [skuName, region, os, termYears].join("|");
   if (azureReservedCache.has(cacheKey)) {
@@ -2457,6 +2808,18 @@ function isHourlyUnit(unit) {
   return /hour/i.test(toText(unit));
 }
 
+function isGbMonthUnit(unit) {
+  const text = toText(unit).toLowerCase();
+  return (
+    text.includes("gb-mo") ||
+    text.includes("gb/month") ||
+    text.includes("gb month") ||
+    text.includes("giby.mo") ||
+    text.includes("gib/month") ||
+    text.includes("gib month")
+  );
+}
+
 async function loadAwsServiceRegionIndex(serviceCode) {
   const cached = awsServiceIndexCache.get(serviceCode);
   if (cached && Date.now() - cached.loadedAt < AWS_PRICE_LIST_CACHE_TTL_MS) {
@@ -2567,6 +2930,76 @@ async function getAwsServiceHourlyRate({
   throw new Error(`AWS ${serviceCode} hourly rate not found.`);
 }
 
+async function getAwsServiceGbMonthRate({
+  serviceCode,
+  regionCode,
+  location,
+  matchers,
+}) {
+  const data = await loadAwsServicePriceList(serviceCode, regionCode);
+  const products = data.products || {};
+  const candidates = [];
+  for (const [sku, product] of Object.entries(products)) {
+    const attrs = product.attributes || {};
+    if (location && attrs.location && attrs.location !== location) {
+      continue;
+    }
+    if (
+      matchers?.productFamily &&
+      product.productFamily &&
+      product.productFamily !== matchers.productFamily
+    ) {
+      continue;
+    }
+    if (
+      matchers?.usagetypeIncludes &&
+      !includesMatch(attrs.usagetype, matchers.usagetypeIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.operationIncludes &&
+      !includesMatch(attrs.operation, matchers.operationIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.groupDescriptionIncludes &&
+      !includesMatch(attrs.groupDescription, matchers.groupDescriptionIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.subcategoryIncludes &&
+      !includesMatch(attrs.subcategory, matchers.subcategoryIncludes)
+    ) {
+      continue;
+    }
+    if (
+      matchers?.storageClassIncludes &&
+      !includesMatch(attrs.storageClass, matchers.storageClassIncludes)
+    ) {
+      continue;
+    }
+    candidates.push({ sku, attrs });
+  }
+  for (const candidate of candidates) {
+    const terms = data.terms?.OnDemand?.[candidate.sku] || {};
+    for (const term of Object.values(terms)) {
+      for (const dimension of Object.values(term.priceDimensions || {})) {
+        if (!isGbMonthUnit(dimension.unit)) {
+          continue;
+        }
+        const rate = Number.parseFloat(dimension.pricePerUnit?.USD || "0");
+        if (Number.isFinite(rate) && rate > 0) {
+          return rate;
+        }
+      }
+    }
+  }
+  throw new Error(`AWS ${serviceCode} GB-month rate not found.`);
+}
+
 async function getAzureRetailHourlyRate({
   serviceName,
   region,
@@ -2643,6 +3076,79 @@ async function getAzureRetailHourlyRate({
     });
   }
   throw new Error("Azure hourly rate not found.");
+}
+
+async function getAzureRetailGbMonthRate({
+  serviceName,
+  region,
+  skuName,
+  productNameIncludes,
+  meterNameIncludes,
+  allowRegionFallback = true,
+}) {
+  const cacheKey = [
+    "gb-month",
+    serviceName,
+    region,
+    skuName || "",
+    productNameIncludes || "",
+    meterNameIncludes || "",
+  ].join("|");
+  if (azureNetworkCache.has(cacheKey)) {
+    return azureNetworkCache.get(cacheKey);
+  }
+  const baseQuery = [
+    `serviceName eq '${serviceName}'`,
+    region ? `armRegionName eq '${region}'` : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  let url =
+    "https://prices.azure.com/api/retail/prices?$filter=" +
+    encodeURIComponent(baseQuery);
+  while (url) {
+    const response = await fetcher(url);
+    if (!response.ok) {
+      throw new Error(`Azure pricing API error: ${response.status}`);
+    }
+    const data = await response.json();
+    const items = data.Items || [];
+    const filtered = items.filter((item) => {
+      if (!isGbMonthUnit(item.unitOfMeasure)) {
+        return false;
+      }
+      if (skuName && item.skuName !== skuName) {
+        return false;
+      }
+      if (productNameIncludes && !includesMatch(item.productName, productNameIncludes)) {
+        return false;
+      }
+      if (meterNameIncludes && !includesMatch(item.meterName, meterNameIncludes)) {
+        return false;
+      }
+      return true;
+    });
+    const candidate = filtered[0] || null;
+    if (candidate) {
+      const rate = Number.parseFloat(candidate.retailPrice || "0");
+      if (Number.isFinite(rate) && rate > 0) {
+        azureNetworkCache.set(cacheKey, rate);
+        return rate;
+      }
+    }
+    url = data.NextPageLink || null;
+  }
+  if (region && allowRegionFallback) {
+    return getAzureRetailGbMonthRate({
+      serviceName,
+      region: null,
+      skuName,
+      productNameIncludes,
+      meterNameIncludes,
+      allowRegionFallback: false,
+    });
+  }
+  throw new Error("Azure GB-month rate not found.");
 }
 
 async function loadGcpServices(apiKey) {
@@ -2759,6 +3265,65 @@ function findGcpHourlySkuRate({ skus, region, descriptionPatterns }) {
   return rate;
 }
 
+function findGcpGbMonthSkuRate({ skus, region, descriptionPatterns }) {
+  const patterns = (descriptionPatterns || []).map((pattern) =>
+    pattern instanceof RegExp ? pattern : new RegExp(pattern, "i")
+  );
+  const candidate = skus.find((sku) => {
+    const description = toText(sku.description);
+    if (!patterns.every((pattern) => pattern.test(description))) {
+      return false;
+    }
+    const regions = sku.serviceRegions || [];
+    if (!listIncludes(regions, region) && !regions.includes("global")) {
+      return false;
+    }
+    const pricingInfo = sku.pricingInfo || [];
+    const usageUnit = toText(pricingInfo[0]?.pricingExpression?.usageUnit).toLowerCase();
+    const usageDesc = toText(
+      pricingInfo[0]?.pricingExpression?.usageUnitDescription
+    ).toLowerCase();
+    const byUnit = usageUnit.includes("giby.mo") || usageUnit.includes("gibibyte month");
+    const byDesc =
+      usageDesc.includes("gibibyte month") ||
+      usageDesc.includes("gibibyte-month") ||
+      usageDesc.includes("giby.mo");
+    if (!byUnit && !byDesc) {
+      return false;
+    }
+    return true;
+  });
+  const price =
+    candidate?.pricingInfo?.[0]?.pricingExpression?.tieredRates?.[0]
+      ?.unitPrice;
+  const rate = unitPriceToNumber(price);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return null;
+  }
+  return rate;
+}
+
+async function getGcpServiceGbMonthRate({
+  serviceName,
+  region,
+  descriptionPatterns,
+}) {
+  if (!hasGcpApiCredentials()) {
+    throw new Error("GCP API key missing.");
+  }
+  const serviceId = await getGcpServiceIdByName(getGcpApiKey(), serviceName);
+  const skus = await loadGcpServiceSkus(getGcpApiKey(), serviceId);
+  const rate = findGcpGbMonthSkuRate({
+    skus,
+    region,
+    descriptionPatterns,
+  });
+  if (!Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`GCP GB-month rate not found for ${serviceName}.`);
+  }
+  return rate;
+}
+
 function resolveNetworkFlavor(providerKey, addonKey, flavorKey) {
   const options = NETWORK_ADDON_OPTIONS[providerKey]?.[addonKey] || [];
   const defaults = NETWORK_ADDON_DEFAULTS[providerKey] || {};
@@ -2770,6 +3335,25 @@ function resolveNetworkFlavor(providerKey, addonKey, flavorKey) {
     options[0] ||
     null
   );
+}
+
+function normalizeAddonSelection(selection) {
+  if (typeof selection === "string") {
+    return {
+      flavor: selection,
+      count: 1,
+      dataTb: 0,
+    };
+  }
+  const flavor =
+    typeof selection?.flavor === "string" ? selection.flavor : "";
+  const count = Math.max(0, Math.round(toNumber(selection?.count, 1)));
+  const dataTb = Math.max(0, toNumber(selection?.dataTb, 0));
+  return {
+    flavor,
+    count,
+    dataTb,
+  };
 }
 
 async function resolveNetworkAddonRate({
@@ -2824,6 +3408,12 @@ async function resolveNetworkAddonRate({
   return { hourlyRate: 0, source: "unknown" };
 }
 
+function resolveNetworkAddonDataRate(providerKey, addonKey) {
+  const providerRates = NETWORK_ADDON_DATA_RATES[providerKey] || {};
+  const rate = providerRates[addonKey];
+  return Number.isFinite(rate) ? rate : 0;
+}
+
 async function resolveNetworkAddonsForProvider({
   providerKey,
   region,
@@ -2833,11 +3423,17 @@ async function resolveNetworkAddonsForProvider({
   const items = [];
   const errors = [];
   let hourlyTotal = 0;
-  for (const addonKey of ["vpc", "firewall", "loadBalancer"]) {
+  let monthlyTotal = 0;
+  const addonKeys = Object.keys(selections || {});
+  for (const addonKey of addonKeys) {
+    const normalized = normalizeAddonSelection(selections?.[addonKey]);
+    if (!normalized.count || normalized.count <= 0) {
+      continue;
+    }
     const flavor = resolveNetworkFlavor(
       providerKey,
       addonKey,
-      selections?.[addonKey]
+      normalized.flavor
     );
     if (!flavor || flavor.key === "none") {
       continue;
@@ -2849,12 +3445,24 @@ async function resolveNetworkAddonsForProvider({
         flavor,
         region,
       });
-      hourlyTotal += hourlyRate;
+      const dataRatePerGb = resolveNetworkAddonDataRate(providerKey, addonKey);
+      const dataGb = normalized.dataTb * 1024;
+      const itemHourly = hourlyRate * normalized.count;
+      const itemMonthly =
+        itemHourly * (Number.isFinite(hours) ? hours : HOURS_IN_MONTH) +
+        dataGb * dataRatePerGb * normalized.count;
+      hourlyTotal += itemHourly;
+      monthlyTotal += itemMonthly;
       items.push({
         addonKey,
         key: flavor.key,
         label: flavor.label,
-        hourlyRate,
+        hourlyRate: itemHourly,
+        unitHourlyRate: hourlyRate,
+        count: normalized.count,
+        dataTb: normalized.dataTb,
+        dataRatePerGb,
+        monthlyTotal: itemMonthly,
         source,
         status: "ok",
       });
@@ -2864,13 +3472,17 @@ async function resolveNetworkAddonsForProvider({
         addonKey,
         key: flavor.key,
         label: flavor.label,
+        count: normalized.count,
+        dataTb: normalized.dataTb,
         hourlyRate: 0,
+        unitHourlyRate: 0,
+        dataRatePerGb: 0,
+        monthlyTotal: 0,
         source: "missing",
         status: "error",
       });
     }
   }
-  const monthlyTotal = Number.isFinite(hours) ? hours * hourlyTotal : 0;
   const note = errors.length
     ? `Network add-on pricing missing for ${errors.join(", ")}.`
     : null;
@@ -2879,6 +3491,39 @@ async function resolveNetworkAddonsForProvider({
     hourlyTotal,
     monthlyTotal,
     note,
+  };
+}
+
+function filterNetworkAddonsByFocus(addons, focus, hours) {
+  if (!addons || focus === "all") {
+    return addons;
+  }
+  const items = Array.isArray(addons.items)
+    ? addons.items.filter((item) => item.addonKey === focus)
+    : [];
+  const hourlyTotal = items.reduce((sum, item) => {
+    const hourlyRate = Number.isFinite(item.hourlyRate) ? item.hourlyRate : 0;
+    return sum + hourlyRate;
+  }, 0);
+  const monthlyTotal = items.reduce((sum, item) => {
+    const monthly = Number.isFinite(item.monthlyTotal)
+      ? item.monthlyTotal
+      : Number.isFinite(hours)
+      ? (Number.isFinite(item.hourlyRate) ? item.hourlyRate : 0) * hours
+      : 0;
+    return sum + monthly;
+  }, 0);
+  const errors = items
+    .filter((item) => item.status === "error")
+    .map((item) => `${focus}:${item.label}`);
+  return {
+    ...addons,
+    items,
+    hourlyTotal,
+    monthlyTotal,
+    note: errors.length
+      ? `Network add-on pricing missing for ${errors.join(", ")}.`
+      : null,
   };
 }
 
@@ -2894,6 +3539,10 @@ function computeTotals({
   snapshotRate,
   egressRate,
   networkMonthly,
+  interVlanMonthly,
+  intraVlanMonthly,
+  iopsMonthly,
+  throughputMonthly,
   sqlLicenseRate,
   windowsLicenseMonthly,
   vcpu,
@@ -2928,8 +3577,6 @@ function computeTotals({
       ? egressScale
       : scale;
   const computeMonthly = computeBase * scale;
-  const storageMonthly =
-    osBase * osMultiplier + dataBase * dataMultiplier;
   const backupMonthly = backupBase * scale;
   const egressMonthly = egressBase * egressMultiplier;
   const sqlMonthly = sqlBase * scale;
@@ -2937,6 +3584,19 @@ function computeTotals({
     ? windowsLicenseMonthly * scale
     : 0;
   const networkBase = Number.isFinite(networkMonthly) ? networkMonthly : 0;
+  const interVlanBase = Number.isFinite(interVlanMonthly)
+    ? interVlanMonthly
+    : 0;
+  const intraVlanBase = Number.isFinite(intraVlanMonthly)
+    ? intraVlanMonthly
+    : 0;
+  const iopsBase = Number.isFinite(iopsMonthly) ? iopsMonthly : 0;
+  const throughputBase = Number.isFinite(throughputMonthly)
+    ? throughputMonthly
+    : 0;
+  const baseStorageMonthly =
+    osBase * osMultiplier + dataBase * dataMultiplier;
+  const storageMonthly = baseStorageMonthly + iopsBase + throughputBase;
   const drRate = Number.isFinite(drPercent) ? drPercent / 100 : 0;
   const drMonthly =
     drRate > 0
@@ -2952,6 +3612,8 @@ function computeTotals({
     windowsLicenseMonthlyTotal +
     drMonthly +
     networkBase +
+    interVlanBase +
+    intraVlanBase +
     controlPlane;
   return {
     computeMonthly,
@@ -2962,9 +3624,73 @@ function computeTotals({
     sqlMonthly,
     windowsLicenseMonthly: windowsLicenseMonthlyTotal,
     networkMonthly: networkBase,
+    interVlanMonthly: interVlanBase,
+    intraVlanMonthly: intraVlanBase,
+    iopsMonthly: iopsBase,
+    throughputMonthly: throughputBase,
     drMonthly,
     total,
   };
+}
+
+function applyPricingFocusToTotals(totals, focus) {
+  if (!totals || focus === "all") {
+    return totals;
+  }
+  const computeMonthly = 0;
+  const controlPlaneMonthly = 0;
+  const sqlMonthly = 0;
+  const windowsLicenseMonthly = 0;
+  const drMonthly = 0;
+  if (focus === "network") {
+    const networkMonthly = totals.networkMonthly || 0;
+    const interVlanMonthly = totals.interVlanMonthly || 0;
+    const intraVlanMonthly = totals.intraVlanMonthly || 0;
+    const egressMonthly = totals.egressMonthly || 0;
+    const total =
+      networkMonthly + interVlanMonthly + intraVlanMonthly + egressMonthly;
+    return {
+      ...totals,
+      computeMonthly,
+      controlPlaneMonthly,
+      storageMonthly: 0,
+      backupMonthly: 0,
+      egressMonthly,
+      networkMonthly,
+      interVlanMonthly,
+      intraVlanMonthly,
+      iopsMonthly: 0,
+      throughputMonthly: 0,
+      sqlMonthly,
+      windowsLicenseMonthly,
+      drMonthly,
+      total,
+    };
+  }
+  if (focus === "storage") {
+    const storageMonthly = totals.storageMonthly || 0;
+    const iopsMonthly = totals.iopsMonthly || 0;
+    const throughputMonthly = totals.throughputMonthly || 0;
+    const total = storageMonthly;
+    return {
+      ...totals,
+      computeMonthly,
+      controlPlaneMonthly,
+      storageMonthly,
+      backupMonthly: 0,
+      egressMonthly: 0,
+      networkMonthly: 0,
+      interVlanMonthly: 0,
+      intraVlanMonthly: 0,
+      iopsMonthly,
+      throughputMonthly,
+      sqlMonthly,
+      windowsLicenseMonthly,
+      drMonthly,
+      total,
+    };
+  }
+  return totals;
 }
 
 function computeTotalsOrNull(params) {
@@ -2993,6 +3719,16 @@ app.post("/api/compare", async (req, res) => {
       ? body.gcpInstanceType.trim()
       : "";
   const mode = body.mode === "k8s" ? "k8s" : "vm";
+  const pricingFocus =
+    body.pricingFocus === "network"
+      ? "network"
+      : body.pricingFocus === "storage"
+      ? "storage"
+      : "all";
+  const networkAddonFocus =
+    pricingFocus === "network"
+      ? normalizeNetworkAddonFocus(body.networkAddonFocus)
+      : "all";
   const osDiskMin = mode === "k8s" ? K8S_OS_DISK_MIN_GB : 0;
   const osDiskDefault = mode === "k8s" ? K8S_OS_DISK_MIN_GB : 256;
   const osDiskGb = Math.max(
@@ -3002,7 +3738,8 @@ app.post("/api/compare", async (req, res) => {
   const dataDiskTb = Math.max(0, toNumber(body.dataDiskTb, 1));
   const dataDiskGb = dataDiskTb * 1024;
   const storageGb = osDiskGb + dataDiskGb;
-  const backupEnabled = toBoolean(body.backupEnabled);
+  const backupEnabled =
+    pricingFocus === "all" ? toBoolean(body.backupEnabled) : false;
   const awsVpcFlavor =
     typeof body.awsVpcFlavor === "string" ? body.awsVpcFlavor.trim() : "";
   const awsFirewallFlavor =
@@ -3033,24 +3770,103 @@ app.post("/api/compare", async (req, res) => {
     typeof body.gcpLoadBalancerFlavor === "string"
       ? body.gcpLoadBalancerFlavor.trim()
       : "";
+  const networkAddonInput = (providerKey, addonKey) => {
+    const flavorKey = `${providerKey}Network${addonKey}Flavor`;
+    const countKey = `${providerKey}Network${addonKey}Count`;
+    const dataKey = `${providerKey}Network${addonKey}DataTb`;
+    return {
+      flavor:
+        typeof body[flavorKey] === "string" ? body[flavorKey].trim() : "",
+      count: Math.max(0, Math.round(toNumber(body[countKey], 1))),
+      dataTb: Math.max(0, toNumber(body[dataKey], 0)),
+    };
+  };
+  const awsNetworkVpc = networkAddonInput("aws", "Vpc");
+  const awsNetworkGateway = networkAddonInput("aws", "Gateway");
+  const awsNetworkLoadBalancer = networkAddonInput("aws", "LoadBalancer");
+  const azureNetworkVpc = networkAddonInput("azure", "Vpc");
+  const azureNetworkGateway = networkAddonInput("azure", "Gateway");
+  const azureNetworkLoadBalancer = networkAddonInput(
+    "azure",
+    "LoadBalancer"
+  );
+  const gcpNetworkVpc = networkAddonInput("gcp", "Vpc");
+  const gcpNetworkGateway = networkAddonInput("gcp", "Gateway");
+  const gcpNetworkLoadBalancer = networkAddonInput("gcp", "LoadBalancer");
+
+  const storageProfileInput = (providerKey) => ({
+    accountCount: Math.max(
+      1,
+      Math.round(toNumber(body[`${providerKey}StorageAccountCount`], 1))
+    ),
+    drEnabled: toBoolean(body[`${providerKey}StorageDrEnabled`]),
+    drDeltaTb: Math.max(
+      0,
+      toNumber(body[`${providerKey}StorageDrDeltaTb`], 0)
+    ),
+    objectTb: Math.max(
+      0,
+      toNumber(body[`${providerKey}StorageObjectTb`], 0)
+    ),
+    fileTb: Math.max(0, toNumber(body[`${providerKey}StorageFileTb`], 0)),
+    tableTb: Math.max(
+      0,
+      toNumber(body[`${providerKey}StorageTableTb`], 0)
+    ),
+    queueTb: Math.max(
+      0,
+      toNumber(body[`${providerKey}StorageQueueTb`], 0)
+    ),
+  });
+  const awsStorageProfile = storageProfileInput("aws");
+  const azureStorageProfile = storageProfileInput("azure");
+  const gcpStorageProfile = storageProfileInput("gcp");
+  const awsObjectStorageRate = Math.max(
+    0,
+    toNumber(body.awsObjectStorageRate, 0)
+  );
+  const azureObjectStorageRate = Math.max(
+    0,
+    toNumber(body.azureObjectStorageRate, 0)
+  );
+  const gcpObjectStorageRate = Math.max(
+    0,
+    toNumber(body.gcpObjectStorageRate, 0)
+  );
   const snapshotMultiplier =
     1 +
     Math.max(0, BACKUP_RETENTION_DAYS - 1) *
       (BACKUP_DAILY_DELTA_PERCENT / 100);
   const snapshotBaseGb = mode === "k8s" ? osDiskGb : storageGb;
   const snapshotGb = backupEnabled ? snapshotBaseGb * snapshotMultiplier : 0;
-  const egressTb = Math.max(0, toNumber(body.egressTb, 0));
+  const egressTb =
+    pricingFocus === "storage" ? 0 : Math.max(0, toNumber(body.egressTb, 0));
+  const interVlanTb =
+    pricingFocus === "network" ? Math.max(0, toNumber(body.interVlanTb, 0)) : 0;
+  const intraVlanTb =
+    pricingFocus === "network" ? Math.max(0, toNumber(body.intraVlanTb, 0)) : 0;
+  const storageIops =
+    pricingFocus === "storage" ? Math.max(0, toNumber(body.storageIops, 0)) : 0;
+  const storageThroughputMbps =
+    pricingFocus === "storage"
+      ? Math.max(0, toNumber(body.storageThroughputMbps, 0))
+      : 0;
   const egressGb = egressTb * 1024;
+  const interVlanGb = interVlanTb * 1024;
+  const intraVlanGb = intraVlanTb * 1024;
   const hours = Math.max(1, toNumber(body.hours, HOURS_IN_MONTH));
-  const drPercent = Math.max(0, toNumber(body.drPercent, 0));
+  const drPercent =
+    pricingFocus === "all" ? Math.max(0, toNumber(body.drPercent, 0)) : 0;
   const vmCountMin = mode === "k8s" ? K8S_MIN_NODE_COUNT : 1;
   const vmCount = Math.max(
     vmCountMin,
     Math.round(toNumber(body.vmCount, vmCountMin))
   );
-  const egressScale = mode === "vm" ? vmCount : 1;
+  const egressScale =
+    pricingFocus === "network" ? 1 : mode === "vm" ? vmCount : 1;
   const osScale = vmCount;
-  const dataScale = mode === "k8s" ? 1 : vmCount;
+  const dataScale =
+    pricingFocus === "storage" ? 1 : mode === "k8s" ? 1 : vmCount;
   const workloadKey =
     mode === "vm" && body.workload in VM_WORKLOADS
       ? body.workload
@@ -3058,7 +3874,10 @@ app.post("/api/compare", async (req, res) => {
   const workloadConfig = VM_WORKLOADS[workloadKey];
   const allowedFlavors =
     mode === "k8s" ? K8S_FLAVORS : workloadConfig.flavors;
-  const pricingProvider = resolvePricingProvider(body);
+  let pricingProvider = resolvePricingProvider(body);
+  if (pricingFocus === "network" || pricingFocus === "storage") {
+    pricingProvider = "api";
+  }
   const diskTierKey =
     typeof body.diskTier === "string" &&
     Object.prototype.hasOwnProperty.call(DISK_TIERS, body.diskTier)
@@ -3067,7 +3886,9 @@ app.post("/api/compare", async (req, res) => {
   const diskTier = DISK_TIERS[diskTierKey] || DISK_TIERS[DEFAULT_DISK_TIER];
   const regionKey = body.regionKey in REGION_MAP ? body.regionKey : "us-east";
   const sqlEdition =
-    mode === "k8s" ? "none" : normalizeSqlEdition(body.sqlEdition);
+    mode === "k8s" || pricingFocus !== "all"
+      ? "none"
+      : normalizeSqlEdition(body.sqlEdition);
   const awsSqlPricingEdition = "none";
   const os = mode === "k8s" ? "linux" : "windows";
   const awsReservedType = "convertible";
@@ -3077,7 +3898,8 @@ app.post("/api/compare", async (req, res) => {
       : sqlEdition === "none"
       ? 0
       : toNumber(body.sqlLicenseRate, SQL_LICENSE_RATES[sqlEdition]);
-  const privateEnabled = toBoolean(body.privateEnabled);
+  const privateEnabled =
+    pricingFocus === "all" ? toBoolean(body.privateEnabled) : false;
   const privateVmwareMonthly = Math.max(
     0,
     toNumber(body.privateVmwareMonthly, 0)
@@ -3168,26 +3990,63 @@ app.post("/api/compare", async (req, res) => {
     sharedStorageRates = sharedStorage.rates;
     sharedStorageSources = sharedStorage.sources;
   }
-  const awsNetworkSelections = {
-    vpc: awsVpcFlavor,
-    firewall: awsFirewallFlavor,
-    loadBalancer: awsLoadBalancerFlavor,
-  };
-  const azureNetworkSelections = {
-    vpc: azureVpcFlavor,
-    firewall: azureFirewallFlavor,
-    loadBalancer: azureLoadBalancerFlavor,
-  };
-  const gcpNetworkSelections = {
-    vpc: gcpVpcFlavor,
-    firewall: gcpFirewallFlavor,
-    loadBalancer: gcpLoadBalancerFlavor,
-  };
-  const [
-    awsNetworkAddons,
-    azureNetworkAddons,
-    gcpNetworkAddons,
-  ] = await Promise.all([
+  let storageFocusRates = null;
+  let storageFocusSources = null;
+  if (pricingFocus === "storage") {
+    const resolved = await resolveStorageFocusRates(region);
+    storageFocusRates = resolved.rates;
+    storageFocusSources = resolved.sources;
+  }
+  const awsNetworkSelections =
+    pricingFocus === "network"
+      ? {
+          vpc: awsNetworkVpc,
+          gateway: awsNetworkGateway,
+          loadBalancer: awsNetworkLoadBalancer,
+        }
+      : {
+          vpc: { flavor: awsVpcFlavor, count: 1, dataTb: 0 },
+          firewall: { flavor: awsFirewallFlavor, count: 1, dataTb: 0 },
+          loadBalancer: {
+            flavor: awsLoadBalancerFlavor,
+            count: 1,
+            dataTb: 0,
+          },
+        };
+  const azureNetworkSelections =
+    pricingFocus === "network"
+      ? {
+          vpc: azureNetworkVpc,
+          gateway: azureNetworkGateway,
+          loadBalancer: azureNetworkLoadBalancer,
+        }
+      : {
+          vpc: { flavor: azureVpcFlavor, count: 1, dataTb: 0 },
+          firewall: { flavor: azureFirewallFlavor, count: 1, dataTb: 0 },
+          loadBalancer: {
+            flavor: azureLoadBalancerFlavor,
+            count: 1,
+            dataTb: 0,
+          },
+        };
+  const gcpNetworkSelections =
+    pricingFocus === "network"
+      ? {
+          vpc: gcpNetworkVpc,
+          gateway: gcpNetworkGateway,
+          loadBalancer: gcpNetworkLoadBalancer,
+        }
+      : {
+          vpc: { flavor: gcpVpcFlavor, count: 1, dataTb: 0 },
+          firewall: { flavor: gcpFirewallFlavor, count: 1, dataTb: 0 },
+          loadBalancer: {
+            flavor: gcpLoadBalancerFlavor,
+            count: 1,
+            dataTb: 0,
+          },
+        };
+  const [awsNetworkAddonsRaw, azureNetworkAddonsRaw, gcpNetworkAddonsRaw] =
+    await Promise.all([
     resolveNetworkAddonsForProvider({
       providerKey: "aws",
       region,
@@ -3207,6 +4066,36 @@ app.post("/api/compare", async (req, res) => {
       hours,
     }),
   ]);
+  const awsNetworkAddons = awsNetworkAddonsRaw;
+  const azureNetworkAddons = azureNetworkAddonsRaw;
+  const gcpNetworkAddons = gcpNetworkAddonsRaw;
+  const awsInterVlanMonthly =
+    interVlanGb * NETWORK_TRAFFIC_RATES.aws.interVlan;
+  const azureInterVlanMonthly =
+    interVlanGb * NETWORK_TRAFFIC_RATES.azure.interVlan;
+  const gcpInterVlanMonthly =
+    interVlanGb * NETWORK_TRAFFIC_RATES.gcp.interVlan;
+  const awsIntraVlanMonthly =
+    intraVlanGb * NETWORK_TRAFFIC_RATES.aws.intraVlan;
+  const azureIntraVlanMonthly =
+    intraVlanGb * NETWORK_TRAFFIC_RATES.azure.intraVlan;
+  const gcpIntraVlanMonthly =
+    intraVlanGb * NETWORK_TRAFFIC_RATES.gcp.intraVlan;
+  const awsIopsMonthly =
+    storageIops * STORAGE_PERFORMANCE_RATES.aws.iopsMonthly;
+  const azureIopsMonthly =
+    storageIops * STORAGE_PERFORMANCE_RATES.azure.iopsMonthly;
+  const gcpIopsMonthly =
+    storageIops * STORAGE_PERFORMANCE_RATES.gcp.iopsMonthly;
+  const awsThroughputMonthly =
+    storageThroughputMbps *
+    STORAGE_PERFORMANCE_RATES.aws.throughputMonthly;
+  const azureThroughputMonthly =
+    storageThroughputMbps *
+    STORAGE_PERFORMANCE_RATES.azure.throughputMonthly;
+  const gcpThroughputMonthly =
+    storageThroughputMbps *
+    STORAGE_PERFORMANCE_RATES.gcp.throughputMonthly;
 
   const awsSizes = collectProviderSizes(
     AWS_FAMILIES,
@@ -3264,7 +4153,9 @@ app.post("/api/compare", async (req, res) => {
   addSelectionNote("AWS", awsInstanceType, awsSelection);
   addSelectionNote("Azure", azureInstanceType, azureSelection);
 
-  const useApiPricing = pricingProvider === "api";
+  const isPublicOnlyFocus =
+    pricingFocus === "network" || pricingFocus === "storage";
+  const useApiPricing = isPublicOnlyFocus ? true : pricingProvider === "api";
 
   const awsResponse = {
     status: useApiPricing ? "api" : "retail",
@@ -3274,7 +4165,12 @@ app.post("/api/compare", async (req, res) => {
     source: useApiPricing ? "aws-pricing-api" : "vantage",
   };
 
-  if (useApiPricing) {
+  if (isPublicOnlyFocus) {
+    awsResponse.hourlyRate = 0;
+    awsResponse.source = "focus-mode";
+    awsResponse.message =
+      "Compute excluded in networking/storage focus; pricing includes selected focus components only.";
+  } else if (useApiPricing) {
     if (!hasAwsApiCredentials()) {
       logPricingWarning(
         "aws",
@@ -3384,7 +4280,12 @@ app.post("/api/compare", async (req, res) => {
     source: useApiPricing ? "azure-retail-api" : "vantage",
   };
 
-  if (useApiPricing) {
+  if (isPublicOnlyFocus) {
+    azureResponse.hourlyRate = 0;
+    azureResponse.source = "focus-mode";
+    azureResponse.message =
+      "Compute excluded in networking/storage focus; pricing includes selected focus components only.";
+  } else if (useApiPricing) {
     try {
       const rate = await getAzureOnDemandPrice({
         skuName: azureSize.type,
@@ -3438,148 +4339,150 @@ app.post("/api/compare", async (req, res) => {
   let awsReserved1Rate = null;
   let awsReserved3Rate = null;
   let awsReservationNote = null;
-  try {
-    awsReserved1Rate = await getAwsPublicReservedPrice({
-      instanceType: awsSize.type,
-      region: region.aws.region,
-      os,
-      sqlEdition: awsSqlPricingEdition,
-      termYears: 1,
-      reservedType: awsReservedType,
-    });
-    awsReservationNote =
-      `AWS reserved pricing uses ${awsReservedType} no-upfront rates from the public snapshot.`;
-  } catch (error) {
-    awsReserved1Rate = null;
-  }
-
-  try {
-    awsReserved3Rate = await getAwsPublicReservedPrice({
-      instanceType: awsSize.type,
-      region: region.aws.region,
-      os,
-      sqlEdition: awsSqlPricingEdition,
-      termYears: 3,
-      reservedType: awsReservedType,
-    });
-    awsReservationNote =
-      `AWS reserved pricing uses ${awsReservedType} no-upfront rates from the public snapshot.`;
-  } catch (error) {
-    awsReserved3Rate = null;
-  }
-
-  if (useApiPricing) {
-    const reservedRates = [awsReserved1Rate, awsReserved3Rate].filter(
-      (rate) => Number.isFinite(rate)
-    );
-    const minReserved = reservedRates.length
-      ? Math.min(...reservedRates)
-      : null;
-    if (
-      Number.isFinite(minReserved) &&
-      Number.isFinite(awsResponse.hourlyRate) &&
-      awsResponse.hourlyRate < minReserved
-    ) {
-      try {
-        const priceListRate = await getAwsPriceListOnDemandRate({
-          instanceType: awsSize.type,
-          region: region.aws.region,
-          location: region.aws.location,
-          os,
-          sqlEdition: awsSqlPricingEdition,
-          logContext,
-        });
-        if (
-          Number.isFinite(priceListRate) &&
-          priceListRate >= minReserved
-        ) {
-          logPricingWarning(
-            "aws",
-            {
-              ...logContext,
-              apiRate: awsResponse.hourlyRate,
-              priceListRate,
-              minReserved,
-            },
-            "AWS API rate below reserved; using price list for consistency."
-          );
-          awsResponse.hourlyRate = priceListRate;
-          awsResponse.source = "aws-price-list";
-          awsResponse.message =
-            "AWS API rate below reserved; using AWS price list for consistency.";
-        }
-      } catch (error) {
-        logPricingError(
-          "aws",
-          {
-            ...logContext,
-            instanceType: awsSize.type,
-            region: region.aws.region,
-            os,
-            sqlEdition: awsSqlPricingEdition,
-            source: "price-list",
-          },
-          error
-        );
-      }
-    }
-  }
-
   let azureReserved1Rate = null;
   let azureReserved3Rate = null;
   let azureReservationNote = null;
 
-  try {
-    if (useApiPricing) {
-      const result = await getAzureReservedPrice({
-        skuName: azureSize.type,
-        region: region.azure.region,
+  if (!isPublicOnlyFocus) {
+    try {
+      awsReserved1Rate = await getAwsPublicReservedPrice({
+        instanceType: awsSize.type,
+        region: region.aws.region,
         os,
+        sqlEdition: awsSqlPricingEdition,
         termYears: 1,
+        reservedType: awsReservedType,
       });
-      azureReserved1Rate = result.hourlyRate;
-      if (result.note) {
-        azureReservationNote = result.note;
-      }
-    } else {
-      azureReserved1Rate = await getAzurePublicReservedPrice({
-        skuName: azureSize.type,
-        region: region.azure.region,
-        os,
-        termYears: 1,
-      });
-      azureReservationNote =
-        "Azure reserved pricing uses monthly (no-upfront) effective rates from the public snapshot.";
+      awsReservationNote =
+        `AWS reserved pricing uses ${awsReservedType} no-upfront rates from the public snapshot.`;
+    } catch (error) {
+      awsReserved1Rate = null;
     }
-  } catch (error) {
-    azureReservationNote = null;
-  }
 
-  try {
-    if (useApiPricing) {
-      const result = await getAzureReservedPrice({
-        skuName: azureSize.type,
-        region: region.azure.region,
+    try {
+      awsReserved3Rate = await getAwsPublicReservedPrice({
+        instanceType: awsSize.type,
+        region: region.aws.region,
         os,
+        sqlEdition: awsSqlPricingEdition,
         termYears: 3,
+        reservedType: awsReservedType,
       });
-      azureReserved3Rate = result.hourlyRate;
-      if (result.note && !azureReservationNote) {
-        azureReservationNote = result.note;
-      }
-    } else {
-      azureReserved3Rate = await getAzurePublicReservedPrice({
-        skuName: azureSize.type,
-        region: region.azure.region,
-        os,
-        termYears: 3,
-      });
-      azureReservationNote =
-        azureReservationNote ||
-        "Azure reserved pricing uses monthly (no-upfront) effective rates from the public snapshot.";
+      awsReservationNote =
+        `AWS reserved pricing uses ${awsReservedType} no-upfront rates from the public snapshot.`;
+    } catch (error) {
+      awsReserved3Rate = null;
     }
-  } catch (error) {
-    azureReservationNote = azureReservationNote || null;
+
+    if (useApiPricing) {
+      const reservedRates = [awsReserved1Rate, awsReserved3Rate].filter(
+        (rate) => Number.isFinite(rate)
+      );
+      const minReserved = reservedRates.length
+        ? Math.min(...reservedRates)
+        : null;
+      if (
+        Number.isFinite(minReserved) &&
+        Number.isFinite(awsResponse.hourlyRate) &&
+        awsResponse.hourlyRate < minReserved
+      ) {
+        try {
+          const priceListRate = await getAwsPriceListOnDemandRate({
+            instanceType: awsSize.type,
+            region: region.aws.region,
+            location: region.aws.location,
+            os,
+            sqlEdition: awsSqlPricingEdition,
+            logContext,
+          });
+          if (
+            Number.isFinite(priceListRate) &&
+            priceListRate >= minReserved
+          ) {
+            logPricingWarning(
+              "aws",
+              {
+                ...logContext,
+                apiRate: awsResponse.hourlyRate,
+                priceListRate,
+                minReserved,
+              },
+              "AWS API rate below reserved; using price list for consistency."
+            );
+            awsResponse.hourlyRate = priceListRate;
+            awsResponse.source = "aws-price-list";
+            awsResponse.message =
+              "AWS API rate below reserved; using AWS price list for consistency.";
+          }
+        } catch (error) {
+          logPricingError(
+            "aws",
+            {
+              ...logContext,
+              instanceType: awsSize.type,
+              region: region.aws.region,
+              os,
+              sqlEdition: awsSqlPricingEdition,
+              source: "price-list",
+            },
+            error
+          );
+        }
+      }
+    }
+
+    try {
+      if (useApiPricing) {
+        const result = await getAzureReservedPrice({
+          skuName: azureSize.type,
+          region: region.azure.region,
+          os,
+          termYears: 1,
+        });
+        azureReserved1Rate = result.hourlyRate;
+        if (result.note) {
+          azureReservationNote = result.note;
+        }
+      } else {
+        azureReserved1Rate = await getAzurePublicReservedPrice({
+          skuName: azureSize.type,
+          region: region.azure.region,
+          os,
+          termYears: 1,
+        });
+        azureReservationNote =
+          "Azure reserved pricing uses monthly (no-upfront) effective rates from the public snapshot.";
+      }
+    } catch (error) {
+      azureReservationNote = null;
+    }
+
+    try {
+      if (useApiPricing) {
+        const result = await getAzureReservedPrice({
+          skuName: azureSize.type,
+          region: region.azure.region,
+          os,
+          termYears: 3,
+        });
+        azureReserved3Rate = result.hourlyRate;
+        if (result.note && !azureReservationNote) {
+          azureReservationNote = result.note;
+        }
+      } else {
+        azureReserved3Rate = await getAzurePublicReservedPrice({
+          skuName: azureSize.type,
+          region: region.azure.region,
+          os,
+          termYears: 3,
+        });
+        azureReservationNote =
+          azureReservationNote ||
+          "Azure reserved pricing uses monthly (no-upfront) effective rates from the public snapshot.";
+      }
+    } catch (error) {
+      azureReservationNote = azureReservationNote || null;
+    }
   }
 
   const gcpResponse = {
@@ -3592,7 +4495,39 @@ app.post("/api/compare", async (req, res) => {
 
   let gcpSize = null;
   let gcpSelection = null;
-  if (useApiPricing) {
+  if (isPublicOnlyFocus) {
+    try {
+      const sizeResult = await getGcpOnDemandPrice({
+        flavorKeys: allowedFlavors.gcp,
+        instanceType: gcpInstanceType,
+        cpu,
+        region: region.gcp.region,
+        os,
+        requirePricing: false,
+      });
+      gcpSize = sizeResult.size;
+      gcpSelection = sizeResult.selection;
+      gcpResponse.instance = sizeResult.size;
+      gcpResponse.hourlyRate = 0;
+      gcpResponse.source = "focus-mode";
+      gcpResponse.message =
+        "Compute excluded in networking/storage focus; pricing includes selected focus components only.";
+    } catch (error) {
+      logPricingError(
+        "gcp",
+        {
+          ...logContext,
+          instanceType: gcpInstanceType,
+          region: region.gcp.region,
+          os,
+        },
+        error
+      );
+      gcpResponse.status = "error";
+      gcpResponse.message =
+        error?.message || "GCP instance selection failed.";
+    }
+  } else if (useApiPricing) {
     if (!hasGcpApiCredentials()) {
       logPricingWarning(
         "gcp",
@@ -3749,8 +4684,17 @@ app.post("/api/compare", async (req, res) => {
         : null,
   };
 
-  const dataStorageRates =
+  let dataStorageRates =
     mode === "k8s" ? sharedStorageRates : diskTier.storageRates;
+  if (pricingFocus === "storage") {
+    dataStorageRates = {
+      aws: awsObjectStorageRate / 1024,
+      azure: azureObjectStorageRate / 1024,
+      gcp: gcpObjectStorageRate / 1024,
+    };
+  }
+  const storageRates =
+    pricingFocus === "storage" ? dataStorageRates : diskTier.storageRates;
   const awsControlPlaneMonthly =
     mode === "k8s" ? K8S_CONTROL_PLANE_HOURLY.aws * hours : 0;
   const azureControlPlaneMonthly =
@@ -3758,184 +4702,280 @@ app.post("/api/compare", async (req, res) => {
   const gcpControlPlaneMonthly =
     mode === "k8s" ? K8S_CONTROL_PLANE_HOURLY.gcp * hours : 0;
 
-  const awsTotals = computeTotalsOrNull({
-    hourlyRate: awsResponse.hourlyRate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.aws,
-    dataStorageRate: dataStorageRates.aws,
-    snapshotRate: diskTier.snapshotRates.aws,
-    egressRate: EGRESS_RATES.aws,
-    networkMonthly: awsNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: awsSize.vcpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: awsControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let awsTotals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: awsResponse.hourlyRate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.aws,
+      dataStorageRate: dataStorageRates.aws,
+      snapshotRate: diskTier.snapshotRates.aws,
+      egressRate: EGRESS_RATES.aws,
+      networkMonthly: awsNetworkAddons.monthlyTotal,
+      interVlanMonthly: awsInterVlanMonthly,
+      intraVlanMonthly: awsIntraVlanMonthly,
+      iopsMonthly: awsIopsMonthly,
+      throughputMonthly: awsThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: awsSize.vcpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: awsControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
-  const azureTotals = computeTotalsOrNull({
-    hourlyRate: azureResponse.hourlyRate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.azure,
-    dataStorageRate: dataStorageRates.azure,
-    snapshotRate: diskTier.snapshotRates.azure,
-    egressRate: EGRESS_RATES.azure,
-    networkMonthly: azureNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: azureSize.vcpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: azureControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let azureTotals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: azureResponse.hourlyRate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.azure,
+      dataStorageRate: dataStorageRates.azure,
+      snapshotRate: diskTier.snapshotRates.azure,
+      egressRate: EGRESS_RATES.azure,
+      networkMonthly: azureNetworkAddons.monthlyTotal,
+      interVlanMonthly: azureInterVlanMonthly,
+      intraVlanMonthly: azureIntraVlanMonthly,
+      iopsMonthly: azureIopsMonthly,
+      throughputMonthly: azureThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: azureSize.vcpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: azureControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
-  const awsReserved1Totals = computeTotalsOrNull({
-    hourlyRate: awsReserved1Rate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.aws,
-    dataStorageRate: dataStorageRates.aws,
-    snapshotRate: diskTier.snapshotRates.aws,
-    egressRate: EGRESS_RATES.aws,
-    networkMonthly: awsNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: awsSize.vcpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: awsControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let awsReserved1Totals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: awsReserved1Rate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.aws,
+      dataStorageRate: dataStorageRates.aws,
+      snapshotRate: diskTier.snapshotRates.aws,
+      egressRate: EGRESS_RATES.aws,
+      networkMonthly: awsNetworkAddons.monthlyTotal,
+      interVlanMonthly: awsInterVlanMonthly,
+      intraVlanMonthly: awsIntraVlanMonthly,
+      iopsMonthly: awsIopsMonthly,
+      throughputMonthly: awsThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: awsSize.vcpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: awsControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
-  const awsReserved3Totals = computeTotalsOrNull({
-    hourlyRate: awsReserved3Rate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.aws,
-    dataStorageRate: dataStorageRates.aws,
-    snapshotRate: diskTier.snapshotRates.aws,
-    egressRate: EGRESS_RATES.aws,
-    networkMonthly: awsNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: awsSize.vcpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: awsControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let awsReserved3Totals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: awsReserved3Rate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.aws,
+      dataStorageRate: dataStorageRates.aws,
+      snapshotRate: diskTier.snapshotRates.aws,
+      egressRate: EGRESS_RATES.aws,
+      networkMonthly: awsNetworkAddons.monthlyTotal,
+      interVlanMonthly: awsInterVlanMonthly,
+      intraVlanMonthly: awsIntraVlanMonthly,
+      iopsMonthly: awsIopsMonthly,
+      throughputMonthly: awsThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: awsSize.vcpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: awsControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
-  const azureReserved1Totals = computeTotalsOrNull({
-    hourlyRate: azureReserved1Rate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.azure,
-    dataStorageRate: dataStorageRates.azure,
-    snapshotRate: diskTier.snapshotRates.azure,
-    egressRate: EGRESS_RATES.azure,
-    networkMonthly: azureNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: azureSize.vcpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: azureControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let azureReserved1Totals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: azureReserved1Rate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.azure,
+      dataStorageRate: dataStorageRates.azure,
+      snapshotRate: diskTier.snapshotRates.azure,
+      egressRate: EGRESS_RATES.azure,
+      networkMonthly: azureNetworkAddons.monthlyTotal,
+      interVlanMonthly: azureInterVlanMonthly,
+      intraVlanMonthly: azureIntraVlanMonthly,
+      iopsMonthly: azureIopsMonthly,
+      throughputMonthly: azureThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: azureSize.vcpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: azureControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
-  const azureReserved3Totals = computeTotalsOrNull({
-    hourlyRate: azureReserved3Rate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.azure,
-    dataStorageRate: dataStorageRates.azure,
-    snapshotRate: diskTier.snapshotRates.azure,
-    egressRate: EGRESS_RATES.azure,
-    networkMonthly: azureNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: azureSize.vcpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: azureControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let azureReserved3Totals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: azureReserved3Rate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.azure,
+      dataStorageRate: dataStorageRates.azure,
+      snapshotRate: diskTier.snapshotRates.azure,
+      egressRate: EGRESS_RATES.azure,
+      networkMonthly: azureNetworkAddons.monthlyTotal,
+      interVlanMonthly: azureInterVlanMonthly,
+      intraVlanMonthly: azureIntraVlanMonthly,
+      iopsMonthly: azureIopsMonthly,
+      throughputMonthly: azureThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: azureSize.vcpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: azureControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
-  const gcpTotals = computeTotalsOrNull({
-    hourlyRate: gcpResponse.hourlyRate,
-    osDiskGb,
-    dataDiskGb,
-    snapshotGb,
-    egressGb,
-    hours,
-    storageRate: diskTier.storageRates.gcp,
-    dataStorageRate: dataStorageRates.gcp,
-    snapshotRate: diskTier.snapshotRates.gcp,
-    egressRate: EGRESS_RATES.gcp,
-    networkMonthly: gcpNetworkAddons.monthlyTotal,
-    sqlLicenseRate,
-    vcpu: gcpSize?.vcpu || cpu,
-    drPercent,
-    vmCount,
-    controlPlaneMonthly: gcpControlPlaneMonthly,
-    egressScale,
-    osScale,
-    dataScale,
-  });
+  let gcpTotals = applyPricingFocusToTotals(
+    computeTotalsOrNull({
+      hourlyRate: gcpResponse.hourlyRate,
+      osDiskGb,
+      dataDiskGb,
+      snapshotGb,
+      egressGb,
+      hours,
+      storageRate: storageRates.gcp,
+      dataStorageRate: dataStorageRates.gcp,
+      snapshotRate: diskTier.snapshotRates.gcp,
+      egressRate: EGRESS_RATES.gcp,
+      networkMonthly: gcpNetworkAddons.monthlyTotal,
+      interVlanMonthly: gcpInterVlanMonthly,
+      intraVlanMonthly: gcpIntraVlanMonthly,
+      iopsMonthly: gcpIopsMonthly,
+      throughputMonthly: gcpThroughputMonthly,
+      sqlLicenseRate,
+      vcpu: gcpSize?.vcpu || cpu,
+      drPercent,
+      vmCount,
+      controlPlaneMonthly: gcpControlPlaneMonthly,
+      egressScale,
+      osScale,
+      dataScale,
+    }),
+    pricingFocus
+  );
 
   const privateTotals = privateEnabled
-    ? computeTotalsOrNull({
-        hourlyRate: privateHourlyRate,
-        osDiskGb,
-        dataDiskGb,
-        snapshotGb,
-        egressGb,
-        hours,
-        storageRate: privateStorageRate,
-        dataStorageRate: privateStorageRate,
-        snapshotRate: privateStorageRate,
-        egressRate: 0,
-        networkMonthly: privateNetworkMonthlyTotal,
-        sqlLicenseRate,
-        windowsLicenseMonthly: privateWindowsLicenseMonthly,
-        vcpu: cpu,
-        drPercent,
-        vmCount,
-        controlPlaneMonthly: 0,
-        egressScale,
-        osScale,
-        dataScale,
-      })
+    ? applyPricingFocusToTotals(
+        computeTotalsOrNull({
+          hourlyRate: privateHourlyRate,
+          osDiskGb,
+          dataDiskGb,
+          snapshotGb,
+          egressGb,
+          hours,
+          storageRate: privateStorageRate,
+          dataStorageRate: privateStorageRate,
+          snapshotRate: privateStorageRate,
+          egressRate: 0,
+          networkMonthly: privateNetworkMonthlyTotal,
+          interVlanMonthly: 0,
+          intraVlanMonthly: 0,
+          iopsMonthly: 0,
+          throughputMonthly: 0,
+          sqlLicenseRate,
+          windowsLicenseMonthly: privateWindowsLicenseMonthly,
+          vcpu: cpu,
+          drPercent,
+          vmCount,
+          controlPlaneMonthly: 0,
+          egressScale,
+          osScale,
+          dataScale,
+        }),
+        pricingFocus
+      )
     : null;
+
+  let awsStorageServices = null;
+  let azureStorageServices = null;
+  let gcpStorageServices = null;
+  if (pricingFocus === "storage" && storageFocusRates) {
+    const awsStorage = computeStorageFocusTotals(
+      awsStorageProfile,
+      storageFocusRates.aws
+    );
+    const azureStorage = computeStorageFocusTotals(
+      azureStorageProfile,
+      storageFocusRates.azure
+    );
+    const gcpStorage = computeStorageFocusTotals(
+      gcpStorageProfile,
+      storageFocusRates.gcp
+    );
+    awsTotals = awsStorage.totals;
+    azureTotals = azureStorage.totals;
+    gcpTotals = gcpStorage.totals;
+    awsReserved1Totals = null;
+    awsReserved3Totals = null;
+    azureReserved1Totals = null;
+    azureReserved3Totals = null;
+    awsStorageServices = {
+      ...awsStorage.breakdown,
+      rates: storageFocusRates.aws,
+      sources: storageFocusSources?.aws || null,
+    };
+    azureStorageServices = {
+      ...azureStorage.breakdown,
+      rates: storageFocusRates.azure,
+      sources: storageFocusSources?.azure || null,
+    };
+    gcpStorageServices = {
+      ...gcpStorage.breakdown,
+      rates: storageFocusRates.gcp,
+      sources: storageFocusSources?.gcp || null,
+    };
+  }
 
   const gcpReserved1Totals = null;
   const gcpReserved3Totals = null;
@@ -3946,7 +4986,11 @@ app.post("/api/compare", async (req, res) => {
   const azureReservedSource =
     useApiPricing ? "azure-retail-reservation" : "public-snapshot";
   const constraintsNote =
-    mode === "k8s"
+    pricingFocus === "network"
+      ? "Networking focus: public-cloud VPC/VNet, VPC gateway, and load balancer pricing only (with per-component counts and data transfer). Compute, storage, SQL, DR, and private cloud are excluded."
+      : pricingFocus === "storage"
+      ? "Storage focus: public storage service pricing only (object, file, table, queue) with optional DR replication delta. Compute, networking, SQL, DR uplift, and private cloud are excluded."
+      : mode === "k8s"
       ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
       : "Windows-only. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
 
@@ -3963,6 +5007,10 @@ app.post("/api/compare", async (req, res) => {
       storageGb,
       egressTb,
       egressGb,
+      interVlanTb,
+      intraVlanTb,
+      storageIops,
+      storageThroughputMbps,
       hours,
       backupEnabled,
       backupRetentionDays: BACKUP_RETENTION_DAYS,
@@ -3970,6 +5018,8 @@ app.post("/api/compare", async (req, res) => {
       drPercent,
       vmCount,
       mode,
+      pricingFocus,
+      networkAddonFocus,
       workload: workloadKey,
       regionKey,
       sqlEdition,
@@ -3982,12 +5032,63 @@ app.post("/api/compare", async (req, res) => {
       awsVpcFlavor,
       awsFirewallFlavor,
       awsLoadBalancerFlavor,
+      awsNetworkVpcFlavor: awsNetworkVpc.flavor,
+      awsNetworkVpcCount: awsNetworkVpc.count,
+      awsNetworkVpcDataTb: awsNetworkVpc.dataTb,
+      awsNetworkGatewayFlavor: awsNetworkGateway.flavor,
+      awsNetworkGatewayCount: awsNetworkGateway.count,
+      awsNetworkGatewayDataTb: awsNetworkGateway.dataTb,
+      awsNetworkLoadBalancerFlavor: awsNetworkLoadBalancer.flavor,
+      awsNetworkLoadBalancerCount: awsNetworkLoadBalancer.count,
+      awsNetworkLoadBalancerDataTb: awsNetworkLoadBalancer.dataTb,
       azureVpcFlavor,
       azureFirewallFlavor,
       azureLoadBalancerFlavor,
+      azureNetworkVpcFlavor: azureNetworkVpc.flavor,
+      azureNetworkVpcCount: azureNetworkVpc.count,
+      azureNetworkVpcDataTb: azureNetworkVpc.dataTb,
+      azureNetworkGatewayFlavor: azureNetworkGateway.flavor,
+      azureNetworkGatewayCount: azureNetworkGateway.count,
+      azureNetworkGatewayDataTb: azureNetworkGateway.dataTb,
+      azureNetworkLoadBalancerFlavor: azureNetworkLoadBalancer.flavor,
+      azureNetworkLoadBalancerCount: azureNetworkLoadBalancer.count,
+      azureNetworkLoadBalancerDataTb: azureNetworkLoadBalancer.dataTb,
       gcpVpcFlavor,
       gcpFirewallFlavor,
       gcpLoadBalancerFlavor,
+      gcpNetworkVpcFlavor: gcpNetworkVpc.flavor,
+      gcpNetworkVpcCount: gcpNetworkVpc.count,
+      gcpNetworkVpcDataTb: gcpNetworkVpc.dataTb,
+      gcpNetworkGatewayFlavor: gcpNetworkGateway.flavor,
+      gcpNetworkGatewayCount: gcpNetworkGateway.count,
+      gcpNetworkGatewayDataTb: gcpNetworkGateway.dataTb,
+      gcpNetworkLoadBalancerFlavor: gcpNetworkLoadBalancer.flavor,
+      gcpNetworkLoadBalancerCount: gcpNetworkLoadBalancer.count,
+      gcpNetworkLoadBalancerDataTb: gcpNetworkLoadBalancer.dataTb,
+      awsObjectStorageRate,
+      azureObjectStorageRate,
+      gcpObjectStorageRate,
+      awsStorageAccountCount: awsStorageProfile.accountCount,
+      awsStorageDrEnabled: awsStorageProfile.drEnabled,
+      awsStorageDrDeltaTb: awsStorageProfile.drDeltaTb,
+      awsStorageObjectTb: awsStorageProfile.objectTb,
+      awsStorageFileTb: awsStorageProfile.fileTb,
+      awsStorageTableTb: awsStorageProfile.tableTb,
+      awsStorageQueueTb: awsStorageProfile.queueTb,
+      azureStorageAccountCount: azureStorageProfile.accountCount,
+      azureStorageDrEnabled: azureStorageProfile.drEnabled,
+      azureStorageDrDeltaTb: azureStorageProfile.drDeltaTb,
+      azureStorageObjectTb: azureStorageProfile.objectTb,
+      azureStorageFileTb: azureStorageProfile.fileTb,
+      azureStorageTableTb: azureStorageProfile.tableTb,
+      azureStorageQueueTb: azureStorageProfile.queueTb,
+      gcpStorageAccountCount: gcpStorageProfile.accountCount,
+      gcpStorageDrEnabled: gcpStorageProfile.drEnabled,
+      gcpStorageDrDeltaTb: gcpStorageProfile.drDeltaTb,
+      gcpStorageObjectTb: gcpStorageProfile.objectTb,
+      gcpStorageFileTb: gcpStorageProfile.fileTb,
+      gcpStorageTableTb: gcpStorageProfile.tableTb,
+      gcpStorageQueueTb: gcpStorageProfile.queueTb,
       privateEnabled,
       privateVmwareMonthly,
       privateWindowsLicenseMonthly,
@@ -4026,6 +5127,7 @@ app.post("/api/compare", async (req, res) => {
         dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
       },
       networkAddons: awsNetworkAddons,
+      storageServices: awsStorageServices,
       dr: {
         percent: drPercent,
       },
@@ -4080,6 +5182,7 @@ app.post("/api/compare", async (req, res) => {
         dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
       },
       networkAddons: azureNetworkAddons,
+      storageServices: azureStorageServices,
       dr: {
         percent: drPercent,
       },
@@ -4131,6 +5234,7 @@ app.post("/api/compare", async (req, res) => {
         dailyDeltaPercent: BACKUP_DAILY_DELTA_PERCENT,
       },
       networkAddons: gcpNetworkAddons,
+      storageServices: gcpStorageServices,
       dr: {
         percent: drPercent,
       },
@@ -4139,7 +5243,7 @@ app.post("/api/compare", async (req, res) => {
         onDemand: {
           hourlyRate: gcpResponse.hourlyRate,
           totals: gcpTotals,
-          source: "public-snapshot",
+          source: gcpResponse.source,
         },
         reserved1yr: {
           hourlyRate: null,
@@ -4233,6 +5337,7 @@ app.post("/api/compare", async (req, res) => {
       constraints: constraintsNote,
       sizeCap: sizeNotes.length ? sizeNotes.join(" ") : null,
       sharedStorageSources: mode === "k8s" ? sharedStorageSources : null,
+      storageSources: pricingFocus === "storage" ? storageFocusSources : null,
     },
   });
 });

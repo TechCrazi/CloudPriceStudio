@@ -130,6 +130,179 @@ body {
   box-shadow: 0 8px 20px rgba(255, 138, 91, 0.25);
 }
 
+.network-addon-tabs {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: -4px;
+}
+
+.network-addon-tab {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.network-addon-tab.active {
+  background: linear-gradient(135deg, var(--accent), var(--highlight));
+  color: #1b120f;
+  box-shadow: 0 8px 20px rgba(255, 138, 91, 0.25);
+}
+
+.focus-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.focus-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.focus-tab {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.focus-tab.active {
+  background: linear-gradient(135deg, var(--accent), var(--highlight));
+  color: #1b120f;
+  box-shadow: 0 8px 20px rgba(255, 138, 91, 0.25);
+}
+
+.focus-table-wrap {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(16, 24, 40, 0.75);
+  overflow-x: auto;
+}
+
+.focus-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.focus-table th,
+.focus-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.focus-table th {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+
+.focus-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.focus-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.focus-provider-card {
+  background: rgba(12, 21, 40, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.focus-provider-card h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.focus-provider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.focus-provider-card .subtle {
+  margin: -2px 0 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.focus-provider-card .row3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 96px) minmax(0, 116px);
+  gap: 8px;
+  align-items: end;
+}
+
+.focus-provider-card .row1 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.focus-provider-card label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.focus-provider-card input,
+.focus-provider-card select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.focus-provider-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.focus-provider-summary div {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.focus-provider-summary span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.focus-provider-summary strong {
+  font-size: 0.92rem;
+}
+
 .vendor-subtabs {
   display: flex;
   flex-wrap: wrap;
@@ -171,6 +344,15 @@ body {
   background: linear-gradient(135deg, var(--accent), var(--highlight));
   color: #1b120f;
   box-shadow: 0 8px 20px rgba(255, 138, 91, 0.3);
+}
+
+body.focus-network .vm-only,
+body.focus-storage .vm-only,
+body.focus-network .reserved-tier,
+body.focus-storage .reserved-tier,
+body.focus-network .tier-savings,
+body.focus-storage .tier-savings {
+  display: none;
 }
 
 .badge {
@@ -287,6 +469,14 @@ body {
 .private-providers-list {
   display: grid;
   gap: 24px;
+}
+
+#network-fields {
+  display: contents;
+}
+
+.network-addon-group {
+  display: contents;
 }
 
 .private-profile-card {
@@ -1028,6 +1218,11 @@ select:focus {
   color: var(--accent);
 }
 
+.status-pill.hardcoded {
+  background: rgba(255, 196, 107, 0.2);
+  color: var(--highlight);
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -1234,5 +1429,17 @@ select:focus {
 
   .tier-card strong {
     font-size: 1rem;
+  }
+
+  .focus-provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-provider-card .row3 {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-provider-summary {
+    grid-template-columns: 1fr;
   }
 }

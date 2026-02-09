@@ -37,16 +37,37 @@
         <button type="button" class="mode-tab" data-mode="k8s">
           K8s
         </button>
+        <button type="button" class="mode-tab" data-mode="network">
+          Networking
+        </button>
+        <button type="button" class="mode-tab" data-mode="storage">
+          Storage
+        </button>
+        <button type="button" class="mode-tab" data-mode="saved">
+          Saved Compare
+        </button>
         <button type="button" class="mode-tab" data-mode="private">
           Private Cloud
         </button>
         <button type="button" class="mode-tab" data-mode="scenarios">
-          Scenarios Compare
+          Private/Public Cloud
         </button>
       </div>
       <section class="layout">
         <form id="pricing-form" class="card form-card">
           <input type="hidden" name="mode" id="mode-input" value="vm" />
+          <input
+            type="hidden"
+            name="pricingFocus"
+            id="pricing-focus"
+            value="all"
+          />
+          <input
+            type="hidden"
+            name="networkAddonFocus"
+            id="network-addon-focus"
+            value="vpc"
+          />
           <div class="card-header">
             <h2 id="form-title">Workload inputs</h2>
             <p id="form-subtitle">
@@ -156,6 +177,41 @@
                 value="1"
               />
             </label>
+            <div class="form-section" id="storage-rate-section">
+              Shared storage rates (object storage)
+            </div>
+            <div id="storage-rate-fields">
+              <label>
+                AWS S3 ($/TB-month)
+                <input
+                  type="number"
+                  name="awsObjectStorageRate"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <label>
+                Azure Blob ($/TB-month)
+                <input
+                  type="number"
+                  name="azureObjectStorageRate"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+              <label>
+                GCP Storage ($/TB-month)
+                <input
+                  type="number"
+                  name="gcpObjectStorageRate"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
+              </label>
+            </div>
             <label class="checkbox-field">
               <input type="checkbox" name="backupEnabled" />
               <span>Enable backups (15-day retention, 10% daily delta)</span>
@@ -170,64 +226,141 @@
                 value="1"
               />
             </label>
-            <div class="form-section">Network add-ons</div>
-            <label>
-              AWS VPC
-              <select name="awsVpcFlavor" id="aws-vpc-flavor"></select>
+            <label id="inter-vlan-field">
+              Inter-VLAN transfer (TB / month)
+              <input
+                type="number"
+                name="interVlanTb"
+                min="0"
+                step="0.1"
+                value="0"
+              />
             </label>
-            <label>
-              AWS firewall
-              <select name="awsFirewallFlavor" id="aws-firewall-flavor"></select>
+            <label id="intra-vlan-field">
+              Intra-VLAN transfer (TB / month)
+              <input
+                type="number"
+                name="intraVlanTb"
+                min="0"
+                step="0.1"
+                value="0"
+              />
             </label>
-            <label>
-              AWS load balancer
-              <select
-                name="awsLoadBalancerFlavor"
-                id="aws-lb-flavor"
-              ></select>
+            <label id="storage-iops-field">
+              Provisioned IOPS
+              <input
+                type="number"
+                name="storageIops"
+                min="0"
+                step="1"
+                value="0"
+              />
             </label>
-            <label>
-              Azure VNet
-              <select
-                name="azureVpcFlavor"
-                id="azure-vnet-flavor"
-              ></select>
+            <label id="storage-throughput-field">
+              Provisioned throughput (MBps)
+              <input
+                type="number"
+                name="storageThroughputMbps"
+                min="0"
+                step="1"
+                value="0"
+              />
             </label>
-            <label>
-              Azure firewall
-              <select
-                name="azureFirewallFlavor"
-                id="azure-firewall-flavor"
-              ></select>
-            </label>
-            <label>
-              Azure load balancer
-              <select
-                name="azureLoadBalancerFlavor"
-                id="azure-lb-flavor"
-              ></select>
-            </label>
-            <label>
-              GCP VPC
-              <select
-                name="gcpVpcFlavor"
-                id="gcp-vpc-flavor"
-              ></select>
-            </label>
-            <label>
-              GCP firewall
-              <select
-                name="gcpFirewallFlavor"
-                id="gcp-firewall-flavor"
-              ></select>
-            </label>
-            <label>
-              GCP load balancer
-              <select
-                name="gcpLoadBalancerFlavor"
-                id="gcp-lb-flavor"
-              ></select>
-            </label>
+            <div class="form-section" id="network-section">Network add-ons</div>
+            <div class="network-addon-tabs is-hidden" id="network-addon-tabs">
+              <button
+                type="button"
+                class="network-addon-tab active"
+                data-network-focus="vpc"
+              >
+                VPC
+              </button>
+              <button
+                type="button"
+                class="network-addon-tab"
+                data-network-focus="firewall"
+              >
+                Firewall
+              </button>
+              <button
+                type="button"
+                class="network-addon-tab"
+                data-network-focus="loadBalancer"
+              >
+                Load balancer
+              </button>
+            </div>
+            <div id="network-fields">
+              <div class="network-addon-group" data-network-addon="vpc">
+                <label>
+                  AWS VPC
+                  <select name="awsVpcFlavor" id="aws-vpc-flavor"></select>
+                </label>
+                <label>
+                  Azure VNet
+                  <select
+                    name="azureVpcFlavor"
+                    id="azure-vnet-flavor"
+                  ></select>
+                </label>
+                <label>
+                  GCP VPC
+                  <select
+                    name="gcpVpcFlavor"
+                    id="gcp-vpc-flavor"
+                  ></select>
+                </label>
+              </div>
+              <div class="network-addon-group" data-network-addon="firewall">
+                <label>
+                  AWS firewall
+                  <select
+                    name="awsFirewallFlavor"
+                    id="aws-firewall-flavor"
+                  ></select>
+                </label>
+                <label>
+                  Azure firewall
+                  <select
+                    name="azureFirewallFlavor"
+                    id="azure-firewall-flavor"
+                  ></select>
+                </label>
+                <label>
+                  GCP firewall
+                  <select
+                    name="gcpFirewallFlavor"
+                    id="gcp-firewall-flavor"
+                  ></select>
+                </label>
+              </div>
+              <div
+                class="network-addon-group"
+                data-network-addon="loadBalancer"
+              >
+                <label>
+                  AWS load balancer
+                  <select
+                    name="awsLoadBalancerFlavor"
+                    id="aws-lb-flavor"
+                  ></select>
+                </label>
+                <label>
+                  Azure load balancer
+                  <select
+                    name="azureLoadBalancerFlavor"
+                    id="azure-lb-flavor"
+                  ></select>
+                </label>
+                <label>
+                  GCP load balancer
+                  <select
+                    name="gcpLoadBalancerFlavor"
+                    id="gcp-lb-flavor"
+                  ></select>
+                </label>
+              </div>
+            </div>
             <label>
               DR uplift (% of compute + storage + SQL)
               <input
@@ -314,9 +447,6 @@
             >
               Pricing
             </button>
-            <button type="button" class="results-tab" data-results="saved">
-              Saved Compare
-            </button>
             <button type="button" class="results-tab" data-results="insight">
               Insight
             </button>
@@ -325,6 +455,67 @@
             </button>
           </div>
           <div class="results-panel" id="pricing-panel">
+            <div class="focus-panel is-hidden" id="network-focus-panel">
+              <div class="focus-tabs">
+                <button
+                  type="button"
+                  class="focus-tab active"
+                  data-network-result="vpc"
+                >
+                  VPC
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-network-result="gateway"
+                >
+                  VPC/VPN gateway
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-network-result="loadBalancer"
+                >
+                  Load balancer
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-network-result="insight"
+                >
+                  Insight
+                </button>
+              </div>
+              <div class="focus-provider-grid" id="network-provider-cards"></div>
+              <div class="focus-table-wrap" id="network-focus-table"></div>
+            </div>
+            <div class="focus-panel is-hidden" id="storage-focus-panel">
+              <div class="focus-tabs">
+                <button
+                  type="button"
+                  class="focus-tab active"
+                  data-storage-result="object"
+                >
+                  Object Storage
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-storage-result="performance"
+                >
+                  Replication / DR
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-storage-result="insight"
+                >
+                  Insight
+                </button>
+              </div>
+              <div class="focus-provider-grid" id="storage-provider-cards"></div>
+              <div class="focus-table-wrap" id="storage-focus-table"></div>
+            </div>
             <div class="view-tabs is-hidden" id="vm-view-tabs">
               <button type="button" class="view-tab active" data-view="compare">
                 Compare
@@ -368,7 +559,7 @@
                   <span class="status-pill" id="aws-status">checking</span>
                 </div>
                 <div class="metrics">
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>Instance</span>
                     <input
                       type="text"
@@ -383,7 +574,7 @@
                       form="pricing-form"
                     ></select>
                   </div>
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>vCPU / RAM</span>
                     <strong id="aws-shape">-</strong>
                   </div>
@@ -391,7 +582,7 @@
                     <span>Region</span>
                     <strong id="aws-region">-</strong>
                   </div>
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>Compute rate</span>
                     <strong id="aws-hourly">-</strong>
                   </div>
@@ -406,12 +597,12 @@
                     <strong id="aws-od-total">-</strong>
                     <small id="aws-od-rate">-</small>
                   </div>
-                  <div class="tier-card">
+                  <div class="tier-card reserved-tier">
                     <span>1-year</span>
                     <strong id="aws-1y-total">-</strong>
                     <small id="aws-1y-rate">-</small>
                   </div>
-                  <div class="tier-card">
+                  <div class="tier-card reserved-tier">
                     <span>3-year</span>
                     <strong id="aws-3y-total">-</strong>
                     <small id="aws-3y-rate">-</small>
@@ -430,7 +621,7 @@
                   <span class="status-pill" id="azure-status">checking</span>
                 </div>
                 <div class="metrics">
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>Instance</span>
                     <input
                       type="text"
@@ -445,7 +636,7 @@
                       form="pricing-form"
                     ></select>
                   </div>
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>vCPU / RAM</span>
                     <strong id="azure-shape">-</strong>
                   </div>
@@ -453,7 +644,7 @@
                     <span>Region</span>
                     <strong id="azure-region">-</strong>
                   </div>
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>Compute rate</span>
                     <strong id="azure-hourly">-</strong>
                   </div>
@@ -468,12 +659,12 @@
                     <strong id="azure-od-total">-</strong>
                     <small id="azure-od-rate">-</small>
                   </div>
-                  <div class="tier-card">
+                  <div class="tier-card reserved-tier">
                     <span>1-year</span>
                     <strong id="azure-1y-total">-</strong>
                     <small id="azure-1y-rate">-</small>
                   </div>
-                  <div class="tier-card">
+                  <div class="tier-card reserved-tier">
                     <span>3-year</span>
                     <strong id="azure-3y-total">-</strong>
                     <small id="azure-3y-rate">-</small>
@@ -492,7 +683,7 @@
                   <span class="status-pill" id="gcp-status">checking</span>
                 </div>
                 <div class="metrics">
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>Instance</span>
                     <input
                       type="text"
@@ -507,7 +698,7 @@
                       form="pricing-form"
                     ></select>
                   </div>
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>vCPU / RAM</span>
                     <strong id="gcp-shape">-</strong>
                   </div>
@@ -515,7 +706,7 @@
                     <span>Region</span>
                     <strong id="gcp-region">-</strong>
                   </div>
-                  <div class="metric">
+                  <div class="metric vm-only">
                     <span>Compute rate</span>
                     <strong id="gcp-hourly">-</strong>
                   </div>
@@ -530,12 +721,12 @@
                     <strong id="gcp-od-total">-</strong>
                     <small id="gcp-od-rate">-</small>
                   </div>
-                  <div class="tier-card">
+                  <div class="tier-card reserved-tier">
                     <span>1-year</span>
                     <strong id="gcp-1y-total">-</strong>
                     <small id="gcp-1y-rate">-</small>
                   </div>
-                  <div class="tier-card">
+                  <div class="tier-card reserved-tier">
                     <span>3-year</span>
                     <strong id="gcp-3y-total">-</strong>
                     <small id="gcp-3y-rate">-</small>
@@ -576,14 +767,14 @@
                 <span class="status-pill" data-field="status">checking</span>
               </div>
               <div class="metrics">
-                <div class="metric">
+                <div class="metric vm-only">
                   <span>Instance</span>
                   <select
                     class="provider-select"
                     data-field="instanceSelect"
                   ></select>
                 </div>
-                <div class="metric">
+                <div class="metric vm-only">
                   <span>vCPU / RAM</span>
                   <strong data-field="shape">-</strong>
                 </div>
@@ -591,7 +782,7 @@
                   <span>Region</span>
                   <strong data-field="region">-</strong>
                 </div>
-                <div class="metric">
+                <div class="metric vm-only">
                   <span>Compute rate</span>
                   <strong data-field="hourly">-</strong>
                 </div>
@@ -606,12 +797,12 @@
                   <strong data-field="od-total">-</strong>
                   <small data-field="od-rate">-</small>
                 </div>
-                <div class="tier-card">
+                <div class="tier-card reserved-tier">
                   <span>1-year</span>
                   <strong data-field="1y-total">-</strong>
                   <small data-field="1y-rate">-</small>
                 </div>
-                <div class="tier-card">
+                <div class="tier-card reserved-tier">
                   <span>3-year</span>
                   <strong data-field="3y-total">-</strong>
                   <small data-field="3y-rate">-</small>
@@ -636,11 +827,11 @@
                 <select data-field="providerSelect"></select>
               </label>
               <div class="metrics">
-                <div class="metric">
+                <div class="metric vm-only">
                   <span>Instance</span>
                   <strong data-field="instance">-</strong>
                 </div>
-                <div class="metric">
+                <div class="metric vm-only">
                   <span>vCPU / RAM</span>
                   <strong data-field="shape">-</strong>
                 </div>
@@ -648,7 +839,7 @@
                   <span>Region</span>
                   <strong data-field="region">-</strong>
                 </div>
-                <div class="metric">
+                <div class="metric vm-only">
                   <span>Compute rate</span>
                   <strong data-field="hourly">-</strong>
                 </div>
@@ -663,12 +854,12 @@
                   <strong data-field="od-total">-</strong>
                   <small data-field="od-rate">-</small>
                 </div>
-                <div class="tier-card">
+                <div class="tier-card reserved-tier">
                   <span>1-year</span>
                   <strong data-field="1y-total">-</strong>
                   <small data-field="1y-rate">-</small>
                 </div>
-                <div class="tier-card">
+                <div class="tier-card reserved-tier">
                   <span>3-year</span>
                   <strong data-field="3y-total">-</strong>
                   <small data-field="3y-rate">-</small>
