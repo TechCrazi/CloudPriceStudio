@@ -113,6 +113,12 @@ const networkFocusTable = document.getElementById("network-focus-table");
 const storageFocusTable = document.getElementById("storage-focus-table");
 const networkProviderCards = document.getElementById("network-provider-cards");
 const storageProviderCards = document.getElementById("storage-provider-cards");
+const networkInsightPanel = document.getElementById("network-focus-insight");
+const networkInsightChart = document.getElementById("network-insight-chart");
+const networkInsightNote = document.getElementById("network-insight-note");
+const storageInsightPanel = document.getElementById("storage-focus-insight");
+const storageInsightChart = document.getElementById("storage-insight-chart");
+const storageInsightNote = document.getElementById("storage-insight-note");
 const networkResultTabs = document.querySelectorAll("[data-network-result]");
 const storageResultTabs = document.querySelectorAll("[data-storage-result]");
 const disclaimer = document.querySelector(".disclaimer");
@@ -1097,12 +1103,34 @@ function setNetworkAddonFocus(focus, options = {}) {
   }
 }
 
-function setNetworkResultTab(tab, options = {}) {
-  if (tab === "insight") {
-    setResultsTab(tab);
-    return;
+function setNetworkFocusView(showInsight) {
+  if (networkInsightPanel) {
+    networkInsightPanel.classList.toggle("is-hidden", !showInsight);
   }
-  currentNetworkResult = normalizeNetworkAddonFocus(tab);
+  if (networkProviderCards) {
+    networkProviderCards.classList.toggle("is-hidden", showInsight);
+  }
+  if (networkFocusTable) {
+    networkFocusTable.classList.toggle("is-hidden", showInsight);
+  }
+}
+
+function setStorageFocusView(showInsight) {
+  if (storageInsightPanel) {
+    storageInsightPanel.classList.toggle("is-hidden", !showInsight);
+  }
+  if (storageProviderCards) {
+    storageProviderCards.classList.toggle("is-hidden", showInsight);
+  }
+  if (storageFocusTable) {
+    storageFocusTable.classList.toggle("is-hidden", showInsight);
+  }
+}
+
+function setNetworkResultTab(tab, options = {}) {
+  const nextTab =
+    tab === "insight" ? "insight" : normalizeNetworkAddonFocus(tab);
+  currentNetworkResult = nextTab;
   networkResultTabs.forEach((button) => {
     button.classList.toggle(
       "active",
@@ -1110,18 +1138,21 @@ function setNetworkResultTab(tab, options = {}) {
     );
   });
   setResultsTab("pricing", { silent: true });
-  setNetworkAddonFocus(currentNetworkResult, { silent: true });
+  if (currentNetworkResult !== "insight") {
+    setNetworkAddonFocus(currentNetworkResult, { silent: true });
+  }
+  setNetworkFocusView(currentNetworkResult === "insight");
+  if (currentNetworkResult === "insight") {
+    renderFocusInsight(lastPricing, "network");
+  }
   if (!options.silent) {
     handleCompare();
   }
 }
 
 function setStorageResultTab(tab, options = {}) {
-  if (tab === "insight") {
-    setResultsTab(tab);
-    return;
-  }
-  currentStorageResult = tab === "performance" ? "performance" : "object";
+  currentStorageResult =
+    tab === "insight" ? "insight" : tab === "performance" ? "performance" : "object";
   storageResultTabs.forEach((button) => {
     button.classList.toggle(
       "active",
@@ -1129,6 +1160,10 @@ function setStorageResultTab(tab, options = {}) {
     );
   });
   setResultsTab("pricing", { silent: true });
+  setStorageFocusView(currentStorageResult === "insight");
+  if (currentStorageResult === "insight") {
+    renderFocusInsight(lastPricing, "storage");
+  }
   if (!options.silent) {
     handleCompare();
   }
@@ -1304,20 +1339,24 @@ function setMode(mode) {
       updateNetworkAddonFocusUi();
     }
   }
+  if (isNetwork) {
+    setNetworkFocusView(currentNetworkResult === "insight");
+  }
+  if (isStorage) {
+    setStorageFocusView(currentStorageResult === "insight");
+  }
   networkResultTabs.forEach((button) => {
     const key = button.dataset.networkResult;
     button.classList.toggle(
       "active",
-      key === currentNetworkResult ||
-        (currentResultsTab === "insight" && key === "insight")
+      key === currentNetworkResult
     );
   });
   storageResultTabs.forEach((button) => {
     const key = button.dataset.storageResult;
     button.classList.toggle(
       "active",
-      key === currentStorageResult ||
-        (currentResultsTab === "insight" && key === "insight")
+      key === currentStorageResult
     );
   });
   if (privateViewTab) {
@@ -1469,22 +1508,24 @@ function setResultsTab(tab, options = {}) {
   if (commitPanel) {
     commitPanel.classList.toggle("is-hidden", nextTab !== "commit");
   }
-  networkResultTabs.forEach((button) => {
-    const key = button.dataset.networkResult;
-    button.classList.toggle(
-      "active",
-      (nextTab === "insight" && key === "insight") ||
-        (nextTab === "pricing" && key === currentNetworkResult)
-    );
-  });
-  storageResultTabs.forEach((button) => {
-    const key = button.dataset.storageResult;
-    button.classList.toggle(
-      "active",
-      (nextTab === "insight" && key === "insight") ||
-        (nextTab === "pricing" && key === currentStorageResult)
-    );
-  });
+  if (!isFocusMode) {
+    networkResultTabs.forEach((button) => {
+      const key = button.dataset.networkResult;
+      button.classList.toggle(
+        "active",
+        (nextTab === "insight" && key === "insight") ||
+          (nextTab === "pricing" && key === currentNetworkResult)
+      );
+    });
+    storageResultTabs.forEach((button) => {
+      const key = button.dataset.storageResult;
+      button.classList.toggle(
+        "active",
+        (nextTab === "insight" && key === "insight") ||
+          (nextTab === "pricing" && key === currentStorageResult)
+      );
+    });
+  }
   updateResultsHeading();
   updateViewTabsVisibility();
   updateVendorSubtabs();
@@ -3625,16 +3666,16 @@ function buildInsightBuckets(totals, focus = "all") {
   };
 }
 
-function renderInsight(data) {
-  if (!insightChart || !insightNote) {
+function renderInsightTo(targetChart, targetNote, data, focusOverride = null) {
+  if (!targetChart || !targetNote) {
     return;
   }
-  insightChart.innerHTML = "";
+  targetChart.innerHTML = "";
   if (!data) {
-    insightNote.textContent = "Run a comparison to generate insights.";
+    targetNote.textContent = "Run a comparison to generate insights.";
     return;
   }
-  const pricingFocus = data.input?.pricingFocus || "all";
+  const pricingFocus = focusOverride || data.input?.pricingFocus || "all";
   const mode = data.input?.mode || "vm";
   const providers = [
     { key: "aws", label: getProviderLabelForMode("aws", mode), data: data.aws },
@@ -3664,7 +3705,7 @@ function renderInsight(data) {
     })
     .filter(Boolean);
   if (!cards.length) {
-    insightNote.textContent = "No pricing data available for insights.";
+    targetNote.textContent = "No pricing data available for insights.";
     return;
   }
   cards.forEach(({ provider, buckets }) => {
@@ -3715,20 +3756,34 @@ function renderInsight(data) {
     card.appendChild(header);
     card.appendChild(bar);
     card.appendChild(metrics);
-    insightChart.appendChild(card);
+    targetChart.appendChild(card);
   });
   if (pricingFocus === "network") {
-    insightNote.textContent =
+    targetNote.textContent =
       "Networking focus breakdown uses on-demand totals (network add-ons, inter/intra VLAN, egress).";
     return;
   }
   if (pricingFocus === "storage") {
-    insightNote.textContent =
+    targetNote.textContent =
       "Storage focus breakdown uses on-demand totals (storage services + DR replication).";
     return;
   }
-  insightNote.textContent =
+  targetNote.textContent =
     "Breakdown uses on-demand totals (compute, storage, egress, licenses).";
+}
+
+function renderInsight(data) {
+  renderInsightTo(insightChart, insightNote, data);
+}
+
+function renderFocusInsight(data, focus) {
+  if (focus === "network") {
+    renderInsightTo(networkInsightChart, networkInsightNote, data, "network");
+    return;
+  }
+  if (focus === "storage") {
+    renderInsightTo(storageInsightChart, storageInsightNote, data, "storage");
+  }
 }
 
 function clampPercent(value) {
@@ -5856,8 +5911,14 @@ async function fetchAndRender() {
   }
   if (currentMode === "network") {
     renderNetworkFocusTable(data);
+    if (currentNetworkResult === "insight") {
+      renderFocusInsight(data, "network");
+    }
   } else if (currentMode === "storage") {
     renderStorageFocusTable(data);
+    if (currentStorageResult === "insight") {
+      renderFocusInsight(data, "storage");
+    }
   }
   const noteParts = [];
   if (data.notes?.constraints) {

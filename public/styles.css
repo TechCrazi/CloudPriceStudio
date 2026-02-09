@@ -185,6 +185,11 @@ body {
   box-shadow: 0 8px 20px rgba(255, 138, 91, 0.25);
 }
 
+.focus-insight {
+  display: grid;
+  gap: 12px;
+}
+
 .focus-table-wrap {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
