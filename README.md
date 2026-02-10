@@ -105,13 +105,17 @@ localStorage and can be loaded later from the dropdown.
 Use the `Billing Import` tab to import provider billing CSV files and visualize
 allocation by service.
 
-- Provider-specific import views for AWS, Azure, and GCP.
+- Provider-specific import views for AWS, Azure, GCP, and Rackspace.
 - Aggregated totals, service share, and top service bar visualization.
 - Expandable line-item drilldown in the service table:
   click `+` beside a service to open detailed items (for example Azure `Meter`
   rows grouped under `ServiceName`).
 - CSV parsing auto-detects service, cost, and detail columns by provider and
   falls back to common column names when exact headers differ.
+- Rackspace CSV mapping supports columns like `SERVICE_TYPE` (service),
+  `AMOUNT` (cost), and `RES_NAME`/`IMPACT_TYPE`/`EVENT_TYPE` (line-item
+  detail), with usage date range from `EVENT_START_DATE`/`EVENT_END_DATE`
+  when present.
 - Imported billing datasets are stored in browser localStorage per provider.
 
 ## Pricing cache warm-up

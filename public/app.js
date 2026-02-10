@@ -429,11 +429,12 @@ const vendorOptionState = {
   private: [],
 };
 let scenarioStore = [];
-let billingImportStore = { aws: null, azure: null, gcp: null };
+let billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
 const billingExpandedServices = {
   aws: new Set(),
   azure: new Set(),
   gcp: new Set(),
+  rackspace: new Set(),
 };
 const instancePools = {
   aws: [],
@@ -6942,6 +6943,9 @@ function normalizeBillingProvider(provider) {
   if (provider === "gcp") {
     return "gcp";
   }
+  if (provider === "rackspace") {
+    return "rackspace";
+  }
   return "aws";
 }
 
@@ -6954,12 +6958,13 @@ function loadBillingImportStore() {
         aws: parsed.aws || null,
         azure: parsed.azure || null,
         gcp: parsed.gcp || null,
+        rackspace: parsed.rackspace || null,
       };
     }
   } catch (error) {
     // Ignore storage errors.
   }
-  return { aws: null, azure: null, gcp: null };
+  return { aws: null, azure: null, gcp: null, rackspace: null };
 }
 
 function persistBillingImportStore(store) {
@@ -7050,6 +7055,13 @@ function parseBillingImportCsv(text, provider) {
       "sku description",
       "sku.description",
     ],
+    rackspace: [
+      "service_type",
+      "impact_type",
+      "event_type",
+      "res_name",
+      "attribute_1",
+    ],
   };
   const costCandidatesByProvider = {
     aws: [
@@ -7070,6 +7082,7 @@ function parseBillingImportCsv(text, provider) {
       "amount",
     ],
     gcp: ["cost", "net cost", "effective cost", "charge", "amount"],
+    rackspace: ["amount", "cost", "charge", "rate"],
   };
   const detailCandidatesByProvider = {
     aws: [
@@ -7098,16 +7111,40 @@ function parseBillingImportCsv(text, provider) {
       "project.id",
       "resource name",
     ],
+    rackspace: [
+      "res_name",
+      "impact_type",
+      "event_type",
+      "res_id",
+      "region_id",
+      "attribute_1",
+      "attribute_2",
+      "attribute_3",
+      "attribute_4",
+      "attribute_5",
+      "attribute_6",
+      "attribute_7",
+      "attribute_8",
+    ],
   };
   const chargeTypeCandidatesByProvider = {
     aws: ["lineitem/lineitemtype", "lineitem/chargetype", "chargetype"],
     azure: ["chargetype", "charge type", "pricingmodel"],
     gcp: ["cost type", "costtype", "charge type"],
+    rackspace: ["event_type", "impact_type"],
   };
   const usageDateCandidatesByProvider = {
     aws: ["lineitem/usagestartdate", "usagedate", "date"],
     azure: ["date", "usagedate", "billingperiodstartdate"],
     gcp: ["usage_start_time", "date", "usage date"],
+    rackspace: [
+      "event_start_date",
+      "event_end_date",
+      "bill_start_date",
+      "bill_end_date",
+      "usage_date",
+      "date",
+    ],
   };
 
   let serviceIndex = findBillingHeaderIndex(
@@ -7494,10 +7531,11 @@ function handleBillingClearProvider() {
 }
 
 function handleBillingClearAll() {
-  billingImportStore = { aws: null, azure: null, gcp: null };
+  billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
   billingExpandedServices.aws = new Set();
   billingExpandedServices.azure = new Set();
   billingExpandedServices.gcp = new Set();
+  billingExpandedServices.rackspace = new Set();
   persistBillingImportStore(billingImportStore);
   setInlineNote(billingNote, "Cleared billing imports for all providers.");
   renderBillingImportPanel();
