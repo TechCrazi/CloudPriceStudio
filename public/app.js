@@ -45,6 +45,7 @@ const hoursInput = form.querySelector("[name='hours']");
 const egressInput = form.querySelector("[name='egressTb']");
 const interVlanInput = form.querySelector("[name='interVlanTb']");
 const intraVlanInput = form.querySelector("[name='intraVlanTb']");
+const interRegionInput = form.querySelector("[name='interRegionTb']");
 const storageIopsInput = form.querySelector("[name='storageIops']");
 const storageThroughputInput = form.querySelector(
   "[name='storageThroughputMbps']"
@@ -73,6 +74,7 @@ const backupField = backupEnabledInput?.closest("label");
 const egressField = egressInput?.closest("label");
 const interVlanField = interVlanInput?.closest("label");
 const intraVlanField = intraVlanInput?.closest("label");
+const interRegionField = interRegionInput?.closest("label");
 const storageIopsField = storageIopsInput?.closest("label");
 const storageThroughputField = storageThroughputInput?.closest("label");
 const drField = drPercentInput?.closest("label");
@@ -387,6 +389,7 @@ const SCENARIO_CSV_FIELDS = [
   { key: "networkAddonFocus", label: "Network_Addon_Focus", type: "string" },
   { key: "interVlanTb", label: "Inter_VLAN_TB", type: "number" },
   { key: "intraVlanTb", label: "Intra_VLAN_TB", type: "number" },
+  { key: "interRegionTb", label: "Inter_Region_TB", type: "number" },
   { key: "storageIops", label: "Storage_IOPS", type: "number" },
   { key: "storageThroughputMbps", label: "Storage_Throughput_MBps", type: "number" },
   { key: "workload", label: "Workload", type: "string" },
@@ -650,7 +653,7 @@ const MODE_COPY = {
   network: {
     formTitle: "Network pricing inputs",
     formSubtitle:
-      "Public-cloud networking only (VPC/VNet, gateway, load balancer, inter/intra VLAN, and egress).",
+      "Public-cloud networking only (VPC/VNet, gateway, load balancer, inter/intra VLAN, inter-region transfer, and egress).",
     resultsTitle: "Network pricing",
     resultsSubtitle:
       "VPC/VNet, VPC/VPN gateway, and load balancer pricing across AWS, Azure, and GCP.",
@@ -713,6 +716,7 @@ const SCENARIO_BREAKDOWN_COMPONENTS = [
   { label: "Storage", field: "storageMonthly" },
   { label: "Backups", field: "backupMonthly" },
   { label: "Network", field: "networkMonthly" },
+  { label: "Inter-region", field: "interRegionMonthly" },
   { label: "Egress", field: "egressMonthly" },
   { label: "Licenses", field: "licenseMonthly" },
   { label: "DR", field: "drMonthly" },
@@ -722,6 +726,7 @@ const NETWORK_HARDCODED_RATES = {
   egress: { aws: 0.09, azure: 0.087, gcp: 0.12 },
   interVlan: { aws: 0.01, azure: 0.01, gcp: 0.01 },
   intraVlan: { aws: 0, azure: 0, gcp: 0 },
+  interRegion: { aws: 0.02, azure: 0.02, gcp: 0.02 },
   addonData: {
     aws: { gateway: 0.02, firewall: 0.01, loadBalancer: 0.008 },
     azure: { gateway: 0.018, firewall: 0.016, loadBalancer: 0.008 },
@@ -895,6 +900,40 @@ function isFallbackSource(source) {
   );
 }
 
+function formatSourceDetail(source) {
+  if (typeof source !== "string" || !source) {
+    return "unknown";
+  }
+  if (source === "public-snapshot") {
+    return "retail snapshot";
+  }
+  if (source === "manual") {
+    return "manual input";
+  }
+  if (isApiSource(source)) {
+    return "API";
+  }
+  if (isFallbackSource(source)) {
+    return "fallback";
+  }
+  return source;
+}
+
+function summarizeItemSources(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return "none";
+  }
+  const api = items.filter((item) => isApiSource(item?.source)).length;
+  const fallback = items.filter((item) => isFallbackSource(item?.source)).length;
+  if (api === items.length) {
+    return "API";
+  }
+  if (fallback === items.length) {
+    return "fallback";
+  }
+  return "mixed";
+}
+
 function formatRateNumber(value, max = 4) {
   if (!Number.isFinite(value)) {
     return "0";
@@ -931,7 +970,10 @@ function getNetworkCardSourceLabel(input, provider) {
     return !isApiSource(item?.source);
   });
   const trafficUsesFallback =
-    (input?.egressTb || 0) > 0 || (input?.interVlanTb || 0) > 0 || (input?.intraVlanTb || 0) > 0;
+    (input?.egressTb || 0) > 0 ||
+    (input?.interVlanTb || 0) > 0 ||
+    (input?.intraVlanTb || 0) > 0 ||
+    (input?.interRegionTb || 0) > 0;
   return selectedUsesFallback || trafficUsesFallback ? "HARDCODED" : "API";
 }
 
@@ -957,6 +999,7 @@ function buildNetworkDisclaimerText() {
   const egress = NETWORK_HARDCODED_RATES.egress;
   const inter = NETWORK_HARDCODED_RATES.interVlan;
   const intra = NETWORK_HARDCODED_RATES.intraVlan;
+  const interRegion = NETWORK_HARDCODED_RATES.interRegion;
   const addon = NETWORK_HARDCODED_RATES.addonData;
   return [
     "Source badge: API = live provider API/price list; HARDCODED = static or fallback values were used.",
@@ -970,6 +1013,9 @@ function buildNetworkDisclaimerText() {
     `Intra-VLAN AWS ${formatRateNumber(intra.aws)}, Azure ${formatRateNumber(
       intra.azure
     )}, GCP ${formatRateNumber(intra.gcp)}.`,
+    `Inter-region AWS ${formatRateNumber(interRegion.aws)}, Azure ${formatRateNumber(
+      interRegion.azure
+    )}, GCP ${formatRateNumber(interRegion.gcp)}.`,
     `Add-on data transfer: AWS gateway ${formatRateNumber(
       addon.aws.gateway
     )}, firewall ${formatRateNumber(addon.aws.firewall)}, LB ${formatRateNumber(
@@ -1290,6 +1336,9 @@ function setMode(mode) {
   }
   if (intraVlanField) {
     intraVlanField.classList.toggle("is-hidden", !isNetwork);
+  }
+  if (interRegionField) {
+    interRegionField.classList.toggle("is-hidden", !isNetwork);
   }
   if (storageIopsField) {
     storageIopsField.classList.toggle("is-hidden", !isStorage);
@@ -1662,6 +1711,8 @@ function updateViewTabsVisibility() {
 function setView(view) {
   const isFocusMode = currentMode === "network" || currentMode === "storage";
   if (isFocusMode) {
+    const showNetworkPanel = currentMode === "network";
+    const showStoragePanel = currentMode === "storage";
     currentView = "compare";
     viewTabButtons.forEach((button) => {
       button.classList.toggle("active", button.dataset.view === "compare");
@@ -1679,16 +1730,16 @@ function setView(view) {
       scenarioDelta.classList.add("is-hidden");
     }
     if (networkFocusPanel) {
-      networkFocusPanel.classList.toggle(
-        "is-hidden",
-        !(currentMode === "network" && currentResultsTab === "pricing")
-      );
+      networkFocusPanel.classList.toggle("is-hidden", !showNetworkPanel);
     }
     if (storageFocusPanel) {
-      storageFocusPanel.classList.toggle(
-        "is-hidden",
-        !(currentMode === "storage" && currentResultsTab === "pricing")
-      );
+      storageFocusPanel.classList.toggle("is-hidden", !showStoragePanel);
+    }
+    if (showNetworkPanel) {
+      setNetworkFocusView(currentNetworkResult === "insight");
+    }
+    if (showStoragePanel) {
+      setStorageFocusView(currentStorageResult === "insight");
     }
     updateVendorSubtabs();
     return;
@@ -1881,6 +1932,40 @@ function buildProviderFieldsFromCard(card) {
     breakdown: card.querySelector("[data-field='breakdown']"),
     note: card.querySelector("[data-field='note']"),
   };
+}
+
+function buildProviderSourceConfidence(provider, options = {}, totals = null) {
+  const pricingFocus =
+    options.pricingFocus === "network"
+      ? "network"
+      : options.pricingFocus === "storage"
+      ? "storage"
+      : "all";
+  const computeSource = formatSourceDetail(
+    provider?.pricingTiers?.onDemand?.source || provider?.source
+  );
+  const networkSource = summarizeItemSources(provider?.networkAddons?.items || []);
+  const egressUsesFallback =
+    Number.isFinite(totals?.egressMonthly) && totals.egressMonthly > 0;
+  if (pricingFocus === "network") {
+    return `Source confidence: compute excluded, network add-ons ${networkSource}, traffic transfer ${egressUsesFallback ? "fallback" : "none"}.`;
+  }
+  if (pricingFocus === "storage") {
+    const sourceValues = Object.values(provider?.storageServices?.sources || {});
+    const storageSource = sourceValues.length
+      ? summarizeItemSources(sourceValues.map((value) => ({ source: value })))
+      : "none selected";
+    return `Source confidence: compute excluded, storage services ${storageSource}.`;
+  }
+  const reserved1Source = formatSourceDetail(provider?.pricingTiers?.reserved1yr?.source);
+  const reserved3Source = formatSourceDetail(provider?.pricingTiers?.reserved3yr?.source);
+  const storageSource =
+    options.mode === "k8s"
+      ? formatSourceDetail(
+          options.sharedStorageSources?.[options.providerKey] || "fallback-default"
+        )
+      : "disk-tier model";
+  return `Source confidence: compute ${computeSource}, 1-year ${reserved1Source}, 3-year ${reserved3Source}, network add-ons ${networkSource}, traffic transfer ${egressUsesFallback ? "fallback" : "none"}, storage ${storageSource}.`;
 }
 
 function updateProvider(target, provider, region, options = {}) {
@@ -2086,6 +2171,9 @@ function updateProvider(target, provider, region, options = {}) {
   ) {
     noteParts.push(provider.reservationNote);
   }
+  if (provider && provider.status !== "error") {
+    noteParts.push(buildProviderSourceConfidence(provider, options, breakdownTotals));
+  }
   target.note.textContent = noteParts.join(" ");
 }
 
@@ -2286,6 +2374,8 @@ async function fetchVendorCard(cardState, basePayload) {
     showReservationNote: providerKey === "aws",
     vmCount,
     mode,
+    providerKey,
+    sharedStorageSources: data.notes?.sharedStorageSources || null,
     pricingFocus: data.input?.pricingFocus,
     pricingProvider: data.input?.pricingProvider,
   });
@@ -2540,9 +2630,21 @@ function renderNetworkProviderCards(data) {
           egressTb: input.egressTb || 0,
           interVlanTb: input.interVlanTb || 0,
           intraVlanTb: input.intraVlanTb || 0,
+          interRegionTb: input.interRegionTb || 0,
         },
         provider
       );
+      const addonSource = summarizeItemSources(
+        (items || []).map((item) => ({ source: item?.source }))
+      );
+      const trafficSource =
+        (input.egressTb || 0) > 0 ||
+        (input.interVlanTb || 0) > 0 ||
+        (input.intraVlanTb || 0) > 0 ||
+        (input.interRegionTb || 0) > 0
+          ? "fallback"
+          : "none";
+      const sourceDetail = `Source detail: add-ons ${addonSource}; transfer ${trafficSource}.`;
       return `
         <article class="focus-provider-card">
           <div class="focus-provider-head">
@@ -2552,6 +2654,7 @@ function renderNetworkProviderCards(data) {
             }">${sourceLabel}</span>
           </div>
           <p class="subtle">API pricing for VPC/VNet, VPC/VPN gateway, and load balancer.</p>
+          <p class="subtle">${sourceDetail}</p>
           <div class="row3">
             <label>
               VPC / VNet flavor
@@ -2660,6 +2763,20 @@ function renderStorageProviderCards(data) {
         },
         breakdown
       );
+      const sourceMap = breakdown?.sources || {};
+      const activeStorageKeys = [
+        objectTb > 0 ? "object" : null,
+        fileTb > 0 ? "file" : null,
+        tableTb > 0 ? "table" : null,
+        queueTb > 0 ? "queue" : null,
+        drEnabled && drDelta > 0 ? "replication" : null,
+      ].filter(Boolean);
+      const fallbackKeys = activeStorageKeys.filter((keyName) =>
+        isFallbackSource(sourceMap[keyName])
+      );
+      const sourceDetail = fallbackKeys.length
+        ? `Source detail: fallback for ${fallbackKeys.join(", ")}.`
+        : "Source detail: API for active services.";
       return `
         <article class="focus-provider-card">
           <div class="focus-provider-head">
@@ -2669,6 +2786,7 @@ function renderStorageProviderCards(data) {
             }">${sourceLabel}</span>
           </div>
           <p class="subtle">API pricing for object, file, table, queue, and DR delta replication.</p>
+          <p class="subtle">${sourceDetail}</p>
           <div class="row1">
             <label>
               Storage accounts
@@ -2762,6 +2880,7 @@ function renderNetworkFocusTable(data) {
         <td>${formatMoney(item?.monthlyTotal || 0)}</td>
         <td>${formatMoney(totals.interVlanMonthly || 0)}</td>
         <td>${formatMoney(totals.intraVlanMonthly || 0)}</td>
+        <td>${formatMoney(totals.interRegionMonthly || 0)}</td>
         <td>${formatMoney(totals.egressMonthly || 0)}</td>
         <td><strong>${formatMoney(totals.total || 0)}</strong></td>
       </tr>`;
@@ -2777,6 +2896,7 @@ function renderNetworkFocusTable(data) {
           <th>${addonLabel} monthly</th>
           <th>Inter-VLAN</th>
           <th>Intra-VLAN</th>
+          <th>Inter-region</th>
           <th>Egress</th>
           <th>Total networking</th>
         </tr>
@@ -3065,9 +3185,10 @@ async function refreshSavedCompare(options = {}) {
   savedCompareRows = rows;
   renderSavedCompareTable(rows);
   const hasError = rows.some((row) => row.error);
+  const successfulRows = rows.filter((row) => row.data && !row.error);
   savedCompareNote.textContent = hasError
-    ? "Saved compare updated with errors."
-    : "Saved compare updated.";
+    ? `Saved compare updated with errors (${successfulRows.length}/${rows.length} succeeded).`
+    : `Saved compare updated (${successfulRows.length} scenarios).`;
   savedCompareNote.classList.toggle("negative", hasError);
 }
 
@@ -3101,6 +3222,7 @@ function renderSavedCompareTable(rows) {
   head.appendChild(headRow);
   table.appendChild(head);
   const body = document.createElement("tbody");
+  const totals = { aws: 0, azure: 0, gcp: 0, private: 0, count: 0 };
   rows.forEach((row) => {
     const tr = document.createElement("tr");
     const input = row.data?.input || row.scenario.input || {};
@@ -3114,6 +3236,26 @@ function renderSavedCompareTable(rows) {
     const privateTotal = row.data
       ? getScenarioProviderTotal(row.data, "private")
       : null;
+    if (Number.isFinite(awsTotal)) {
+      totals.aws += awsTotal;
+    }
+    if (Number.isFinite(azureTotal)) {
+      totals.azure += azureTotal;
+    }
+    if (Number.isFinite(gcpTotal)) {
+      totals.gcp += gcpTotal;
+    }
+    if (Number.isFinite(privateTotal)) {
+      totals.private += privateTotal;
+    }
+    if (
+      Number.isFinite(awsTotal) ||
+      Number.isFinite(azureTotal) ||
+      Number.isFinite(gcpTotal) ||
+      Number.isFinite(privateTotal)
+    ) {
+      totals.count += 1;
+    }
 
     [
       row.scenario.name,
@@ -3175,6 +3317,26 @@ function renderSavedCompareTable(rows) {
     tr.appendChild(actionCell);
     body.appendChild(tr);
   });
+  if (totals.count > 1) {
+    const totalRow = document.createElement("tr");
+    totalRow.className = "saved-compare-total";
+    [
+      "Portfolio total",
+      "-",
+      `${totals.count} scenarios`,
+      formatMonthly(totals.aws),
+      formatMonthly(totals.azure),
+      formatMonthly(totals.gcp),
+      formatMonthly(totals.private),
+      "-",
+      "-",
+    ].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value || "-";
+      totalRow.appendChild(cell);
+    });
+    body.appendChild(totalRow);
+  }
   table.appendChild(body);
   savedCompareTable.appendChild(table);
 }
@@ -3564,21 +3726,64 @@ function buildSavedCompareCsv(rows) {
     "Status",
   ];
   const lines = [headers.join(",")];
+  const totals = { aws: 0, azure: 0, gcp: 0, private: 0, count: 0 };
   rows.forEach((row) => {
     const input = row.data?.input || row.scenario.input || {};
     const regionLabel = getRegionLabel(input.regionKey || "");
+    const awsTotal = row.data ? getScenarioProviderTotal(row.data, "aws") : "";
+    const azureTotal = row.data ? getScenarioProviderTotal(row.data, "azure") : "";
+    const gcpTotal = row.data ? getScenarioProviderTotal(row.data, "gcp") : "";
+    const privateTotal = row.data
+      ? getScenarioProviderTotal(row.data, "private")
+      : "";
     const line = [
       row.scenario.name,
       input.mode || "vm",
       regionLabel,
-      row.data ? getScenarioProviderTotal(row.data, "aws") : "",
-      row.data ? getScenarioProviderTotal(row.data, "azure") : "",
-      row.data ? getScenarioProviderTotal(row.data, "gcp") : "",
-      row.data ? getScenarioProviderTotal(row.data, "private") : "",
+      awsTotal,
+      azureTotal,
+      gcpTotal,
+      privateTotal,
       row.error ? row.error : "OK",
     ];
+    if (Number.isFinite(awsTotal)) {
+      totals.aws += awsTotal;
+    }
+    if (Number.isFinite(azureTotal)) {
+      totals.azure += azureTotal;
+    }
+    if (Number.isFinite(gcpTotal)) {
+      totals.gcp += gcpTotal;
+    }
+    if (Number.isFinite(privateTotal)) {
+      totals.private += privateTotal;
+    }
+    if (
+      Number.isFinite(awsTotal) ||
+      Number.isFinite(azureTotal) ||
+      Number.isFinite(gcpTotal) ||
+      Number.isFinite(privateTotal)
+    ) {
+      totals.count += 1;
+    }
     lines.push(line.map((value) => escapeCsv(value)).join(","));
   });
+  if (totals.count > 1) {
+    lines.push(
+      [
+        "Portfolio total",
+        "-",
+        `${totals.count} scenarios`,
+        totals.aws,
+        totals.azure,
+        totals.gcp,
+        totals.private,
+        "-",
+      ]
+        .map((value) => escapeCsv(value))
+        .join(",")
+    );
+  }
   return lines.join("\n");
 }
 
@@ -3605,19 +3810,21 @@ function buildInsightBuckets(totals, focus = "all") {
   }
   if (focus === "network") {
     const networkAddons = totals.networkMonthly || 0;
-    const interIntra =
-      (totals.interVlanMonthly || 0) + (totals.intraVlanMonthly || 0);
+    const transfer =
+      (totals.interVlanMonthly || 0) +
+      (totals.intraVlanMonthly || 0) +
+      (totals.interRegionMonthly || 0);
     const egress = totals.egressMonthly || 0;
-    const total = networkAddons + interIntra + egress;
+    const total = networkAddons + transfer + egress;
     return {
       compute: networkAddons,
-      storage: interIntra,
+      storage: transfer,
       egress,
       licenses: 0,
       total,
       labels: {
         compute: "Network add-ons",
-        storage: "Inter/Intra VLAN",
+        storage: "VLAN + Inter-region",
         egress: "Egress",
         licenses: "Other",
       },
@@ -3760,7 +3967,7 @@ function renderInsightTo(targetChart, targetNote, data, focusOverride = null) {
   });
   if (pricingFocus === "network") {
     targetNote.textContent =
-      "Networking focus breakdown uses on-demand totals (network add-ons, inter/intra VLAN, egress).";
+      "Networking focus breakdown uses on-demand totals (network add-ons, inter/intra VLAN, inter-region transfer, egress).";
     return;
   }
   if (pricingFocus === "storage") {
@@ -4793,6 +5000,7 @@ async function renderPrivateCompareCards(basePayload, baseData) {
           showReservationNote: false,
           vmCount,
           mode,
+          providerKey: "private",
           pricingFocus: baseData?.input?.pricingFocus,
           pricingProvider: baseData?.input?.pricingProvider,
         });
@@ -4809,6 +5017,7 @@ async function renderPrivateCompareCards(basePayload, baseData) {
           showReservationNote: false,
           vmCount,
           mode,
+          providerKey: "private",
           pricingFocus: baseData?.input?.pricingFocus,
           pricingProvider: baseData?.input?.pricingProvider,
         });
@@ -4824,6 +5033,7 @@ async function renderPrivateCompareCards(basePayload, baseData) {
           showReservationNote: false,
           vmCount,
           mode,
+          providerKey: "private",
           pricingFocus: data.input?.pricingFocus,
           pricingProvider: data.input?.pricingProvider,
         });
@@ -4843,6 +5053,7 @@ async function renderPrivateCompareCards(basePayload, baseData) {
             showReservationNote: false,
             vmCount,
             mode,
+            providerKey: "private",
             pricingFocus: baseData?.input?.pricingFocus,
             pricingProvider: baseData?.input?.pricingProvider,
           }
@@ -5088,6 +5299,9 @@ function applyScenarioInput(input) {
   }
   if (Number.isFinite(input.intraVlanTb) && intraVlanInput) {
     intraVlanInput.value = input.intraVlanTb.toString();
+  }
+  if (Number.isFinite(input.interRegionTb) && interRegionInput) {
+    interRegionInput.value = input.interRegionTb.toString();
   }
   if (Number.isFinite(input.storageIops) && storageIopsInput) {
     storageIopsInput.value = input.storageIops.toString();
@@ -5753,6 +5967,7 @@ function serializeForm(formElement) {
     egressTb,
     interVlanTb: Number.parseFloat(data.interVlanTb),
     intraVlanTb: Number.parseFloat(data.intraVlanTb),
+    interRegionTb: Number.parseFloat(data.interRegionTb),
     storageIops: Number.parseFloat(data.storageIops),
     storageThroughputMbps: Number.parseFloat(data.storageThroughputMbps),
     hours: Number.parseFloat(data.hours),
@@ -5876,6 +6091,8 @@ async function fetchAndRender() {
     showReservationNote: true,
     vmCount,
     mode,
+    providerKey: "aws",
+    sharedStorageSources: data.notes?.sharedStorageSources || null,
     pricingFocus: data.input?.pricingFocus,
     pricingProvider: data.input?.pricingProvider,
   });
@@ -5884,6 +6101,8 @@ async function fetchAndRender() {
     showReservationNote: false,
     vmCount,
     mode,
+    providerKey: "azure",
+    sharedStorageSources: data.notes?.sharedStorageSources || null,
     pricingFocus: data.input?.pricingFocus,
     pricingProvider: data.input?.pricingProvider,
   });
@@ -5892,6 +6111,8 @@ async function fetchAndRender() {
     showReservationNote: false,
     vmCount,
     mode,
+    providerKey: "gcp",
+    sharedStorageSources: data.notes?.sharedStorageSources || null,
     pricingFocus: data.input?.pricingFocus,
     pricingProvider: data.input?.pricingProvider,
   });
@@ -6208,6 +6429,7 @@ function buildCsv(data) {
         Egress_TB: input.egressTb ?? "",
         Inter_VLAN_TB: input.interVlanTb ?? "",
         Intra_VLAN_TB: input.intraVlanTb ?? "",
+        Inter_Region_TB: input.interRegionTb ?? "",
         Storage_IOPS: input.storageIops ?? "",
         Storage_Throughput_MBps: input.storageThroughputMbps ?? "",
         Hours: input.hours ?? "",
@@ -6867,7 +7089,12 @@ if (runRegionCompareButton) {
   runRegionCompareButton.addEventListener("click", runRegionCompare);
 }
 if (savedCompareRefresh) {
-  savedCompareRefresh.addEventListener("click", refreshSavedCompare);
+  savedCompareRefresh.addEventListener("click", () => {
+    const scenarioIds = resolveScenarioSelections();
+    refreshSavedCompare({
+      scenarioIds: scenarioIds.length ? scenarioIds : null,
+    });
+  });
 }
 if (savedComparePrivateRun) {
   savedComparePrivateRun.addEventListener("click", runSavedPrivateCompare);

@@ -310,9 +310,9 @@ const EGRESS_RATES = {
   gcp: 0.12,
 };
 const NETWORK_TRAFFIC_RATES = {
-  aws: { interVlan: 0.01, intraVlan: 0 },
-  azure: { interVlan: 0.01, intraVlan: 0 },
-  gcp: { interVlan: 0.01, intraVlan: 0 },
+  aws: { interVlan: 0.01, intraVlan: 0, interRegion: 0.02 },
+  azure: { interVlan: 0.01, intraVlan: 0, interRegion: 0.02 },
+  gcp: { interVlan: 0.01, intraVlan: 0, interRegion: 0.02 },
 };
 const NETWORK_ADDON_DATA_RATES = {
   aws: { vpc: 0, gateway: 0.02, firewall: 0.01, loadBalancer: 0.008 },
@@ -2262,6 +2262,7 @@ function computeStorageFocusTotals(profile, providerRates) {
       networkMonthly: 0,
       interVlanMonthly: 0,
       intraVlanMonthly: 0,
+      interRegionMonthly: 0,
       iopsMonthly: 0,
       throughputMonthly: 0,
       drMonthly: 0,
@@ -3541,6 +3542,7 @@ function computeTotals({
   networkMonthly,
   interVlanMonthly,
   intraVlanMonthly,
+  interRegionMonthly,
   iopsMonthly,
   throughputMonthly,
   sqlLicenseRate,
@@ -3590,6 +3592,9 @@ function computeTotals({
   const intraVlanBase = Number.isFinite(intraVlanMonthly)
     ? intraVlanMonthly
     : 0;
+  const interRegionBase = Number.isFinite(interRegionMonthly)
+    ? interRegionMonthly
+    : 0;
   const iopsBase = Number.isFinite(iopsMonthly) ? iopsMonthly : 0;
   const throughputBase = Number.isFinite(throughputMonthly)
     ? throughputMonthly
@@ -3614,6 +3619,7 @@ function computeTotals({
     networkBase +
     interVlanBase +
     intraVlanBase +
+    interRegionBase +
     controlPlane;
   return {
     computeMonthly,
@@ -3626,6 +3632,7 @@ function computeTotals({
     networkMonthly: networkBase,
     interVlanMonthly: interVlanBase,
     intraVlanMonthly: intraVlanBase,
+    interRegionMonthly: interRegionBase,
     iopsMonthly: iopsBase,
     throughputMonthly: throughputBase,
     drMonthly,
@@ -3646,9 +3653,14 @@ function applyPricingFocusToTotals(totals, focus) {
     const networkMonthly = totals.networkMonthly || 0;
     const interVlanMonthly = totals.interVlanMonthly || 0;
     const intraVlanMonthly = totals.intraVlanMonthly || 0;
+    const interRegionMonthly = totals.interRegionMonthly || 0;
     const egressMonthly = totals.egressMonthly || 0;
     const total =
-      networkMonthly + interVlanMonthly + intraVlanMonthly + egressMonthly;
+      networkMonthly +
+      interVlanMonthly +
+      intraVlanMonthly +
+      interRegionMonthly +
+      egressMonthly;
     return {
       ...totals,
       computeMonthly,
@@ -3659,6 +3671,7 @@ function applyPricingFocusToTotals(totals, focus) {
       networkMonthly,
       interVlanMonthly,
       intraVlanMonthly,
+      interRegionMonthly,
       iopsMonthly: 0,
       throughputMonthly: 0,
       sqlMonthly,
@@ -3682,6 +3695,7 @@ function applyPricingFocusToTotals(totals, focus) {
       networkMonthly: 0,
       interVlanMonthly: 0,
       intraVlanMonthly: 0,
+      interRegionMonthly: 0,
       iopsMonthly,
       throughputMonthly,
       sqlMonthly,
@@ -3845,6 +3859,8 @@ app.post("/api/compare", async (req, res) => {
     pricingFocus === "network" ? Math.max(0, toNumber(body.interVlanTb, 0)) : 0;
   const intraVlanTb =
     pricingFocus === "network" ? Math.max(0, toNumber(body.intraVlanTb, 0)) : 0;
+  const interRegionTb =
+    pricingFocus === "network" ? Math.max(0, toNumber(body.interRegionTb, 0)) : 0;
   const storageIops =
     pricingFocus === "storage" ? Math.max(0, toNumber(body.storageIops, 0)) : 0;
   const storageThroughputMbps =
@@ -3854,6 +3870,7 @@ app.post("/api/compare", async (req, res) => {
   const egressGb = egressTb * 1024;
   const interVlanGb = interVlanTb * 1024;
   const intraVlanGb = intraVlanTb * 1024;
+  const interRegionGb = interRegionTb * 1024;
   const hours = Math.max(1, toNumber(body.hours, HOURS_IN_MONTH));
   const drPercent =
     pricingFocus === "all" ? Math.max(0, toNumber(body.drPercent, 0)) : 0;
@@ -4081,6 +4098,12 @@ app.post("/api/compare", async (req, res) => {
     intraVlanGb * NETWORK_TRAFFIC_RATES.azure.intraVlan;
   const gcpIntraVlanMonthly =
     intraVlanGb * NETWORK_TRAFFIC_RATES.gcp.intraVlan;
+  const awsInterRegionMonthly =
+    interRegionGb * NETWORK_TRAFFIC_RATES.aws.interRegion;
+  const azureInterRegionMonthly =
+    interRegionGb * NETWORK_TRAFFIC_RATES.azure.interRegion;
+  const gcpInterRegionMonthly =
+    interRegionGb * NETWORK_TRAFFIC_RATES.gcp.interRegion;
   const awsIopsMonthly =
     storageIops * STORAGE_PERFORMANCE_RATES.aws.iopsMonthly;
   const azureIopsMonthly =
@@ -4717,6 +4740,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: awsNetworkAddons.monthlyTotal,
       interVlanMonthly: awsInterVlanMonthly,
       intraVlanMonthly: awsIntraVlanMonthly,
+      interRegionMonthly: awsInterRegionMonthly,
       iopsMonthly: awsIopsMonthly,
       throughputMonthly: awsThroughputMonthly,
       sqlLicenseRate,
@@ -4746,6 +4770,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: azureNetworkAddons.monthlyTotal,
       interVlanMonthly: azureInterVlanMonthly,
       intraVlanMonthly: azureIntraVlanMonthly,
+      interRegionMonthly: azureInterRegionMonthly,
       iopsMonthly: azureIopsMonthly,
       throughputMonthly: azureThroughputMonthly,
       sqlLicenseRate,
@@ -4775,6 +4800,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: awsNetworkAddons.monthlyTotal,
       interVlanMonthly: awsInterVlanMonthly,
       intraVlanMonthly: awsIntraVlanMonthly,
+      interRegionMonthly: awsInterRegionMonthly,
       iopsMonthly: awsIopsMonthly,
       throughputMonthly: awsThroughputMonthly,
       sqlLicenseRate,
@@ -4804,6 +4830,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: awsNetworkAddons.monthlyTotal,
       interVlanMonthly: awsInterVlanMonthly,
       intraVlanMonthly: awsIntraVlanMonthly,
+      interRegionMonthly: awsInterRegionMonthly,
       iopsMonthly: awsIopsMonthly,
       throughputMonthly: awsThroughputMonthly,
       sqlLicenseRate,
@@ -4833,6 +4860,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: azureNetworkAddons.monthlyTotal,
       interVlanMonthly: azureInterVlanMonthly,
       intraVlanMonthly: azureIntraVlanMonthly,
+      interRegionMonthly: azureInterRegionMonthly,
       iopsMonthly: azureIopsMonthly,
       throughputMonthly: azureThroughputMonthly,
       sqlLicenseRate,
@@ -4862,6 +4890,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: azureNetworkAddons.monthlyTotal,
       interVlanMonthly: azureInterVlanMonthly,
       intraVlanMonthly: azureIntraVlanMonthly,
+      interRegionMonthly: azureInterRegionMonthly,
       iopsMonthly: azureIopsMonthly,
       throughputMonthly: azureThroughputMonthly,
       sqlLicenseRate,
@@ -4891,6 +4920,7 @@ app.post("/api/compare", async (req, res) => {
       networkMonthly: gcpNetworkAddons.monthlyTotal,
       interVlanMonthly: gcpInterVlanMonthly,
       intraVlanMonthly: gcpIntraVlanMonthly,
+      interRegionMonthly: gcpInterRegionMonthly,
       iopsMonthly: gcpIopsMonthly,
       throughputMonthly: gcpThroughputMonthly,
       sqlLicenseRate,
@@ -4921,6 +4951,7 @@ app.post("/api/compare", async (req, res) => {
           networkMonthly: privateNetworkMonthlyTotal,
           interVlanMonthly: 0,
           intraVlanMonthly: 0,
+          interRegionMonthly: 0,
           iopsMonthly: 0,
           throughputMonthly: 0,
           sqlLicenseRate,
@@ -4987,7 +5018,7 @@ app.post("/api/compare", async (req, res) => {
     useApiPricing ? "azure-retail-reservation" : "public-snapshot";
   const constraintsNote =
     pricingFocus === "network"
-      ? "Networking focus: public-cloud VPC/VNet, VPC gateway, and load balancer pricing only (with per-component counts and data transfer). Compute, storage, SQL, DR, and private cloud are excluded."
+      ? "Networking focus: public-cloud VPC/VNet, VPC gateway, and load balancer pricing only (with per-component counts and data transfer). Inter-VLAN, intra-VLAN, inter-region transfer, and egress are modeled. Compute, storage, SQL, DR, and private cloud are excluded."
       : pricingFocus === "storage"
       ? "Storage focus: public storage service pricing only (object, file, table, queue) with optional DR replication delta. Compute, networking, SQL, DR uplift, and private cloud are excluded."
       : mode === "k8s"
@@ -5009,6 +5040,7 @@ app.post("/api/compare", async (req, res) => {
       egressGb,
       interVlanTb,
       intraVlanTb,
+      interRegionTb,
       storageIops,
       storageThroughputMbps,
       hours,
