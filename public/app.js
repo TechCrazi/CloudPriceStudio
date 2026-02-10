@@ -50,6 +50,12 @@ const storageIopsInput = form.querySelector("[name='storageIops']");
 const storageThroughputInput = form.querySelector(
   "[name='storageThroughputMbps']"
 );
+const storageRequestInput = form.querySelector(
+  "[name='storageRequestUnitsMillion']"
+);
+const storageOperationInput = form.querySelector(
+  "[name='storageOperationUnitsMillion']"
+);
 const dataDiskInput = form.querySelector("[name='dataDiskTb']");
 const backupEnabledInput = form.querySelector("[name='backupEnabled']");
 const drPercentInput = form.querySelector("[name='drPercent']");
@@ -77,6 +83,8 @@ const intraVlanField = intraVlanInput?.closest("label");
 const interRegionField = interRegionInput?.closest("label");
 const storageIopsField = storageIopsInput?.closest("label");
 const storageThroughputField = storageThroughputInput?.closest("label");
+const storageRequestField = storageRequestInput?.closest("label");
+const storageOperationField = storageOperationInput?.closest("label");
 const drField = drPercentInput?.closest("label");
 const networkSection = document.getElementById("network-section");
 const networkFields = document.getElementById("network-fields");
@@ -88,6 +96,9 @@ const scenarioNameInput = document.getElementById("scenario-name");
 const scenarioList = document.getElementById("scenario-list");
 const scenarioNote = document.getElementById("scenario-note");
 const scenarioDelta = document.getElementById("scenario-delta");
+const scenarioComponentDelta = document.getElementById(
+  "scenario-component-delta"
+);
 const saveScenarioButton = document.getElementById("save-scenario");
 const loadScenarioButton = document.getElementById("load-scenario");
 const cloneScenarioButton = document.getElementById("clone-scenario");
@@ -164,6 +175,16 @@ const resultsTabs = document.getElementById("results-tabs");
 const resultsTabButtons = document.querySelectorAll(".results-tab");
 const pricingPanel = document.getElementById("pricing-panel");
 const savedComparePanel = document.getElementById("saved-compare-panel");
+const billingPanel = document.getElementById("billing-panel");
+const billingProviderTabs = document.querySelectorAll("[data-billing-provider]");
+const billingImportButton = document.getElementById("billing-import-csv");
+const billingImportInput = document.getElementById("billing-import-file");
+const billingClearButton = document.getElementById("billing-clear");
+const billingClearAllButton = document.getElementById("billing-clear-all");
+const billingNote = document.getElementById("billing-note");
+const billingSummary = document.getElementById("billing-summary");
+const billingChart = document.getElementById("billing-chart");
+const billingTable = document.getElementById("billing-table");
 const savedCompareTable = document.getElementById("saved-compare-table");
 const savedCompareNote = document.getElementById("saved-compare-note");
 const savedCompareRefresh = document.getElementById("saved-compare-refresh");
@@ -185,12 +206,33 @@ const savedComparePrivateNote = document.getElementById(
 const insightPanel = document.getElementById("insight-panel");
 const insightChart = document.getElementById("insight-chart");
 const insightNote = document.getElementById("insight-note");
+const qualityPanel = document.getElementById("quality-panel");
+const qualityMeta = document.getElementById("quality-meta");
+const qualityList = document.getElementById("quality-list");
+const unitEconPanel = document.getElementById("unit-econ-panel");
+const unitEconTable = document.getElementById("unit-econ-table");
+const unitEconNote = document.getElementById("unit-econ-note");
+const recommendPanel = document.getElementById("recommend-panel");
+const recommendList = document.getElementById("recommend-list");
+const recommendNote = document.getElementById("recommend-note");
+const recommendProviderFilter = document.getElementById(
+  "recommend-provider-filter"
+);
+const recommendLimitInput = document.getElementById("recommend-limit");
+const runRecommendationsButton = document.getElementById(
+  "run-recommendations"
+);
 const commitPanel = document.getElementById("commit-panel");
 const commitNote = document.getElementById("commit-note");
 const commitDiscountInputs = {
   aws: document.querySelector("[data-commit-discount='aws']"),
   azure: document.querySelector("[data-commit-discount='azure']"),
   gcp: document.querySelector("[data-commit-discount='gcp']"),
+};
+const commitTypeInputs = {
+  aws: document.querySelector("[data-commit-type='aws']"),
+  azure: document.querySelector("[data-commit-type='azure']"),
+  gcp: document.querySelector("[data-commit-type='gcp']"),
 };
 const commitFields = {
   aws: {
@@ -328,6 +370,40 @@ const PRIVATE_COMPARE_KEY = "cloud-price-private-compare";
 const PRIVATE_COMPARE_SLOTS = 2;
 const VMWARE_VCPU_PER_SOCKET = 3;
 const MAX_VENDOR_OPTIONS = 4;
+const BILLING_IMPORT_KEY = "cloud-price-billing-import";
+const SCENARIO_SCHEMA_VERSION = 2;
+const QUALITY_WARNING_LIMIT = 8;
+const COMMITMENT_TYPE_DEFAULTS = {
+  aws: "aws-savings-plan",
+  azure: "azure-reservation",
+  gcp: "gcp-cud-1y",
+};
+const COMMITMENT_TYPE_PROFILES = {
+  "aws-savings-plan": {
+    label: "AWS Savings Plan",
+    recommendedDiscount: 25,
+  },
+  "aws-reserved-instance": {
+    label: "AWS Reserved Instance",
+    recommendedDiscount: 30,
+  },
+  "azure-reservation": {
+    label: "Azure Reservation",
+    recommendedDiscount: 28,
+  },
+  "azure-savings-plan": {
+    label: "Azure Savings Plan",
+    recommendedDiscount: 22,
+  },
+  "gcp-cud-1y": {
+    label: "GCP CUD 1-year",
+    recommendedDiscount: 20,
+  },
+  "gcp-cud-3y": {
+    label: "GCP CUD 3-year",
+    recommendedDiscount: 40,
+  },
+};
 let sqlRateTouched = false;
 let sizeOptions = null;
 let lastPricing = null;
@@ -338,6 +414,7 @@ let currentResultsTab = "pricing";
 let currentVendorView = "options";
 let currentNetworkResult = "vpc";
 let currentStorageResult = "object";
+let currentBillingProvider = "aws";
 let savedCompareRows = [];
 let savedComparePrivateRows = [];
 let savedCompareScenarioSelections = null;
@@ -352,6 +429,12 @@ const vendorOptionState = {
   private: [],
 };
 let scenarioStore = [];
+let billingImportStore = { aws: null, azure: null, gcp: null };
+const billingExpandedServices = {
+  aws: new Set(),
+  azure: new Set(),
+  gcp: new Set(),
+};
 const instancePools = {
   aws: [],
   azure: [],
@@ -392,6 +475,16 @@ const SCENARIO_CSV_FIELDS = [
   { key: "interRegionTb", label: "Inter_Region_TB", type: "number" },
   { key: "storageIops", label: "Storage_IOPS", type: "number" },
   { key: "storageThroughputMbps", label: "Storage_Throughput_MBps", type: "number" },
+  {
+    key: "storageRequestUnitsMillion",
+    label: "Storage_Request_Units_Million",
+    type: "number",
+  },
+  {
+    key: "storageOperationUnitsMillion",
+    label: "Storage_Operation_Units_Million",
+    type: "number",
+  },
   { key: "workload", label: "Workload", type: "string" },
   { key: "regionKey", label: "Region_Key", type: "string" },
   { key: "pricingProvider", label: "Pricing_Provider", type: "string" },
@@ -1153,23 +1246,11 @@ function setNetworkFocusView(showInsight) {
   if (networkInsightPanel) {
     networkInsightPanel.classList.toggle("is-hidden", !showInsight);
   }
-  if (networkProviderCards) {
-    networkProviderCards.classList.toggle("is-hidden", showInsight);
-  }
-  if (networkFocusTable) {
-    networkFocusTable.classList.toggle("is-hidden", showInsight);
-  }
 }
 
 function setStorageFocusView(showInsight) {
   if (storageInsightPanel) {
     storageInsightPanel.classList.toggle("is-hidden", !showInsight);
-  }
-  if (storageProviderCards) {
-    storageProviderCards.classList.toggle("is-hidden", showInsight);
-  }
-  if (storageFocusTable) {
-    storageFocusTable.classList.toggle("is-hidden", showInsight);
   }
 }
 
@@ -1190,8 +1271,18 @@ function setNetworkResultTab(tab, options = {}) {
   setNetworkFocusView(currentNetworkResult === "insight");
   if (currentNetworkResult === "insight") {
     renderFocusInsight(lastPricing, "network");
+  } else if (lastPricing && currentMode === "network") {
+    renderNetworkFocusTable(lastPricing);
   }
   if (!options.silent) {
+    // Keep focus-tab navigation responsive: switching to Insight should
+    // not force a fresh compare that can reset focus state.
+    if (currentNetworkResult === "insight") {
+      if (!lastPricing) {
+        handleCompare();
+      }
+      return;
+    }
     handleCompare();
   }
 }
@@ -1209,8 +1300,18 @@ function setStorageResultTab(tab, options = {}) {
   setStorageFocusView(currentStorageResult === "insight");
   if (currentStorageResult === "insight") {
     renderFocusInsight(lastPricing, "storage");
+  } else if (lastPricing && currentMode === "storage") {
+    renderStorageFocusTable(lastPricing);
   }
   if (!options.silent) {
+    // Keep focus-tab navigation responsive: switching to Insight should
+    // not force a fresh compare that can reset focus state.
+    if (currentStorageResult === "insight") {
+      if (!lastPricing) {
+        handleCompare();
+      }
+      return;
+    }
     handleCompare();
   }
 }
@@ -1346,6 +1447,12 @@ function setMode(mode) {
   if (storageThroughputField) {
     storageThroughputField.classList.toggle("is-hidden", !isStorage);
   }
+  if (storageRequestField) {
+    storageRequestField.classList.toggle("is-hidden", !isStorage);
+  }
+  if (storageOperationField) {
+    storageOperationField.classList.toggle("is-hidden", !isStorage);
+  }
   if (drField) {
     drField.classList.toggle("is-hidden", isNetwork || isStorage);
   }
@@ -1460,6 +1567,12 @@ function updateResultsHeading() {
     resultsSubtitle.textContent = RESULTS_TAB_COPY.saved.subtitle;
     return;
   }
+  if (activePanel === "billing") {
+    resultsTitle.textContent = "Billing Import";
+    resultsSubtitle.textContent =
+      "Import provider billing CSVs and visualize cost allocation by service.";
+    return;
+  }
   if (currentResultsTab === "saved") {
     if (currentMode === "network") {
       resultsTitle.textContent = "Network Saved Compare";
@@ -1512,7 +1625,8 @@ function updateResultsTabsVisibility() {
   const showTabs =
     activePanel !== "private" &&
     activePanel !== "scenarios" &&
-    activePanel !== "saved";
+    activePanel !== "saved" &&
+    activePanel !== "billing";
   resultsTabs.classList.toggle("is-hidden", !showTabs || isFocusMode);
   if (!showTabs) {
     currentResultsTab = "pricing";
@@ -1535,7 +1649,8 @@ function updateResultsTabsVisibility() {
 function setResultsTab(tab, options = {}) {
   const isFocusMode = currentMode === "network" || currentMode === "storage";
   const nextTab =
-    tab === "saved" || tab === "insight" || (!isFocusMode && tab === "commit")
+    !isFocusMode &&
+    (tab === "saved" || tab === "insight" || tab === "commit")
       ? tab
       : "pricing";
   currentResultsTab = nextTab;
@@ -1601,6 +1716,8 @@ function setPanel(panel) {
       ? "private"
       : panel === "scenarios"
       ? "scenarios"
+      : panel === "billing"
+      ? "billing"
       : panel === "k8s"
       ? "k8s"
       : panel === "network"
@@ -1617,7 +1734,8 @@ function setPanel(panel) {
   if (
     nextPanel === "private" ||
     nextPanel === "scenarios" ||
-    nextPanel === "saved"
+    nextPanel === "saved" ||
+    nextPanel === "billing"
   ) {
     if (cloudPanel) {
       cloudPanel.classList.add("is-hidden");
@@ -1631,6 +1749,9 @@ function setPanel(panel) {
     if (savedComparePanel) {
       savedComparePanel.classList.toggle("is-hidden", nextPanel !== "saved");
     }
+    if (billingPanel) {
+      billingPanel.classList.toggle("is-hidden", nextPanel !== "billing");
+    }
     if (formCard) {
       formCard.classList.add("is-hidden");
     }
@@ -1639,9 +1760,6 @@ function setPanel(panel) {
     }
     if (pricingPanel) {
       pricingPanel.classList.add("is-hidden");
-    }
-    if (savedComparePanel) {
-      savedComparePanel.classList.add("is-hidden");
     }
     if (insightPanel) {
       insightPanel.classList.add("is-hidden");
@@ -1654,6 +1772,9 @@ function setPanel(panel) {
     updateViewTabsVisibility();
     if (nextPanel === "saved") {
       refreshSavedCompare();
+    }
+    if (nextPanel === "billing") {
+      setBillingProvider(currentBillingProvider);
     }
     return;
   }
@@ -1668,6 +1789,9 @@ function setPanel(panel) {
   }
   if (savedComparePanel) {
     savedComparePanel.classList.add("is-hidden");
+  }
+  if (billingPanel) {
+    billingPanel.classList.add("is-hidden");
   }
   if (formCard) {
     formCard.classList.remove("is-hidden");
@@ -1692,6 +1816,7 @@ function updateViewTabsVisibility() {
     activePanel !== "private" &&
     activePanel !== "scenarios" &&
     activePanel !== "saved" &&
+    activePanel !== "billing" &&
     currentResultsTab === "pricing" &&
     currentMode !== "network" &&
     currentMode !== "storage";
@@ -1700,7 +1825,8 @@ function updateViewTabsVisibility() {
     !showTabs &&
     (activePanel === "private" ||
       activePanel === "scenarios" ||
-      activePanel === "saved") &&
+      activePanel === "saved" ||
+      activePanel === "billing") &&
     currentView !== "compare"
   ) {
     currentView = "compare";
@@ -2241,7 +2367,10 @@ function resolveVendorInstanceTypes(providerKey, sizes) {
 }
 
 function buildPrivateOptionDefaults() {
-  const primaryConfig = getPrimaryPrivateConfig();
+  const primaryProvider = getPrimaryPrivateProvider();
+  const primaryConfig = normalizePrivateConfig(
+    primaryProvider?.config || buildDefaultPrivateConfig()
+  );
   const osDefault = Number.parseFloat(primaryConfig?.vmOsDiskGb);
   const osDisk =
     Number.isFinite(osDefault) && osDefault > 0
@@ -2254,6 +2383,7 @@ function buildPrivateOptionDefaults() {
     ram: flavor.ram,
     osDiskGb: osDisk,
     dataDiskGb: dataGb,
+    providerId: primaryProvider?.id || "",
   }));
 }
 
@@ -2309,6 +2439,16 @@ function createPrivateOptionCard(optionIndex, option) {
   const ramInput = card.querySelector("[data-field='spec-ram']");
   const osInput = card.querySelector("[data-field='spec-os']");
   const dataInput = card.querySelector("[data-field='spec-data']");
+  const providerSelect = card.querySelector("[data-field='providerSelect']");
+  const selectedProviderId =
+    option.providerId ||
+    getPrimaryPrivateProvider()?.id ||
+    privateProviderStore.providers[0]?.id ||
+    "";
+  fillPrivateProviderSelect(providerSelect, selectedProviderId);
+  if (providerSelect instanceof HTMLSelectElement) {
+    providerSelect.disabled = privateProviderStore.providers.length < 2;
+  }
   if (vcpuInput) {
     vcpuInput.value = option.vcpu;
   }
@@ -2330,13 +2470,15 @@ function createPrivateOptionCard(optionIndex, option) {
       osInput,
       dataInput,
     },
+    providerSelect,
+    providerId: selectedProviderId,
     providerKey: "private",
     optionIndex,
   };
 }
 
 function buildVendorPayload(basePayload, cardState) {
-  const payload = { ...basePayload };
+  let payload = { ...basePayload };
   if (cardState.providerKey === "aws") {
     payload.awsInstanceType = cardState.instanceSelect?.value || "";
   }
@@ -2347,6 +2489,18 @@ function buildVendorPayload(basePayload, cardState) {
     payload.gcpInstanceType = cardState.instanceSelect?.value || "";
   }
   if (cardState.providerKey === "private") {
+    const selectedProviderId =
+      cardState.providerSelect?.value || cardState.providerId || "";
+    const selectedProvider = selectedProviderId
+      ? getPrivateProviderById(selectedProviderId)
+      : null;
+    if (selectedProvider?.config) {
+      payload = applyPrivateConfigToPayload(payload, selectedProvider.config, {
+        forceEnable: true,
+      });
+    } else {
+      payload.privateEnabled = false;
+    }
     const vcpu = Number.parseFloat(cardState.specInputs.vcpuInput?.value);
     const ram = Number.parseFloat(cardState.specInputs.ramInput?.value);
     const osDiskGb = Number.parseFloat(cardState.specInputs.osInput?.value);
@@ -2364,9 +2518,46 @@ function buildVendorPayload(basePayload, cardState) {
 
 async function fetchVendorCard(cardState, basePayload) {
   const payload = buildVendorPayload(basePayload, cardState);
+  if (cardState.providerKey === "private" && !payload.privateEnabled) {
+    updateProvider(
+      cardState.fields,
+      {
+        status: "manual",
+        message:
+          privateProviderStore.providers.length > 0
+            ? "Select a private provider profile."
+            : "Create and save a private provider profile first.",
+        family: "Private cloud",
+        instance: {},
+        pricingTiers: {},
+      },
+      { location: "Private DC" },
+      {
+        showMonthlyRate: false,
+        showReservationNote: false,
+        vmCount: basePayload.vmCount,
+        mode: basePayload.mode || currentMode,
+        providerKey: "private",
+        pricingFocus: basePayload.pricingFocus,
+        pricingProvider: basePayload.pricingProvider,
+      }
+    );
+    return null;
+  }
   const data = await comparePricing(payload);
   const providerKey = cardState.providerKey;
-  const providerData = data[providerKey];
+  let providerData = data[providerKey];
+  if (providerKey === "private") {
+    const selectedProvider = getPrivateProviderById(
+      cardState.providerSelect?.value || cardState.providerId || ""
+    );
+    if (selectedProvider) {
+      providerData = {
+        ...providerData,
+        family: `Private cloud (${selectedProvider.name})`,
+      };
+    }
+  }
   const vmCount = data.input?.vmCount ?? payload.vmCount;
   const mode = data.input?.mode ?? payload.mode ?? "vm";
   updateProvider(cardState.fields, providerData, data.region[providerKey], {
@@ -2400,11 +2591,13 @@ async function fetchVendorOptions() {
       vendorGrid.appendChild(cardState.element);
       cards.push(cardState);
       const onChange = async () => {
+        cardState.providerId = cardState.providerSelect?.value || "";
         vendorOptionState.private[index] = {
           vcpu: Number.parseFloat(cardState.specInputs.vcpuInput?.value),
           ram: Number.parseFloat(cardState.specInputs.ramInput?.value),
           osDiskGb: Number.parseFloat(cardState.specInputs.osInput?.value),
           dataDiskGb: Number.parseFloat(cardState.specInputs.dataInput?.value),
+          providerId: cardState.providerId,
         };
         try {
           await fetchVendorCard(cardState, serializeForm(form));
@@ -2418,6 +2611,9 @@ async function fetchVendorOptions() {
           input.addEventListener("change", onChange);
         }
       });
+      if (cardState.providerSelect) {
+        cardState.providerSelect.addEventListener("change", onChange);
+      }
     });
   } else {
     const sizes = instancePools[providerKey] || [];
@@ -3991,6 +4187,415 @@ function renderFocusInsight(data, focus) {
   if (focus === "storage") {
     renderInsightTo(storageInsightChart, storageInsightNote, data, "storage");
   }
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "n/a";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "n/a";
+  }
+  return date.toLocaleString();
+}
+
+function getProviderRowsForPanels(data) {
+  if (!data) {
+    return [];
+  }
+  const mode = data.input?.mode || "vm";
+  const rows = [
+    { key: "aws", label: getProviderLabelForMode("aws", mode), provider: data.aws },
+    {
+      key: "azure",
+      label: getProviderLabelForMode("azure", mode),
+      provider: data.azure,
+    },
+    { key: "gcp", label: getProviderLabelForMode("gcp", mode), provider: data.gcp },
+  ];
+  if (data.private?.enabled && data.input?.pricingFocus === "all") {
+    const privateName = getPrimaryPrivateProvider()?.name;
+    rows.push({
+      key: "private",
+      label: privateName ? `Private (${privateName})` : "Private",
+      provider: data.private,
+    });
+  }
+  return rows;
+}
+
+function getProviderOnDemandTotals(provider) {
+  return provider?.pricingTiers?.onDemand?.totals || provider?.totals || null;
+}
+
+function getNormalizationInfo(data, providerKey) {
+  const input = data?.input || {};
+  const focus = input.pricingFocus || "all";
+  if (focus === "network") {
+    const providerPrefix =
+      providerKey === "aws" ? "aws" : providerKey === "azure" ? "azure" : "gcp";
+    const totalTb =
+      (Number.isFinite(input[`${providerPrefix}NetworkVpcDataTb`])
+        ? input[`${providerPrefix}NetworkVpcDataTb`]
+        : 0) +
+      (Number.isFinite(input[`${providerPrefix}NetworkGatewayDataTb`])
+        ? input[`${providerPrefix}NetworkGatewayDataTb`]
+        : 0) +
+      (Number.isFinite(input[`${providerPrefix}NetworkLoadBalancerDataTb`])
+        ? input[`${providerPrefix}NetworkLoadBalancerDataTb`]
+        : 0) +
+      (Number.isFinite(input.interVlanTb) ? input.interVlanTb : 0) +
+      (Number.isFinite(input.intraVlanTb) ? input.intraVlanTb : 0) +
+      (Number.isFinite(input.interRegionTb) ? input.interRegionTb : 0) +
+      (Number.isFinite(input.egressTb) ? input.egressTb : 0);
+    if (totalTb > 0) {
+      return { divisor: totalTb, label: "TB transfer" };
+    }
+    return { divisor: null, label: "TB transfer" };
+  }
+  if (focus === "storage") {
+    const providerPrefix =
+      providerKey === "aws" ? "aws" : providerKey === "azure" ? "azure" : "gcp";
+    const objectTb = Number.isFinite(input[`${providerPrefix}StorageObjectTb`])
+      ? input[`${providerPrefix}StorageObjectTb`]
+      : 0;
+    const fileTb = Number.isFinite(input[`${providerPrefix}StorageFileTb`])
+      ? input[`${providerPrefix}StorageFileTb`]
+      : 0;
+    const tableTb = Number.isFinite(input[`${providerPrefix}StorageTableTb`])
+      ? input[`${providerPrefix}StorageTableTb`]
+      : 0;
+    const queueTb = Number.isFinite(input[`${providerPrefix}StorageQueueTb`])
+      ? input[`${providerPrefix}StorageQueueTb`]
+      : 0;
+    const drDeltaTb =
+      input[`${providerPrefix}StorageDrEnabled`] &&
+      Number.isFinite(input[`${providerPrefix}StorageDrDeltaTb`])
+        ? input[`${providerPrefix}StorageDrDeltaTb`]
+        : 0;
+    const totalTb = objectTb + fileTb + tableTb + queueTb + drDeltaTb;
+    if (totalTb > 0) {
+      return { divisor: totalTb, label: "TB storage" };
+    }
+    return { divisor: null, label: "TB storage" };
+  }
+  const count = Number.isFinite(input.vmCount) ? input.vmCount : 0;
+  const unitLabel = input.mode === "k8s" ? "node" : "VM";
+  if (count > 0) {
+    return { divisor: count, label: unitLabel };
+  }
+  return { divisor: null, label: unitLabel };
+}
+
+function renderDataQualityPanel(data) {
+  if (!qualityMeta || !qualityList) {
+    return;
+  }
+  if (!data) {
+    qualityMeta.textContent = "Waiting for pricing...";
+    qualityList.innerHTML = "";
+    return;
+  }
+  const cacheMeta = data.notes?.cacheMeta || {};
+  const refreshStatus = cacheMeta.refreshStatus || "unknown";
+  qualityMeta.textContent = `Generated ${formatDateTime(
+    cacheMeta.generatedAt
+  )} | refresh: ${refreshStatus}`;
+  const lines = [];
+  if (data.notes?.cacheWarning) {
+    lines.push(data.notes.cacheWarning);
+  }
+  if (Array.isArray(cacheMeta.staleCaches) && cacheMeta.staleCaches.length) {
+    lines.push(`Stale caches: ${cacheMeta.staleCaches.join(", ")}.`);
+  }
+  const providerRows = getProviderRowsForPanels(data);
+  providerRows.forEach(({ label, provider }) => {
+    const computeSource = formatSourceDetail(
+      provider?.pricingTiers?.onDemand?.source || provider?.source
+    );
+    const networkSource = summarizeItemSources(provider?.networkAddons?.items || []);
+    const storageSourceValues = Object.values(provider?.storageServices?.sources || {});
+    const storageSource = storageSourceValues.length
+      ? summarizeItemSources(
+          storageSourceValues.map((source) => ({ source }))
+        )
+      : "none";
+    lines.push(
+      `${label}: compute ${computeSource}, network ${networkSource}, storage ${storageSource}.`
+    );
+  });
+  qualityList.innerHTML = "";
+  lines.slice(0, QUALITY_WARNING_LIMIT).forEach((line) => {
+    const item = document.createElement("li");
+    item.textContent = line;
+    qualityList.appendChild(item);
+  });
+  if (!lines.length) {
+    const item = document.createElement("li");
+    item.textContent = "No quality warnings for this result set.";
+    qualityList.appendChild(item);
+  }
+}
+
+function renderUnitEconomics(data) {
+  if (!unitEconTable || !unitEconNote) {
+    return;
+  }
+  if (!data) {
+    unitEconTable.innerHTML = "";
+    unitEconNote.textContent = "Per-provider normalized costs.";
+    return;
+  }
+  const rows = getProviderRowsForPanels(data).map(({ key, label, provider }) => {
+    const totals = getProviderOnDemandTotals(provider);
+    const info = getNormalizationInfo(data, key);
+    const total = Number.isFinite(totals?.total) ? totals.total : null;
+    const normalized =
+      Number.isFinite(total) && Number.isFinite(info.divisor) && info.divisor > 0
+        ? total / info.divisor
+        : null;
+    const compute = Number.isFinite(totals?.computeMonthly)
+      ? totals.computeMonthly
+      : 0;
+    const storage = Number.isFinite(totals?.storageMonthly)
+      ? totals.storageMonthly
+      : 0;
+    const network = Number.isFinite(totals?.networkMonthly)
+      ? totals.networkMonthly
+      : 0;
+    const egress = Number.isFinite(totals?.egressMonthly)
+      ? totals.egressMonthly
+      : 0;
+    const licenses =
+      (Number.isFinite(totals?.sqlMonthly) ? totals.sqlMonthly : 0) +
+      (Number.isFinite(totals?.windowsLicenseMonthly)
+        ? totals.windowsLicenseMonthly
+        : 0);
+    const denominator = Number.isFinite(total) && total > 0 ? total : null;
+    const share = (value) =>
+      denominator ? `${((value / denominator) * 100).toFixed(1)}%` : "n/a";
+    return {
+      label,
+      total,
+      normalized,
+      unit: info.label,
+      computeShare: share(compute),
+      storageShare: share(storage),
+      networkShare: share(network),
+      egressShare: share(egress),
+      licenseShare: share(licenses),
+    };
+  });
+  unitEconTable.innerHTML = `
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Total / month</th>
+        <th>Normalized</th>
+        <th>Compute</th>
+        <th>Storage</th>
+        <th>Network</th>
+        <th>Egress</th>
+        <th>Licenses</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows
+        .map(
+          (row) => `
+        <tr>
+          <td>${row.label}</td>
+          <td>${formatMonthly(row.total)}</td>
+          <td>${
+            Number.isFinite(row.normalized)
+              ? `${formatMoney(row.normalized)}/${row.unit}`
+              : "n/a"
+          }</td>
+          <td>${row.computeShare}</td>
+          <td>${row.storageShare}</td>
+          <td>${row.networkShare}</td>
+          <td>${row.egressShare}</td>
+          <td>${row.licenseShare}</td>
+        </tr>`
+        )
+        .join("")}
+    </tbody>
+  `;
+  const focus = data.input?.pricingFocus || "all";
+  if (focus === "network") {
+    unitEconNote.textContent =
+      "Normalized by per-provider network TB transfer input.";
+    return;
+  }
+  if (focus === "storage") {
+    unitEconNote.textContent =
+      "Normalized by per-provider storage + replication TB input.";
+    return;
+  }
+  unitEconNote.textContent =
+    data.input?.mode === "k8s"
+      ? "Normalized per node count."
+      : "Normalized per VM count.";
+}
+
+function buildRecommendations(data) {
+  const focus = data?.input?.pricingFocus || "all";
+  const providerFilter = recommendProviderFilter?.value || "all";
+  const parsedLimit = Number.parseInt(recommendLimitInput?.value || "3", 10);
+  const topN = Number.isFinite(parsedLimit)
+    ? Math.min(10, Math.max(1, parsedLimit))
+    : 3;
+  const providerRows = getProviderRowsForPanels(data).filter(
+    ({ key }) =>
+      key !== "private" &&
+      (providerFilter === "all" || providerFilter === key)
+  );
+  const items = [];
+  providerRows.forEach(({ key, label, provider }) => {
+    const onDemand = provider?.pricingTiers?.onDemand?.totals?.total;
+    const reserved1 = provider?.pricingTiers?.reserved1yr?.totals?.total;
+    const reserved3 = provider?.pricingTiers?.reserved3yr?.totals?.total;
+    if (
+      focus === "all" &&
+      Number.isFinite(onDemand) &&
+      Number.isFinite(reserved1) &&
+      reserved1 < onDemand
+    ) {
+      items.push({
+        key: `${key}-1y`,
+        title: `${label}: use 1-year commitment`,
+        impact: onDemand - reserved1,
+        detail: `Estimated monthly savings ${formatMoney(onDemand - reserved1)}.`,
+      });
+    }
+    if (
+      focus === "all" &&
+      Number.isFinite(onDemand) &&
+      Number.isFinite(reserved3) &&
+      reserved3 < onDemand
+    ) {
+      items.push({
+        key: `${key}-3y`,
+        title: `${label}: use 3-year commitment`,
+        impact: onDemand - reserved3,
+        detail: `Estimated monthly savings ${formatMoney(onDemand - reserved3)}.`,
+      });
+    }
+    const totals = getProviderOnDemandTotals(provider);
+    if (!totals || !Number.isFinite(totals.total) || totals.total <= 0) {
+      return;
+    }
+    if (focus === "network") {
+      const transfer =
+        (totals.interVlanMonthly || 0) +
+        (totals.intraVlanMonthly || 0) +
+        (totals.interRegionMonthly || 0) +
+        (totals.egressMonthly || 0);
+      if (transfer > 0 && transfer / totals.total >= 0.3) {
+        items.push({
+          key: `${key}-network-transfer`,
+          title: `${label}: optimize transfer-heavy traffic`,
+          impact: transfer * 0.15,
+          detail:
+            "Inter/intra/inter-region + egress represent a large share of networking spend.",
+        });
+      }
+      return;
+    }
+    if (focus === "storage") {
+      const replication = totals.egressMonthly || 0;
+      if (replication > 0 && replication / totals.total >= 0.25) {
+        items.push({
+          key: `${key}-storage-repl`,
+          title: `${label}: tune DR delta replication`,
+          impact: replication * 0.2,
+          detail:
+            "Replication delta is a material part of storage total; reducing delta volume can lower spend.",
+        });
+      }
+      return;
+    }
+    const storageAndBackup =
+      (totals.storageMonthly || 0) + (totals.backupMonthly || 0);
+    if (storageAndBackup > 0 && storageAndBackup / totals.total >= 0.35) {
+      items.push({
+        key: `${key}-storage-tier`,
+        title: `${label}: validate storage tier/perf settings`,
+        impact: storageAndBackup * 0.12,
+        detail:
+          "Storage and backups are a major cost driver; validate required performance profile.",
+      });
+    }
+    const egressAndInterRegion =
+      (totals.egressMonthly || 0) + (totals.interRegionMonthly || 0);
+    if (egressAndInterRegion > 0 && egressAndInterRegion / totals.total >= 0.2) {
+      items.push({
+        key: `${key}-egress`,
+        title: `${label}: reduce inter-region/egress traffic`,
+        impact: egressAndInterRegion * 0.15,
+        detail:
+          "Traffic costs are significant; localize traffic paths where possible.",
+      });
+    }
+  });
+  if (providerRows.length > 1) {
+    const priced = providerRows
+      .map(({ label, provider }) => ({
+        label,
+        total: provider?.pricingTiers?.onDemand?.totals?.total,
+      }))
+      .filter((entry) => Number.isFinite(entry.total));
+    priced.sort((a, b) => a.total - b.total);
+    if (priced.length > 1) {
+      const cheapest = priced[0];
+      priced.slice(1).forEach((entry) => {
+        items.push({
+          key: `provider-delta-${entry.label}`,
+          title: `Compare ${entry.label} against ${cheapest.label}`,
+          impact: entry.total - cheapest.total,
+          detail: `${entry.label} is ${formatMoney(
+            entry.total - cheapest.total
+          )}/mo above the current lowest provider.`,
+        });
+      });
+    }
+  }
+  items.sort((a, b) => b.impact - a.impact);
+  return items.slice(0, topN);
+}
+
+function renderRecommendations(data) {
+  if (!recommendList || !recommendNote) {
+    return;
+  }
+  recommendList.innerHTML = "";
+  if (!data) {
+    recommendNote.textContent = "Run pricing first to generate recommendations.";
+    return;
+  }
+  const recommendations = buildRecommendations(data);
+  if (!recommendations.length) {
+    recommendNote.textContent =
+      "No high-confidence recommendations for the current filter.";
+    return;
+  }
+  recommendNote.textContent = `Showing ${recommendations.length} recommendation(s).`;
+  recommendations.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "recommend-item";
+    const title = document.createElement("h5");
+    title.textContent = item.title;
+    const detail = document.createElement("p");
+    detail.className = "meta";
+    detail.textContent = item.detail;
+    const impact = document.createElement("strong");
+    impact.textContent = `Potential impact: ${formatMoney(item.impact)}/mo`;
+    card.appendChild(title);
+    card.appendChild(detail);
+    card.appendChild(impact);
+    recommendList.appendChild(card);
+  });
 }
 
 function clampPercent(value) {
@@ -6202,6 +6807,9 @@ async function fetchAndRender() {
   if (currentResultsTab === "commit") {
     renderCommit(data);
   }
+  renderDataQualityPanel(data);
+  renderUnitEconomics(data);
+  renderRecommendations(data);
   updateDisclaimerText(data);
   setView(currentView);
   return data;
@@ -6325,6 +6933,574 @@ function parseCsvBoolean(value) {
     return false;
   }
   return undefined;
+}
+
+function normalizeBillingProvider(provider) {
+  if (provider === "azure") {
+    return "azure";
+  }
+  if (provider === "gcp") {
+    return "gcp";
+  }
+  return "aws";
+}
+
+function loadBillingImportStore() {
+  try {
+    const raw = localStorage.getItem(BILLING_IMPORT_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object") {
+      return {
+        aws: parsed.aws || null,
+        azure: parsed.azure || null,
+        gcp: parsed.gcp || null,
+      };
+    }
+  } catch (error) {
+    // Ignore storage errors.
+  }
+  return { aws: null, azure: null, gcp: null };
+}
+
+function persistBillingImportStore(store) {
+  try {
+    localStorage.setItem(BILLING_IMPORT_KEY, JSON.stringify(store));
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function parseBillingCurrency(value) {
+  let text = String(value ?? "").trim();
+  if (!text) {
+    return Number.NaN;
+  }
+  let negative = false;
+  if (text.startsWith("(") && text.endsWith(")")) {
+    negative = true;
+    text = text.slice(1, -1);
+  }
+  text = text.replace(/[$,%\s]/g, "");
+  text = text.replace(/,/g, "");
+  text = text.replace(/[A-Za-z]/g, "");
+  if (!text) {
+    return Number.NaN;
+  }
+  const parsed = Number.parseFloat(text);
+  if (!Number.isFinite(parsed)) {
+    return Number.NaN;
+  }
+  return negative ? -parsed : parsed;
+}
+
+function findBillingHeaderIndex(headers, candidates = []) {
+  for (const candidate of candidates) {
+    const idx = headers.indexOf(candidate);
+    if (idx >= 0) {
+      return idx;
+    }
+  }
+  for (let idx = 0; idx < headers.length; idx += 1) {
+    const header = headers[idx];
+    if (candidates.some((candidate) => header.includes(candidate))) {
+      return idx;
+    }
+  }
+  return -1;
+}
+
+function escapeMarkup(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function parseBillingImportCsv(text, provider) {
+  const rows = parseCsvRows(text).filter((row) =>
+    row.some((value) => String(value || "").trim() !== "")
+  );
+  if (rows.length < 2) {
+    throw new Error("CSV needs a header and at least one data row.");
+  }
+  const normalizedProvider = normalizeBillingProvider(provider);
+  const headers = rows[0].map((value) => normalizeCsvHeader(value));
+  const serviceCandidatesByProvider = {
+    aws: [
+      "product/productname",
+      "product/servicename",
+      "product/servicecode",
+      "lineitem/productcode",
+      "lineitem/lineitemdescription",
+      "lineitem/usagetype",
+    ],
+    azure: [
+      "servicename",
+      "metercategory",
+      "productname",
+      "metername",
+      "resourcegroup",
+    ],
+    gcp: [
+      "service description",
+      "service.description",
+      "service",
+      "sku description",
+      "sku.description",
+    ],
+  };
+  const costCandidatesByProvider = {
+    aws: [
+      "lineitem/unblendedcost",
+      "lineitem/netunblendedcost",
+      "lineitem/blendedcost",
+      "lineitem/netamortizedcost",
+      "amortizedcost",
+      "cost",
+      "charge",
+      "amount",
+    ],
+    azure: [
+      "costinbillingcurrency",
+      "pretaxcost",
+      "cost",
+      "charge",
+      "amount",
+    ],
+    gcp: ["cost", "net cost", "effective cost", "charge", "amount"],
+  };
+  const detailCandidatesByProvider = {
+    aws: [
+      "lineitem/lineitemdescription",
+      "lineitem/usagetype",
+      "lineitem/resourceid",
+      "product/instancetype",
+      "product/location",
+      "lineitem/operation",
+    ],
+    azure: [
+      "meter",
+      "metername",
+      "metercategory",
+      "meterid",
+      "resourcegroup",
+      "resourcetype",
+      "partnumber",
+    ],
+    gcp: [
+      "sku description",
+      "sku.description",
+      "sku id",
+      "sku.id",
+      "project id",
+      "project.id",
+      "resource name",
+    ],
+  };
+  const chargeTypeCandidatesByProvider = {
+    aws: ["lineitem/lineitemtype", "lineitem/chargetype", "chargetype"],
+    azure: ["chargetype", "charge type", "pricingmodel"],
+    gcp: ["cost type", "costtype", "charge type"],
+  };
+  const usageDateCandidatesByProvider = {
+    aws: ["lineitem/usagestartdate", "usagedate", "date"],
+    azure: ["date", "usagedate", "billingperiodstartdate"],
+    gcp: ["usage_start_time", "date", "usage date"],
+  };
+
+  let serviceIndex = findBillingHeaderIndex(
+    headers,
+    serviceCandidatesByProvider[normalizedProvider]
+  );
+  let costIndex = findBillingHeaderIndex(
+    headers,
+    costCandidatesByProvider[normalizedProvider]
+  );
+  if (serviceIndex < 0) {
+    serviceIndex = findBillingHeaderIndex(headers, [
+      "service",
+      "product",
+      "meter",
+      "sku",
+      "category",
+      "name",
+    ]);
+  }
+  if (costIndex < 0) {
+    costIndex = findBillingHeaderIndex(headers, ["cost", "charge", "amount"]);
+  }
+  let detailIndex = findBillingHeaderIndex(
+    headers,
+    detailCandidatesByProvider[normalizedProvider]
+  );
+  if (detailIndex < 0) {
+    detailIndex = findBillingHeaderIndex(headers, [
+      "meter",
+      "sku",
+      "usage",
+      "description",
+      "resource",
+      "partnumber",
+      "item",
+      "name",
+    ]);
+  }
+  const chargeTypeIndex = findBillingHeaderIndex(
+    headers,
+    chargeTypeCandidatesByProvider[normalizedProvider]
+  );
+  const usageDateIndex = findBillingHeaderIndex(
+    headers,
+    usageDateCandidatesByProvider[normalizedProvider]
+  );
+  if (costIndex < 0) {
+    throw new Error("Could not find a cost column in CSV.");
+  }
+  if (serviceIndex < 0) {
+    serviceIndex = 0;
+  }
+  if (detailIndex < 0) {
+    detailIndex = serviceIndex;
+  }
+
+  const totalsByService = new Map();
+  let importedRows = 0;
+  let totalCost = 0;
+  for (const row of rows.slice(1)) {
+    const cost = parseBillingCurrency(row[costIndex]);
+    if (!Number.isFinite(cost)) {
+      continue;
+    }
+    const rawService = String(row[serviceIndex] || "").trim();
+    const service = rawService || "Uncategorized";
+    const rawDetail = String(row[detailIndex] || "").trim();
+    const detail = rawDetail || "Line item";
+    const usageDateRaw =
+      usageDateIndex >= 0 ? String(row[usageDateIndex] || "").trim() : "";
+    const chargeTypeRaw =
+      chargeTypeIndex >= 0 ? String(row[chargeTypeIndex] || "").trim() : "";
+    let serviceBucket = totalsByService.get(service);
+    if (!serviceBucket) {
+      serviceBucket = {
+        name: service,
+        cost: 0,
+        rowCount: 0,
+        details: new Map(),
+        chargeTypes: new Map(),
+        minDate: null,
+        maxDate: null,
+      };
+      totalsByService.set(service, serviceBucket);
+    }
+    serviceBucket.cost += cost;
+    serviceBucket.rowCount += 1;
+    let detailBucket = serviceBucket.details.get(detail);
+    if (!detailBucket) {
+      detailBucket = {
+        name: detail,
+        cost: 0,
+        rowCount: 0,
+      };
+      serviceBucket.details.set(detail, detailBucket);
+    }
+    detailBucket.cost += cost;
+    detailBucket.rowCount += 1;
+    if (chargeTypeRaw) {
+      serviceBucket.chargeTypes.set(
+        chargeTypeRaw,
+        (serviceBucket.chargeTypes.get(chargeTypeRaw) || 0) + 1
+      );
+    }
+    if (usageDateRaw) {
+      const parsedDate = new Date(usageDateRaw);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        const currentTime = parsedDate.getTime();
+        if (!serviceBucket.minDate || currentTime < serviceBucket.minDate) {
+          serviceBucket.minDate = currentTime;
+        }
+        if (!serviceBucket.maxDate || currentTime > serviceBucket.maxDate) {
+          serviceBucket.maxDate = currentTime;
+        }
+      }
+    }
+    importedRows += 1;
+    totalCost += cost;
+  }
+  if (!importedRows) {
+    throw new Error("No numeric cost rows found in CSV.");
+  }
+
+  const services = Array.from(totalsByService.values())
+    .map((bucket) => {
+      const details = Array.from(bucket.details.values())
+        .map((detail) => ({
+          name: detail.name,
+          cost: detail.cost,
+          rowCount: detail.rowCount,
+          share: bucket.cost !== 0 ? (detail.cost / bucket.cost) * 100 : 0,
+        }))
+        .sort((a, b) => b.cost - a.cost);
+      const topChargeTypes = Array.from(bucket.chargeTypes.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+      return {
+        name: bucket.name,
+        cost: bucket.cost,
+        rowCount: bucket.rowCount,
+        share: totalCost !== 0 ? (bucket.cost / totalCost) * 100 : 0,
+        detailCount: details.length,
+        details,
+        topChargeTypes,
+        minDate: bucket.minDate,
+        maxDate: bucket.maxDate,
+      };
+    })
+    .sort((a, b) => b.cost - a.cost);
+
+  return {
+    provider: normalizedProvider,
+    importedAt: new Date().toISOString(),
+    rowCount: importedRows,
+    serviceCount: services.length,
+    totalCost,
+    serviceColumn: rows[0][serviceIndex] || "Service",
+    costColumn: rows[0][costIndex] || "Cost",
+    detailColumn: rows[0][detailIndex] || "Detail",
+    chargeTypeColumn: chargeTypeIndex >= 0 ? rows[0][chargeTypeIndex] : "",
+    usageDateColumn: usageDateIndex >= 0 ? rows[0][usageDateIndex] : "",
+    services,
+  };
+}
+
+function setBillingProvider(provider) {
+  currentBillingProvider = normalizeBillingProvider(provider);
+  billingProviderTabs.forEach((button) => {
+    button.classList.toggle(
+      "active",
+      button.dataset.billingProvider === currentBillingProvider
+    );
+  });
+  renderBillingImportPanel();
+}
+
+function getBillingExpandedServiceSet(provider) {
+  const key = normalizeBillingProvider(provider);
+  if (!(billingExpandedServices[key] instanceof Set)) {
+    billingExpandedServices[key] = new Set();
+  }
+  return billingExpandedServices[key];
+}
+
+function renderBillingImportPanel() {
+  if (!billingSummary || !billingChart || !billingTable) {
+    return;
+  }
+  const data = billingImportStore[currentBillingProvider];
+  if (!data) {
+    billingSummary.innerHTML = `
+      <article class="billing-summary-card">
+        <h4>${currentBillingProvider.toUpperCase()}</h4>
+        <p>No CSV imported for this provider yet.</p>
+      </article>`;
+    billingChart.innerHTML = `<p class="billing-empty">Import a billing CSV to visualize service allocation.</p>`;
+    billingTable.innerHTML = "";
+    if (billingNote && !billingNote.textContent.trim()) {
+      billingNote.textContent = "Import a billing CSV to start allocation analysis.";
+    }
+    return;
+  }
+
+  const topServices = data.services.slice(0, 10);
+  const maxValue = topServices.length ? Math.max(...topServices.map((row) => row.cost)) : 0;
+  billingSummary.innerHTML = `
+    <article class="billing-summary-card">
+      <h4>${currentBillingProvider.toUpperCase()}</h4>
+      <p>Total imported</p>
+      <strong>${formatMoney(data.totalCost)}</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Rows</h4>
+      <p>Processed rows</p>
+      <strong>${data.rowCount}</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Services</h4>
+      <p>Distinct services</p>
+      <strong>${data.serviceCount}</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Columns</h4>
+      <p>${escapeMarkup(data.serviceColumn)} / ${escapeMarkup(data.costColumn)}</p>
+      <strong>${new Date(data.importedAt).toLocaleString()}</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Line-item column</h4>
+      <p>${escapeMarkup(data.detailColumn || "Detail")}</p>
+      <strong>${data.usageDateColumn ? escapeMarkup(data.usageDateColumn) : "No usage date column"}</strong>
+    </article>`;
+
+  billingChart.innerHTML = topServices.length
+    ? topServices
+        .map((service) => {
+          const width = maxValue > 0 ? (service.cost / maxValue) * 100 : 0;
+          return `
+            <div class="billing-bar-row">
+              <div class="billing-bar-meta">
+                <span class="billing-bar-label">${escapeMarkup(service.name)}</span>
+                <span class="billing-bar-value">${formatMoney(service.cost)} (${service.share.toFixed(1)}%)</span>
+              </div>
+              <div class="billing-bar-track">
+                <div class="billing-bar-fill" style="width: ${Math.max(0, Math.min(100, width))}%"></div>
+              </div>
+            </div>`;
+        })
+        .join("")
+    : `<p class="billing-empty">No service rows were parsed.</p>`;
+
+  const expandedServices = getBillingExpandedServiceSet(currentBillingProvider);
+  const tableRows = data.services
+    .slice(0, 100)
+    .map((service) => {
+      const isExpanded = expandedServices.has(service.name);
+      const toggleLabel = isExpanded ? "-" : "+";
+      const details = Array.isArray(service.details) ? service.details : [];
+      const detailRows = isExpanded
+        ? details
+            .slice(0, 200)
+            .map(
+              (detail) => `
+              <tr class="billing-detail-row">
+                <td></td>
+                <td class="billing-detail-name">${escapeMarkup(detail.name)}</td>
+                <td>${formatMoney(detail.cost)}</td>
+                <td>${detail.share.toFixed(2)}%</td>
+                <td>${detail.rowCount}</td>
+                <td>Line item</td>
+              </tr>`
+            )
+            .join("") +
+          (() => {
+            if (details.length > 200) {
+              return `
+                <tr class="billing-detail-row">
+                  <td></td>
+                  <td class="billing-detail-name" colspan="5">
+                    Showing top 200 line items by cost (${details.length} total).
+                  </td>
+                </tr>`;
+            }
+            return "";
+          })() +
+          (() => {
+            const tags = [];
+            if (Array.isArray(service.topChargeTypes) && service.topChargeTypes.length) {
+              tags.push(`Charge types: ${service.topChargeTypes.join(", ")}`);
+            }
+            if (Number.isFinite(service.minDate) && Number.isFinite(service.maxDate)) {
+              const start = new Date(service.minDate).toLocaleDateString();
+              const end = new Date(service.maxDate).toLocaleDateString();
+              tags.push(`Usage range: ${start} - ${end}`);
+            }
+            if (!tags.length) {
+              return "";
+            }
+            return `
+              <tr class="billing-detail-row billing-detail-meta">
+                <td></td>
+                <td colspan="5">${escapeMarkup(tags.join(" | "))}</td>
+              </tr>`;
+          })()
+        : "";
+      return `
+        <tr class="billing-service-row">
+          <td>
+            <button
+              type="button"
+              class="billing-expand-btn"
+              data-billing-toggle="${encodeURIComponent(service.name)}"
+              title="${isExpanded ? "Collapse" : "Expand"} line items"
+            >
+              ${toggleLabel}
+            </button>
+          </td>
+          <td>${escapeMarkup(service.name)}</td>
+          <td>${formatMoney(service.cost)}</td>
+          <td>${service.share.toFixed(2)}%</td>
+          <td>${service.rowCount}</td>
+          <td>${service.detailCount || details.length}</td>
+        </tr>
+        ${detailRows}`;
+    })
+    .join("");
+  billingTable.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Service</th>
+          <th>Cost</th>
+          <th>Share</th>
+          <th>Rows</th>
+          <th>Line items</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>`;
+}
+
+async function handleBillingImportFile(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    const parsed = parseBillingImportCsv(text, currentBillingProvider);
+    billingImportStore[currentBillingProvider] = parsed;
+    billingExpandedServices[currentBillingProvider] = new Set();
+    persistBillingImportStore(billingImportStore);
+    setInlineNote(
+      billingNote,
+      `${currentBillingProvider.toUpperCase()} billing CSV imported (${parsed.rowCount} rows).`
+    );
+    renderBillingImportPanel();
+  } catch (error) {
+    setInlineNote(
+      billingNote,
+      error?.message || "Could not import billing CSV.",
+      true
+    );
+  } finally {
+    if (billingImportInput) {
+      billingImportInput.value = "";
+    }
+  }
+}
+
+function handleBillingClearProvider() {
+  billingImportStore[currentBillingProvider] = null;
+  billingExpandedServices[currentBillingProvider] = new Set();
+  persistBillingImportStore(billingImportStore);
+  setInlineNote(
+    billingNote,
+    `Cleared ${currentBillingProvider.toUpperCase()} billing import.`
+  );
+  renderBillingImportPanel();
+}
+
+function handleBillingClearAll() {
+  billingImportStore = { aws: null, azure: null, gcp: null };
+  billingExpandedServices.aws = new Set();
+  billingExpandedServices.azure = new Set();
+  billingExpandedServices.gcp = new Set();
+  persistBillingImportStore(billingImportStore);
+  setInlineNote(billingNote, "Cleared billing imports for all providers.");
+  renderBillingImportPanel();
 }
 
 function buildCsv(data) {
@@ -7061,6 +8237,30 @@ exportButton.addEventListener("click", handleExportCsv);
 resultsTabButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const nextTab = button.dataset.results;
+    if (currentMode === "network" || currentMode === "storage") {
+      if (nextTab === "insight") {
+        if (currentMode === "network") {
+          setNetworkResultTab("insight");
+        } else {
+          setStorageResultTab("insight");
+        }
+        return;
+      }
+      if (nextTab === "pricing") {
+        if (currentMode === "network") {
+          setNetworkResultTab(
+            currentNetworkResult === "insight" ? "vpc" : currentNetworkResult
+          );
+        } else {
+          setStorageResultTab(
+            currentStorageResult === "insight"
+              ? "object"
+              : currentStorageResult
+          );
+        }
+      }
+      return;
+    }
     setResultsTab(nextTab);
   });
 });
@@ -7104,6 +8304,21 @@ Object.entries(commitDiscountInputs).forEach(([, input]) => {
     input.addEventListener("input", () => renderCommit(lastPricing));
   }
 });
+if (runRecommendationsButton) {
+  runRecommendationsButton.addEventListener("click", () => {
+    renderRecommendations(lastPricing);
+  });
+}
+if (recommendProviderFilter) {
+  recommendProviderFilter.addEventListener("change", () => {
+    renderRecommendations(lastPricing);
+  });
+}
+if (recommendLimitInput) {
+  recommendLimitInput.addEventListener("input", () => {
+    renderRecommendations(lastPricing);
+  });
+}
 if (saveScenarioButton) {
   saveScenarioButton.addEventListener("click", handleSaveScenario);
 }
@@ -7180,7 +8395,8 @@ modeTabs.forEach((tab) => {
     if (
       nextPanel !== "private" &&
       nextPanel !== "scenarios" &&
-      nextPanel !== "saved"
+      nextPanel !== "saved" &&
+      nextPanel !== "billing"
     ) {
       handleCompare();
     }
@@ -7207,6 +8423,43 @@ if (storageProviderCards) {
     }
   });
 }
+billingProviderTabs.forEach((button) => {
+  button.addEventListener("click", () => {
+    setBillingProvider(button.dataset.billingProvider);
+  });
+});
+if (billingImportButton && billingImportInput) {
+  billingImportButton.addEventListener("click", () => {
+    billingImportInput.click();
+  });
+  billingImportInput.addEventListener("change", handleBillingImportFile);
+}
+if (billingClearButton) {
+  billingClearButton.addEventListener("click", handleBillingClearProvider);
+}
+if (billingClearAllButton) {
+  billingClearAllButton.addEventListener("click", handleBillingClearAll);
+}
+if (billingTable) {
+  billingTable.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-billing-toggle]");
+    if (!button) {
+      return;
+    }
+    const encodedName = button.dataset.billingToggle || "";
+    const serviceName = decodeURIComponent(encodedName);
+    if (!serviceName) {
+      return;
+    }
+    const expanded = getBillingExpandedServiceSet(currentBillingProvider);
+    if (expanded.has(serviceName)) {
+      expanded.delete(serviceName);
+    } else {
+      expanded.add(serviceName);
+    }
+    renderBillingImportPanel();
+  });
+}
 sqlRateInput.addEventListener("input", () => {
   const rateValue = Number.parseFloat(sqlRateInput.value);
   sqlRateTouched = !isDefaultSqlRate(rateValue, sqlEditionSelect.value);
@@ -7221,6 +8474,7 @@ sqlEditionSelect.addEventListener("change", () => {
 });
 window.addEventListener("load", async () => {
   scenarioStore = loadScenarioStore();
+  billingImportStore = loadBillingImportStore();
   savedCompareScenarioSelections = loadSavedCompareSelections(
     SAVED_COMPARE_SCENARIOS_KEY
   );
@@ -7231,6 +8485,7 @@ window.addEventListener("load", async () => {
   privateProviderStore = loadPrivateProviders();
   privateCompareSelections = loadPrivateCompareSelections();
   renderPrivateProviderCards();
+  setBillingProvider("aws");
   setPanel(modeInput.value);
   buildRegionChecklist();
   try {

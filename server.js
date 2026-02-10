@@ -18,6 +18,13 @@ const PRICING_WARMUP_CONCURRENCY = Math.max(
   1,
   Number.parseInt(process.env.PRICING_CACHE_CONCURRENCY || "4", 10) || 4
 );
+const PRICING_CACHE_REFRESH_INTERVAL_MS = Math.max(
+  60 * 1000,
+  Number.parseInt(
+    process.env.PRICING_CACHE_REFRESH_INTERVAL_MS || `${30 * 60 * 1000}`,
+    10
+  ) || 30 * 60 * 1000
+);
 const BACKUP_RETENTION_DAYS = 15;
 const BACKUP_DAILY_DELTA_PERCENT = 10;
 const K8S_OS_DISK_MIN_GB = 32;
@@ -330,9 +337,24 @@ const STORAGE_REPLICATION_DEFAULT_RATES = {
   gcp: 0.02,
 };
 const STORAGE_PERFORMANCE_RATES = {
-  aws: { iopsMonthly: 0.005, throughputMonthly: 0.04 },
-  azure: { iopsMonthly: 0, throughputMonthly: 0 },
-  gcp: { iopsMonthly: 0, throughputMonthly: 0 },
+  aws: {
+    iopsMonthly: 0.005,
+    throughputMonthly: 0.04,
+    requestMonthly: 0.04,
+    operationMonthly: 0.05,
+  },
+  azure: {
+    iopsMonthly: 0,
+    throughputMonthly: 0,
+    requestMonthly: 0.03,
+    operationMonthly: 0.03,
+  },
+  gcp: {
+    iopsMonthly: 0,
+    throughputMonthly: 0,
+    requestMonthly: 0.05,
+    operationMonthly: 0.04,
+  },
 };
 const NETWORK_ADDON_OPTIONS = {
   aws: {
@@ -862,6 +884,12 @@ const gcpServiceCache = { loadedAt: 0, data: null };
 const gcpServiceSkuCache = new Map();
 const awsEfsRegionIndexCache = { loadedAt: 0, data: null };
 const k8sSharedStorageCache = new Map();
+let cacheRefreshTimer = null;
+let cacheRefreshRunning = false;
+let lastCacheRefreshAt = 0;
+let lastCacheRefreshStatus = "never";
+let lastCacheRefreshSummary = null;
+let lastCacheRefreshError = null;
 
 app.use(express.json({ limit: "200kb" }));
 app.use(express.static(path.join(__dirname, "public")));
@@ -873,6 +901,294 @@ app.get("/api/options", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error?.message || "Failed to build size options.",
+    });
+  }
+});
+
+function getMapLatestLoadedAt(map) {
+  if (!(map instanceof Map) || !map.size) {
+    return 0;
+  }
+  let latest = 0;
+  for (const value of map.values()) {
+    if (value && typeof value === "object" && Number.isFinite(value.loadedAt)) {
+      latest = Math.max(latest, value.loadedAt);
+    }
+  }
+  return latest;
+}
+
+function getSharedStorageCacheLatestLoadedAt() {
+  if (!(k8sSharedStorageCache instanceof Map) || !k8sSharedStorageCache.size) {
+    return 0;
+  }
+  let latest = 0;
+  for (const value of k8sSharedStorageCache.values()) {
+    if (value && Number.isFinite(value.expiresAt)) {
+      const inferredLoadedAt = value.expiresAt - K8S_SHARED_STORAGE_CACHE_TTL_MS;
+      latest = Math.max(latest, inferredLoadedAt);
+    }
+  }
+  return latest;
+}
+
+function getSharedStorageCacheStaleEntries() {
+  if (!(k8sSharedStorageCache instanceof Map) || !k8sSharedStorageCache.size) {
+    return 0;
+  }
+  let stale = 0;
+  const now = Date.now();
+  for (const value of k8sSharedStorageCache.values()) {
+    if (value && Number.isFinite(value.expiresAt) && value.expiresAt < now) {
+      stale += 1;
+    }
+  }
+  return stale;
+}
+
+function buildCacheStatus() {
+  const now = Date.now();
+  const definitions = [
+    {
+      key: "aws-public-snapshot",
+      label: "AWS public snapshot",
+      ttlMs: AWS_PUBLIC_CACHE_TTL_MS,
+      size: awsPublicCache.data instanceof Map ? awsPublicCache.data.size : 0,
+      loadedAt: Number.isFinite(awsPublicCache.loadedAt)
+        ? awsPublicCache.loadedAt
+        : 0,
+    },
+    {
+      key: "azure-public-snapshot",
+      label: "Azure public snapshot",
+      ttlMs: AZURE_PUBLIC_CACHE_TTL_MS,
+      size: azurePublicCache.data instanceof Map ? azurePublicCache.data.size : 0,
+      loadedAt: Number.isFinite(azurePublicCache.loadedAt)
+        ? azurePublicCache.loadedAt
+        : 0,
+    },
+    {
+      key: "gcp-public-snapshot",
+      label: "GCP public snapshot",
+      ttlMs: GCP_PUBLIC_CACHE_TTL_MS,
+      size: Array.isArray(gcpPublicCache.data) ? gcpPublicCache.data.length : 0,
+      loadedAt: Number.isFinite(gcpPublicCache.loadedAt)
+        ? gcpPublicCache.loadedAt
+        : 0,
+    },
+    {
+      key: "gcp-billing-api",
+      label: "GCP billing SKUs",
+      ttlMs: GCP_BILLING_CACHE_TTL_MS,
+      size: Array.isArray(gcpBillingCache.data) ? gcpBillingCache.data.length : 0,
+      loadedAt: Number.isFinite(gcpBillingCache.loadedAt)
+        ? gcpBillingCache.loadedAt
+        : 0,
+    },
+    {
+      key: "aws-price-list-index",
+      label: "AWS price list index",
+      ttlMs: AWS_PRICE_LIST_CACHE_TTL_MS,
+      size:
+        awsPriceListIndexCache.data &&
+        typeof awsPriceListIndexCache.data === "object"
+          ? Object.keys(awsPriceListIndexCache.data).length
+          : 0,
+      loadedAt: Number.isFinite(awsPriceListIndexCache.loadedAt)
+        ? awsPriceListIndexCache.loadedAt
+        : 0,
+    },
+    {
+      key: "aws-price-list-regions",
+      label: "AWS regional price lists",
+      ttlMs: AWS_PRICE_LIST_CACHE_TTL_MS,
+      size: awsPriceListRegionCache.size,
+      loadedAt: getMapLatestLoadedAt(awsPriceListRegionCache),
+    },
+    {
+      key: "aws-service-index",
+      label: "AWS service indexes",
+      ttlMs: AWS_PRICE_LIST_CACHE_TTL_MS,
+      size: awsServiceIndexCache.size,
+      loadedAt: getMapLatestLoadedAt(awsServiceIndexCache),
+    },
+    {
+      key: "aws-service-regions",
+      label: "AWS service region catalogs",
+      ttlMs: AWS_PRICE_LIST_CACHE_TTL_MS,
+      size: awsServiceRegionCache.size,
+      loadedAt: getMapLatestLoadedAt(awsServiceRegionCache),
+    },
+    {
+      key: "aws-efs-index",
+      label: "AWS EFS index",
+      ttlMs: K8S_SHARED_STORAGE_CACHE_TTL_MS,
+      size:
+        awsEfsRegionIndexCache.data &&
+        typeof awsEfsRegionIndexCache.data === "object"
+          ? Object.keys(awsEfsRegionIndexCache.data?.regions || {}).length
+          : 0,
+      loadedAt: Number.isFinite(awsEfsRegionIndexCache.loadedAt)
+        ? awsEfsRegionIndexCache.loadedAt
+        : 0,
+    },
+    {
+      key: "shared-storage",
+      label: "Shared storage rates",
+      ttlMs: K8S_SHARED_STORAGE_CACHE_TTL_MS,
+      size: k8sSharedStorageCache.size,
+      loadedAt: getSharedStorageCacheLatestLoadedAt(),
+      staleEntries: getSharedStorageCacheStaleEntries(),
+    },
+    {
+      key: "aws-ec2-rates",
+      label: "AWS EC2 rates",
+      ttlMs: null,
+      size: awsCache.size,
+      loadedAt: 0,
+    },
+    {
+      key: "azure-vm-rates",
+      label: "Azure VM rates",
+      ttlMs: null,
+      size: azureCache.size,
+      loadedAt: 0,
+    },
+    {
+      key: "azure-reserved-rates",
+      label: "Azure reserved rates",
+      ttlMs: null,
+      size: azureReservedCache.size,
+      loadedAt: 0,
+    },
+    {
+      key: "network-addon-rates",
+      label: "Network add-on rates",
+      ttlMs: null,
+      size: azureNetworkCache.size,
+      loadedAt: 0,
+    },
+    {
+      key: "gcp-api-instance-rates",
+      label: "GCP API instance rates",
+      ttlMs: null,
+      size: gcpApiCache.size,
+      loadedAt: 0,
+    },
+  ];
+
+  const caches = definitions.map((item) => {
+    const loadedAt =
+      Number.isFinite(item.loadedAt) && item.loadedAt > 0 ? item.loadedAt : null;
+    const ageMs = loadedAt ? now - loadedAt : null;
+    const stale =
+      Number.isFinite(item.ttlMs) && item.ttlMs > 0 && loadedAt
+        ? ageMs > item.ttlMs
+        : false;
+    return {
+      key: item.key,
+      label: item.label,
+      ttlMs: item.ttlMs,
+      loadedAt,
+      ageMs,
+      stale,
+      size: item.size,
+      staleEntries: item.staleEntries || 0,
+    };
+  });
+
+  const staleCaches = caches
+    .filter((cache) => cache.stale || cache.staleEntries > 0)
+    .map((cache) => cache.key);
+  return {
+    generatedAt: new Date(now).toISOString(),
+    refresh: {
+      status: lastCacheRefreshStatus,
+      running: cacheRefreshRunning,
+      lastRefreshAt: lastCacheRefreshAt
+        ? new Date(lastCacheRefreshAt).toISOString()
+        : null,
+      intervalMs: PRICING_CACHE_REFRESH_INTERVAL_MS,
+      summary: lastCacheRefreshSummary,
+      error: lastCacheRefreshError,
+    },
+    summary: {
+      staleCount: staleCaches.length,
+      staleCaches,
+      loadedCount: caches.filter((cache) => cache.loadedAt).length,
+      cacheGroups: caches.length,
+    },
+    caches,
+  };
+}
+
+function buildCacheHealthWarning() {
+  const status = buildCacheStatus();
+  if (status.summary.staleCount <= 0) {
+    return null;
+  }
+  return `Cache warning: stale cache groups detected (${status.summary.staleCaches.join(
+    ", "
+  )}). Results can fall back to defaults until refresh completes.`;
+}
+
+async function runCacheRefreshCycle(trigger = "scheduled") {
+  if (cacheRefreshRunning) {
+    return {
+      accepted: false,
+      trigger,
+      message: "Cache refresh already running.",
+    };
+  }
+  cacheRefreshRunning = true;
+  lastCacheRefreshStatus = "running";
+  lastCacheRefreshError = null;
+  try {
+    const summary = await warmPricingCaches();
+    lastCacheRefreshAt = Date.now();
+    lastCacheRefreshStatus = "ok";
+    lastCacheRefreshSummary = summary;
+    return {
+      accepted: true,
+      trigger,
+      summary,
+    };
+  } catch (error) {
+    lastCacheRefreshStatus = "error";
+    lastCacheRefreshError = error?.message || String(error);
+    throw error;
+  } finally {
+    cacheRefreshRunning = false;
+  }
+}
+
+function startCacheRefreshLoop() {
+  if (cacheRefreshTimer) {
+    return;
+  }
+  cacheRefreshTimer = setInterval(() => {
+    runCacheRefreshCycle("scheduled").catch((error) => {
+      console.error("[pricing] Background cache refresh failed.", error);
+    });
+  }, PRICING_CACHE_REFRESH_INTERVAL_MS);
+  if (typeof cacheRefreshTimer.unref === "function") {
+    cacheRefreshTimer.unref();
+  }
+}
+
+app.get("/api/cache/status", (req, res) => {
+  res.json(buildCacheStatus());
+});
+
+app.post("/api/cache/refresh", async (req, res) => {
+  try {
+    const result = await runCacheRefreshCycle("manual");
+    res.status(result.accepted ? 200 : 202).json(result);
+  } catch (error) {
+    res.status(500).json({
+      accepted: false,
+      trigger: "manual",
+      error: error?.message || "Cache refresh failed.",
     });
   }
 });
@@ -1314,6 +1630,10 @@ async function warmPricingCaches() {
     `[pricing] Cache warm-up complete in ${elapsed}s.`,
     summary
   );
+  return {
+    ...summary,
+    elapsedSeconds: Number.parseFloat(elapsed),
+  };
 }
 
 function pickSizeByCpu(sizes, cpu) {
@@ -5024,6 +5344,22 @@ app.post("/api/compare", async (req, res) => {
       : mode === "k8s"
       ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
       : "Windows-only. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
+  const cacheStatus = buildCacheStatus();
+  const cacheWarning =
+    cacheStatus.summary.staleCount > 0
+      ? `Cache warning: stale cache groups detected (${cacheStatus.summary.staleCaches.join(
+          ", "
+        )}). Results can fall back to defaults until refresh completes.`
+      : null;
+  const cacheStatusSummary = cacheStatus.summary;
+  const cacheMeta = {
+    generatedAt: cacheStatus.generatedAt,
+    lastRefreshAt: cacheStatus.refresh.lastRefreshAt,
+    refreshStatus: cacheStatus.refresh.status,
+    refreshRunning: cacheStatus.refresh.running,
+    staleCount: cacheStatus.summary.staleCount,
+    staleCaches: cacheStatus.summary.staleCaches,
+  };
 
   res.json({
     input: {
@@ -5370,6 +5706,14 @@ app.post("/api/compare", async (req, res) => {
       sizeCap: sizeNotes.length ? sizeNotes.join(" ") : null,
       sharedStorageSources: mode === "k8s" ? sharedStorageSources : null,
       storageSources: pricingFocus === "storage" ? storageFocusSources : null,
+      cacheWarning,
+      cacheStatus: cacheStatusSummary,
+      cacheMeta,
+      apiCredentials: {
+        aws: hasAwsApiCredentials(),
+        azure: true,
+        gcp: hasGcpApiCredentials(),
+      },
     },
   });
 });
@@ -5378,9 +5722,15 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Cloud price app running at http://localhost:${PORT}`);
     if (PRICING_WARMUP_ENABLED) {
-      warmPricingCaches().catch((error) => {
+      runCacheRefreshCycle("startup").catch((error) => {
         console.error("[pricing] Cache warm-up failed.", error);
       });
+      startCacheRefreshLoop();
+      console.log(
+        `[pricing] Background cache refresh enabled every ${Math.round(
+          PRICING_CACHE_REFRESH_INTERVAL_MS / 1000
+        )}s.`
+      );
     } else {
       console.log("[pricing] Cache warm-up disabled.");
     }

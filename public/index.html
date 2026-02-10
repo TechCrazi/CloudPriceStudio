@@ -43,6 +43,9 @@
         <button type="button" class="mode-tab" data-mode="storage">
           Storage
         </button>
+        <button type="button" class="mode-tab" data-mode="billing">
+          Billing Import
+        </button>
         <button type="button" class="mode-tab" data-mode="saved">
           Saved Compare
         </button>
@@ -273,6 +276,26 @@
                 name="storageThroughputMbps"
                 min="0"
                 step="1"
+                value="0"
+              />
+            </label>
+            <label id="storage-request-field">
+              Storage requests (million ops / month)
+              <input
+                type="number"
+                name="storageRequestUnitsMillion"
+                min="0"
+                step="0.1"
+                value="0"
+              />
+            </label>
+            <label id="storage-operation-field">
+              Storage write/tx units (million / month)
+              <input
+                type="number"
+                name="storageOperationUnitsMillion"
+                min="0"
+                step="0.1"
                 value="0"
               />
             </label>
@@ -903,6 +926,10 @@
                 </div>
                 <span class="status-pill" data-field="status">manual</span>
               </div>
+              <label class="private-provider-select">
+                Provider profile
+                <select data-field="providerSelect"></select>
+              </label>
               <div class="metrics">
                 <div class="metric">
                   <span>Specs</span>
@@ -991,6 +1018,62 @@
           </template>
             <div class="delta" id="delta"></div>
             <div class="scenario-delta is-hidden" id="scenario-delta"></div>
+            <div
+              class="scenario-component-delta is-hidden"
+              id="scenario-component-delta"
+            ></div>
+            <section class="quality-panel" id="quality-panel">
+              <div class="quality-head">
+                <h4>Data quality</h4>
+                <span id="quality-meta" class="quality-meta">Waiting for pricing...</span>
+              </div>
+              <ul id="quality-list" class="quality-list"></ul>
+            </section>
+            <section class="unit-econ-panel" id="unit-econ-panel">
+              <div class="quality-head">
+                <h4>Unit economics</h4>
+                <span id="unit-econ-note" class="quality-meta">Per-provider normalized costs.</span>
+              </div>
+              <div class="focus-table-wrap">
+                <table class="focus-table" id="unit-econ-table"></table>
+              </div>
+            </section>
+            <section class="recommend-panel" id="recommend-panel">
+              <div class="recommend-head">
+                <h4>Recommendations</h4>
+                <div class="recommend-controls">
+                  <label>
+                    Provider
+                    <select id="recommend-provider-filter">
+                      <option value="all">All providers</option>
+                      <option value="aws">AWS</option>
+                      <option value="azure">Azure</option>
+                      <option value="gcp">GCP</option>
+                    </select>
+                  </label>
+                  <label>
+                    Top N
+                    <input
+                      type="number"
+                      id="recommend-limit"
+                      min="1"
+                      max="10"
+                      step="1"
+                      value="3"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="run-recommendations"
+                  >
+                    Refresh recommendations
+                  </button>
+                </div>
+              </div>
+              <div class="recommend-list" id="recommend-list"></div>
+              <p class="form-note" id="recommend-note"></p>
+            </section>
             <p class="disclaimer">
             Storage uses the selected disk tier (Premium SSD or Max performance
             with an uplift for ultra tiers; per-IOPS charges are not modeled).
@@ -1342,6 +1425,60 @@
             <p class="form-note" id="saved-compare-note"></p>
             <div class="saved-compare-table" id="saved-compare-table"></div>
           </div>
+          <div class="results-panel is-hidden" id="billing-panel">
+            <div class="panel-actions billing-actions">
+              <div class="focus-tabs billing-provider-tabs">
+                <button
+                  type="button"
+                  class="focus-tab active"
+                  data-billing-provider="aws"
+                >
+                  AWS
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-billing-provider="azure"
+                >
+                  Azure
+                </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-billing-provider="gcp"
+                >
+                  GCP
+                </button>
+              </div>
+              <button
+                type="button"
+                class="secondary-btn"
+                id="billing-import-csv"
+              >
+                Import CSV
+              </button>
+              <button type="button" class="secondary-btn" id="billing-clear">
+                Clear provider
+              </button>
+              <button
+                type="button"
+                class="secondary-btn"
+                id="billing-clear-all"
+              >
+                Clear all
+              </button>
+            </div>
+            <input
+              type="file"
+              id="billing-import-file"
+              accept=".csv,text/csv"
+              class="is-hidden"
+            />
+            <p class="form-note" id="billing-note"></p>
+            <div class="billing-summary" id="billing-summary"></div>
+            <div class="billing-chart" id="billing-chart"></div>
+            <div class="saved-compare-table" id="billing-table"></div>
+          </div>
           <div class="results-panel is-hidden" id="scenarios-panel">
             <div class="panel-actions">
               <button
@@ -1406,6 +1543,13 @@
                   </div>
                   <span class="status-pill">commit</span>
                 </div>
+                <label class="commit-input">
+                  Commitment type
+                  <select data-commit-type="aws">
+                    <option value="aws-savings-plan">Savings Plan (compute)</option>
+                    <option value="aws-reserved-instance">Reserved Instance</option>
+                  </select>
+                </label>
                 <label class="commit-input">
                   Discount (%)
                   <input
@@ -1520,6 +1664,13 @@
                   <span class="status-pill">commit</span>
                 </div>
                 <label class="commit-input">
+                  Commitment type
+                  <select data-commit-type="azure">
+                    <option value="azure-reservation">Reservations</option>
+                    <option value="azure-savings-plan">Savings Plan</option>
+                  </select>
+                </label>
+                <label class="commit-input">
                   Discount (%)
                   <input
                     type="number"
@@ -1632,6 +1783,13 @@
                   </div>
                   <span class="status-pill">commit</span>
                 </div>
+                <label class="commit-input">
+                  Commitment type
+                  <select data-commit-type="gcp">
+                    <option value="gcp-cud-1y">Committed Use Discount (1-year)</option>
+                    <option value="gcp-cud-3y">Committed Use Discount (3-year)</option>
+                  </select>
+                </label>
                 <label class="commit-input">
                   Discount (%)
                   <input

@@ -11,6 +11,8 @@ Constraints:
 - Optional network add-ons with provider-specific flavors: VPC/VNet, managed
   firewall, and load balancer.
 - Optional private cloud provider with manual VMware/SAN and network/LB inputs.
+- Public-cloud-only tabs for Networking and Storage analysis.
+- Dedicated top-level tabs for Saved Compare, Private/Public Cloud, and Billing Import.
 - Minimum 8 vCPU and 8 GB RAM.
 - Pricing tiers show on-demand plus 1-year and 3-year reserved (no upfront).
 - AWS reserved type is fixed to Convertible (no upfront).
@@ -98,6 +100,20 @@ Retail (Vantage) mode does not require credentials.
 Save, clone, and compare input profiles. Scenarios are stored in browser
 localStorage and can be loaded later from the dropdown.
 
+## Billing Import
+
+Use the `Billing Import` tab to import provider billing CSV files and visualize
+allocation by service.
+
+- Provider-specific import views for AWS, Azure, and GCP.
+- Aggregated totals, service share, and top service bar visualization.
+- Expandable line-item drilldown in the service table:
+  click `+` beside a service to open detailed items (for example Azure `Meter`
+  rows grouped under `ServiceName`).
+- CSV parsing auto-detects service, cost, and detail columns by provider and
+  falls back to common column names when exact headers differ.
+- Imported billing datasets are stored in browser localStorage per provider.
+
 ## Pricing cache warm-up
 
 On startup, the app preloads pricing data for the supported instance sizes and
@@ -146,6 +162,7 @@ regions so most requests hit in-memory caches instead of live API calls.
   and fall back to defaults if lookups fail. It enforces a 32 GB minimum OS
   disk size.
 - Egress defaults: base internet out pricing for the first tier.
+- Billing Import is CSV-driven and does not call provider billing APIs directly.
 - Reserved tiers use AWS convertible no-upfront rates from the public snapshot.
   Azure reservation terms are converted from term totals into monthly-equivalent
   hourly rates for both Retail API and Vantage snapshot sources.

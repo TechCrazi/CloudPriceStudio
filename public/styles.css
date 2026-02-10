@@ -877,6 +877,132 @@ select:focus {
   font-weight: 600;
 }
 
+.billing-actions {
+  align-items: center;
+}
+
+.billing-provider-tabs {
+  margin-right: auto;
+}
+
+.billing-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.billing-summary-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 4px;
+}
+
+.billing-summary-card h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.billing-summary-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.billing-summary-card strong {
+  font-size: 1rem;
+}
+
+.billing-chart {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(16, 24, 40, 0.75);
+}
+
+.billing-bar-row {
+  display: grid;
+  gap: 6px;
+}
+
+.billing-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.82rem;
+}
+
+.billing-bar-label {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.billing-bar-value {
+  color: var(--muted);
+}
+
+.billing-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.billing-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--highlight));
+}
+
+.billing-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.billing-expand-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.billing-expand-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.billing-service-row td {
+  font-weight: 600;
+}
+
+.billing-detail-row td {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.billing-detail-name {
+  padding-left: 26px !important;
+}
+
+.billing-detail-meta td {
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
 .saved-compare-breakdown td {
   font-size: 0.8rem;
   color: var(--muted);
@@ -1358,9 +1484,130 @@ select:focus {
   color: var(--accent);
 }
 
+.scenario-component-delta {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.scenario-component-delta table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.scenario-component-delta th,
+.scenario-component-delta td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.scenario-component-delta th {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+}
+
+.scenario-component-delta tr:last-child td {
+  border-bottom: none;
+}
+
+.delta-positive {
+  color: var(--accent);
+}
+
+.delta-negative {
+  color: var(--accent-2);
+}
+
 .delta.negative {
   background: rgba(255, 138, 91, 0.12);
   color: var(--accent);
+}
+
+.quality-panel,
+.unit-econ-panel,
+.recommend-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(16, 24, 40, 0.74);
+}
+
+.quality-head,
+.recommend-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.quality-head h4,
+.recommend-head h4 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.quality-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.quality-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.recommend-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.recommend-controls label {
+  min-width: 140px;
+}
+
+.recommend-controls .secondary-btn {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+}
+
+.recommend-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.recommend-item {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 6px;
+}
+
+.recommend-item h5 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.recommend-item .meta {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .disclaimer {
@@ -1446,5 +1693,11 @@ select:focus {
 
   .focus-provider-summary {
     grid-template-columns: 1fr;
+  }
+
+  .quality-head,
+  .recommend-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
