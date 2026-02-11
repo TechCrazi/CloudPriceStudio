@@ -1,11 +1,13 @@
 # Cloud Price Studio
 
-Compare AWS, Azure, and GCP VM pricing by CPU, RAM, region, OS disk (GB), data disk
-(TB), egress (TB), and SQL Server edition. The app selects the closest VM size by
-flavor and shows monthly totals.
+Compare AWS, Azure, and GCP pricing for VM, Kubernetes, Networking-only, and
+Storage-only views. Inputs include CPU, RAM, region, OS disk (GB), data disk
+(TB), egress (TB), SQL Server edition, network add-ons, and storage service
+breakdowns. The app selects the closest supported size by flavor and shows
+monthly totals.
 
 Constraints:
-- Windows-only pricing.
+- VM mode uses Windows pricing. Kubernetes mode uses Linux node pricing.
 - No local or temp disks (managed disk only).
 - Disk tier selectable (Premium SSD or Max performance) and 10+ Gbps network floor.
 - Optional network add-ons with provider-specific flavors: VPC/VNet, managed
@@ -19,10 +21,11 @@ Constraints:
 - VM workload profiles: General purpose, SQL Server, and Web Server.
 - VM flavors are provider-recommended families per workload (AWS/Azure/GCP).
 - VM view tabs: Compare plus per-provider tabs with up to four options per
-  vendor (auto-picked instances with manual overrides; private options accept
-  manual vCPU/RAM/OS/data specs).
-- Private-Price tab stores manual pricing plus node capacity inputs and
+  vendor (auto-picked instances with manual overrides).
+- Private Cloud panel stores manual pricing plus node capacity inputs and
   calculates SAN cost per TB and VMs per node (including N+1 capacity).
+- Results include Pricing, Insight, and Cloud Commit tabs, plus recommendation
+  and unit-economics panels.
 
 ## Run
 
@@ -83,6 +86,8 @@ Azure Retail Prices API is public.
 Network add-ons (VPC/VNet, firewall, load balancer) always use provider pricing
 APIs/price lists; GCP add-ons require a GCP API key even in Retail mode and will
 show $0 with a provider note when missing.
+Networking and Storage focus modes always use API/price-list lookups for public
+cloud pricing and force the provider selector to API.
 
 ### AWS API credentials
 
@@ -106,6 +111,7 @@ Use the `Billing Import` tab to import provider billing CSV files and visualize
 allocation by service.
 
 - Provider-specific import views for AWS, Azure, GCP, and Rackspace.
+- Unified billing view merges imported datasets across providers.
 - Aggregated totals, service share, and top service bar visualization.
 - Expandable line-item drilldown in the service table:
   click `+` beside a service to open detailed items (for example Azure `Meter`
@@ -116,6 +122,8 @@ allocation by service.
 - Azure import expects Cost Analysis `Meter view` CSV format.
 - Add custom tags per service (including `Product app`) with multi-tag input
   (comma-separated tags).
+- Optional detail-level tags for expanded line items plus bulk apply/clear
+  across selected visible rows.
 - Filter Billing Import views by `Product app` (including an `Untagged` filter).
 - Export provider billing CSV from the active filter; exported rows include
   `ProductApp` and `Tags` columns.
@@ -135,14 +143,18 @@ regions so most requests hit in-memory caches instead of live API calls.
 
 - Set `PRICING_CACHE_WARMUP=false` to disable warm-up.
 - Set `PRICING_CACHE_CONCURRENCY=4` (or higher/lower) to tune API fan-out.
+- Set `PRICING_CACHE_REFRESH_INTERVAL_MS=1800000` to control background refresh
+  cadence (minimum 60s).
 - Warm-up uses AWS/GCP credentials when available; missing credentials skip
   those providers.
+- Cache status and manual refresh endpoints:
+  - `GET /api/cache/status`
+  - `POST /api/cache/refresh`
 
 ## Notes
 
 - Storage defaults: Premium SSD per-GB estimates. Max performance applies an
-  uplift to approximate Ultra/Extreme/io2 BE tiers; per-IOPS charges are not
-  modeled.
+  uplift to approximate Ultra/Extreme/io2 BE tiers.
 - Disk tier defaults to Max performance in the UI and can be switched back to
   Premium SSD.
 - Private cloud pricing uses manual inputs; Node CPU capacity is treated as
@@ -192,8 +204,10 @@ regions so most requests hit in-memory caches instead of live API calls.
 - If a request exceeds the curated size list, the app uses the largest
   available size and flags it in the UI.
 - Instance dropdowns include quick filters above each provider list.
-- Region groups include US Central, US West (N. California), EU Central, UK
-  South, Japan East, India Central, South America, and Africa South.
+- Region groups include US East, US Central, US West, US West (N. California),
+  Canada Central, EU West, EU Central, UK South, EU North, Asia Pacific
+  (Singapore), Japan East, India Central, Australia East, South America
+  (Sao Paulo), and Africa South.
 
 
 
