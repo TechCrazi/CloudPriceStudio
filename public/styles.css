@@ -890,6 +890,73 @@ select:focus {
   margin-right: auto;
 }
 
+.billing-tools {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(320px, 1fr);
+  gap: 12px;
+}
+
+.billing-filter,
+.billing-tag-editor,
+.billing-bulk-editor {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.billing-filter label,
+.billing-tag-editor label,
+.billing-bulk-editor label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.billing-filter select,
+.billing-tag-editor select,
+.billing-tag-editor input,
+.billing-bulk-editor input {
+  margin-top: 4px;
+}
+
+.billing-filter {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.billing-tag-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.billing-bulk-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.billing-bulk-editor input[readonly] {
+  color: var(--text);
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.billing-tag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.billing-tag-actions .secondary-btn {
+  padding: 7px 12px;
+  font-size: 0.82rem;
+}
+
 .billing-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -973,6 +1040,22 @@ select:focus {
   font-size: 0.9rem;
 }
 
+.billing-inline-bulk-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) minmax(180px, 1fr) minmax(200px, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.billing-inline-bulk-bar strong {
+  font-size: 0.85rem;
+}
+
 .billing-expand-btn {
   width: 26px;
   height: 26px;
@@ -997,6 +1080,37 @@ select:focus {
 .billing-detail-row td {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.billing-detail-select {
+  width: 16px;
+  height: 16px;
+}
+
+.billing-inline-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.billing-inline-input:focus {
+  outline: none;
+  border-color: rgba(255, 182, 102, 0.7);
+  box-shadow: 0 0 0 2px rgba(255, 170, 90, 0.2);
+}
+
+.billing-inline-actions {
+  white-space: nowrap;
+}
+
+.billing-inline-actions .table-action {
+  padding: 4px 10px;
+  font-size: 0.74rem;
 }
 
 .billing-detail-name {
@@ -1647,6 +1761,22 @@ select:focus {
   .commit-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .billing-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .billing-tag-editor {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .billing-bulk-editor {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .billing-inline-bulk-bar {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1677,6 +1807,18 @@ select:focus {
   }
 
   .commit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .billing-tag-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .billing-bulk-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .billing-inline-bulk-bar {
     grid-template-columns: 1fr;
   }
 

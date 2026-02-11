@@ -178,11 +178,30 @@ const savedComparePanel = document.getElementById("saved-compare-panel");
 const billingPanel = document.getElementById("billing-panel");
 const billingProviderTabs = document.querySelectorAll("[data-billing-provider]");
 const billingImportButton = document.getElementById("billing-import-csv");
+const billingExportButton = document.getElementById("billing-export-csv");
 const billingImportInput = document.getElementById("billing-import-file");
 const billingClearButton = document.getElementById("billing-clear");
 const billingClearAllButton = document.getElementById("billing-clear-all");
 const billingNote = document.getElementById("billing-note");
 const billingFormatHint = document.getElementById("billing-format-hint");
+const billingProductFilter = document.getElementById("billing-product-filter");
+const billingChartGroup = document.getElementById("billing-chart-group");
+const billingTagService = document.getElementById("billing-tag-service");
+const billingTagProductApp = document.getElementById("billing-tag-product-app");
+const billingTagCustom = document.getElementById("billing-tag-custom");
+const billingApplyTagsButton = document.getElementById("billing-apply-tags");
+const billingClearTagsButton = document.getElementById("billing-clear-tags");
+const billingBulkCount = document.getElementById("billing-bulk-count");
+const billingBulkProductApp = document.getElementById("billing-bulk-product-app");
+const billingBulkTags = document.getElementById("billing-bulk-tags");
+const billingBulkSelectVisible = document.getElementById(
+  "billing-bulk-select-visible"
+);
+const billingBulkClearSelection = document.getElementById(
+  "billing-bulk-clear-selection"
+);
+const billingBulkApply = document.getElementById("billing-bulk-apply");
+const billingBulkClearTags = document.getElementById("billing-bulk-clear-tags");
 const billingSummary = document.getElementById("billing-summary");
 const billingChart = document.getElementById("billing-chart");
 const billingTable = document.getElementById("billing-table");
@@ -372,8 +391,12 @@ const PRIVATE_COMPARE_SLOTS = 2;
 const VMWARE_VCPU_PER_SOCKET = 3;
 const MAX_VENDOR_OPTIONS = 4;
 const BILLING_IMPORT_KEY = "cloud-price-billing-import";
+const BILLING_TAGS_KEY = "cloud-price-billing-tags";
+const BILLING_DETAIL_TAGS_KEY = "cloud-price-billing-detail-tags";
+const BILLING_UNTAGGED_FILTER = "__untagged__";
 const SCENARIO_SCHEMA_VERSION = 2;
 const QUALITY_WARNING_LIMIT = 8;
+const BILLING_IMPORT_PROVIDERS = ["aws", "azure", "gcp", "rackspace"];
 const COMMITMENT_TYPE_DEFAULTS = {
   aws: "aws-savings-plan",
   azure: "azure-reservation",
@@ -431,11 +454,35 @@ const vendorOptionState = {
 };
 let scenarioStore = [];
 let billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
+let billingTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+let billingDetailTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+const billingProductFilterSelections = {
+  aws: "",
+  azure: "",
+  gcp: "",
+  rackspace: "",
+  unified: "",
+};
+const billingChartGroupSelections = {
+  aws: "service",
+  azure: "service",
+  gcp: "service",
+  rackspace: "service",
+  unified: "service",
+};
 const billingExpandedServices = {
   aws: new Set(),
   azure: new Set(),
   gcp: new Set(),
   rackspace: new Set(),
+  unified: new Set(),
+};
+const billingSelectedDetailKeys = {
+  aws: new Set(),
+  azure: new Set(),
+  gcp: new Set(),
+  rackspace: new Set(),
+  unified: new Set(),
 };
 const instancePools = {
   aws: [],
@@ -6964,6 +7011,9 @@ function parseCsvBoolean(value) {
 }
 
 function normalizeBillingProvider(provider) {
+  if (provider === "unified") {
+    return "unified";
+  }
   if (provider === "azure") {
     return "azure";
   }
@@ -6978,16 +7028,137 @@ function normalizeBillingProvider(provider) {
 
 function getBillingImportFormatHint(provider) {
   const normalized = normalizeBillingProvider(provider);
+  if (normalized === "unified") {
+    return "Unified view: combines imported AWS, Azure, GCP, and Rackspace billing datasets.";
+  }
   if (normalized === "aws") {
-    return "AWS CSV format: Cost Explorer Service view (Cost and usage breakdown by Service).";
+    return "AWS CSV format: Cost Explorer Service view (Cost and usage breakdown by Service). Account labels are auto-derived from filename.";
   }
   if (normalized === "azure") {
-    return "Azure CSV format: Cost Analysis Meter view.";
+    return "Azure CSV format: Cost Analysis Meter view. Account labels are auto-derived from filename.";
   }
   if (normalized === "gcp") {
-    return "GCP CSV format: Billing export with service/SKU/cost columns.";
+    return "GCP CSV format: Billing export with service/SKU/cost columns. Account labels are auto-derived from filename.";
   }
-  return "Rackspace CSV format: invoice usage export with SERVICE_TYPE and AMOUNT columns.";
+  return "Rackspace CSV format: invoice usage export with SERVICE_TYPE and AMOUNT columns. Account labels are auto-derived from filename.";
+}
+
+function getBillingProviderDisplayName(provider) {
+  const normalized = normalizeBillingProvider(provider);
+  if (normalized === "aws") {
+    return "AWS";
+  }
+  if (normalized === "azure") {
+    return "Azure";
+  }
+  if (normalized === "gcp") {
+    return "GCP";
+  }
+  if (normalized === "rackspace") {
+    return "Rackspace";
+  }
+  return "Unified";
+}
+
+function normalizeBillingAccountName(value, fallback = "") {
+  const text = String(value || "").trim();
+  if (text) {
+    return text;
+  }
+  return String(fallback || "").trim();
+}
+
+function normalizeBillingTagEntry(entry) {
+  const productApp = String(entry?.productApp || "").trim();
+  const tags = [];
+  const seen = new Set();
+  if (Array.isArray(entry?.tags)) {
+    entry.tags.forEach((value) => {
+      const text = String(value || "").trim();
+      if (!text) {
+        return;
+      }
+      const key = text.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      tags.push(text);
+    });
+  }
+  return { productApp, tags };
+}
+
+function normalizeBillingProviderTags(providerTags) {
+  const normalized = {};
+  if (!providerTags || typeof providerTags !== "object") {
+    return normalized;
+  }
+  Object.entries(providerTags).forEach(([serviceName, entry]) => {
+    const service = String(serviceName || "").trim();
+    if (!service) {
+      return;
+    }
+    const tagEntry = normalizeBillingTagEntry(entry);
+    if (!tagEntry.productApp && !tagEntry.tags.length) {
+      return;
+    }
+    normalized[service] = tagEntry;
+  });
+  return normalized;
+}
+
+function normalizeBillingProviderDetailTags(providerTags) {
+  const normalized = {};
+  if (!providerTags || typeof providerTags !== "object") {
+    return normalized;
+  }
+  Object.entries(providerTags).forEach(([serviceName, detailMap]) => {
+    const service = String(serviceName || "").trim();
+    if (!service || !detailMap || typeof detailMap !== "object") {
+      return;
+    }
+    const normalizedDetailMap = {};
+    Object.entries(detailMap).forEach(([detailName, entry]) => {
+      const detail = String(detailName || "").trim();
+      if (!detail) {
+        return;
+      }
+      const tagEntry = normalizeBillingTagEntry(entry);
+      if (!tagEntry.productApp && !tagEntry.tags.length) {
+        return;
+      }
+      normalizedDetailMap[detail] = tagEntry;
+    });
+    if (Object.keys(normalizedDetailMap).length) {
+      normalized[service] = normalizedDetailMap;
+    }
+  });
+  return normalized;
+}
+
+function normalizeBillingTagStore(store) {
+  const base = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+  if (!store || typeof store !== "object") {
+    return base;
+  }
+  base.aws = normalizeBillingProviderTags(store.aws);
+  base.azure = normalizeBillingProviderTags(store.azure);
+  base.gcp = normalizeBillingProviderTags(store.gcp);
+  base.rackspace = normalizeBillingProviderTags(store.rackspace);
+  return base;
+}
+
+function normalizeBillingDetailTagStore(store) {
+  const base = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+  if (!store || typeof store !== "object") {
+    return base;
+  }
+  base.aws = normalizeBillingProviderDetailTags(store.aws);
+  base.azure = normalizeBillingProviderDetailTags(store.azure);
+  base.gcp = normalizeBillingProviderDetailTags(store.gcp);
+  base.rackspace = normalizeBillingProviderDetailTags(store.rackspace);
+  return base;
 }
 
 function loadBillingImportStore() {
@@ -7014,6 +7185,431 @@ function persistBillingImportStore(store) {
   } catch (error) {
     // Ignore storage errors.
   }
+}
+
+function loadBillingTagsStore() {
+  try {
+    const raw = localStorage.getItem(BILLING_TAGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return normalizeBillingTagStore(parsed);
+  } catch (error) {
+    return { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+  }
+}
+
+function persistBillingTagsStore(store) {
+  try {
+    const normalized = normalizeBillingTagStore(store);
+    localStorage.setItem(BILLING_TAGS_KEY, JSON.stringify(normalized));
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function loadBillingDetailTagsStore() {
+  try {
+    const raw = localStorage.getItem(BILLING_DETAIL_TAGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return normalizeBillingDetailTagStore(parsed);
+  } catch (error) {
+    return { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+  }
+}
+
+function persistBillingDetailTagsStore(store) {
+  try {
+    const normalized = normalizeBillingDetailTagStore(store);
+    localStorage.setItem(BILLING_DETAIL_TAGS_KEY, JSON.stringify(normalized));
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function getBillingProviderTagMap(provider) {
+  const key = normalizeBillingProvider(provider);
+  if (!billingTagStore[key] || typeof billingTagStore[key] !== "object") {
+    billingTagStore[key] = {};
+  }
+  return billingTagStore[key];
+}
+
+function getBillingProviderDetailTagMap(provider) {
+  const key = normalizeBillingProvider(provider);
+  if (
+    !billingDetailTagStore[key] ||
+    typeof billingDetailTagStore[key] !== "object"
+  ) {
+    billingDetailTagStore[key] = {};
+  }
+  return billingDetailTagStore[key];
+}
+
+function parseBillingCustomTags(text) {
+  const seen = new Set();
+  const tags = [];
+  String(text || "")
+    .split(",")
+    .map((value) => value.trim())
+    .forEach((value) => {
+      if (!value) {
+        return;
+      }
+      const key = value.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      tags.push(value);
+    });
+  return tags;
+}
+
+function getBillingServiceTag(provider, serviceName) {
+  const service = String(serviceName || "").trim();
+  if (!service) {
+    return null;
+  }
+  const map = getBillingProviderTagMap(provider);
+  const entry = normalizeBillingTagEntry(map[service]);
+  if (!entry.productApp && !entry.tags.length) {
+    return null;
+  }
+  return entry;
+}
+
+function setBillingServiceTag(provider, serviceName, entry) {
+  const service = String(serviceName || "").trim();
+  if (!service) {
+    return;
+  }
+  const map = getBillingProviderTagMap(provider);
+  const normalized = normalizeBillingTagEntry(entry);
+  if (!normalized.productApp && !normalized.tags.length) {
+    delete map[service];
+    return;
+  }
+  map[service] = normalized;
+}
+
+function getBillingDetailTag(provider, serviceName, detailName) {
+  const service = String(serviceName || "").trim();
+  const detail = String(detailName || "").trim();
+  if (!service || !detail) {
+    return null;
+  }
+  const providerMap = getBillingProviderDetailTagMap(provider);
+  const serviceMap = providerMap[service];
+  if (!serviceMap || typeof serviceMap !== "object") {
+    return null;
+  }
+  const entry = normalizeBillingTagEntry(serviceMap[detail]);
+  if (!entry.productApp && !entry.tags.length) {
+    return null;
+  }
+  return entry;
+}
+
+function setBillingDetailTag(provider, serviceName, detailName, entry) {
+  const service = String(serviceName || "").trim();
+  const detail = String(detailName || "").trim();
+  if (!service || !detail) {
+    return;
+  }
+  const providerMap = getBillingProviderDetailTagMap(provider);
+  if (!providerMap[service] || typeof providerMap[service] !== "object") {
+    providerMap[service] = {};
+  }
+  const normalized = normalizeBillingTagEntry(entry);
+  if (!normalized.productApp && !normalized.tags.length) {
+    delete providerMap[service][detail];
+    if (!Object.keys(providerMap[service]).length) {
+      delete providerMap[service];
+    }
+    return;
+  }
+  providerMap[service][detail] = normalized;
+}
+
+function encodeBillingDetailKey(serviceName, detailName) {
+  return `${encodeURIComponent(serviceName || "")}::${encodeURIComponent(
+    detailName || ""
+  )}`;
+}
+
+function decodeBillingDetailKey(value) {
+  const [encodedService = "", encodedDetail = ""] = String(value || "").split(
+    "::"
+  );
+  return {
+    serviceName: decodeURIComponent(encodedService),
+    detailName: decodeURIComponent(encodedDetail),
+  };
+}
+
+function getBillingCurrentFilter(provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  return billingProductFilterSelections[key] || "";
+}
+
+function setBillingCurrentFilter(value, provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  billingProductFilterSelections[key] = String(value || "");
+}
+
+function getBillingCurrentChartGroup(provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  return billingChartGroupSelections[key] || "service";
+}
+
+function setBillingCurrentChartGroup(value, provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  const normalized =
+    value === "productApp" || value === "tag" ? value : "service";
+  billingChartGroupSelections[key] = normalized;
+}
+
+function getBillingSelectedDetailSet(provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  if (!(billingSelectedDetailKeys[key] instanceof Set)) {
+    billingSelectedDetailKeys[key] = new Set();
+  }
+  return billingSelectedDetailKeys[key];
+}
+
+function getBillingSelectedDetailCount(provider = currentBillingProvider) {
+  const selected = getBillingSelectedDetailSet(provider);
+  return selected.size;
+}
+
+function updateBillingBulkSelectionSummary(provider = currentBillingProvider) {
+  if (!billingBulkCount) {
+    return;
+  }
+  const count = getBillingSelectedDetailCount(provider);
+  billingBulkCount.value = `${count} selected`;
+}
+
+function getBillingFilteredServices(data, provider = currentBillingProvider) {
+  const services = Array.isArray(data?.services) ? data.services : [];
+  const filterValue = getBillingCurrentFilter(provider);
+  const isUnified = normalizeBillingProvider(provider) === "unified";
+  if (!filterValue) {
+    return services.map((service) => ({
+      ...service,
+      details: Array.isArray(service.details) ? service.details : [],
+      isPartial: false,
+    }));
+  }
+
+  const filtered = [];
+  services.forEach((service) => {
+    const details = Array.isArray(service.details) ? service.details : [];
+    const tagProvider = isUnified
+      ? normalizeBillingProvider(service.sourceProvider)
+      : normalizeBillingProvider(provider);
+    const tagServiceName = isUnified
+      ? String(service.sourceServiceName || service.name)
+      : service.name;
+    const entry = getBillingServiceTag(tagProvider, tagServiceName);
+    const productApp = entry?.productApp || "";
+    if (productApp && filterValue !== BILLING_UNTAGGED_FILTER) {
+      if (productApp === filterValue) {
+        filtered.push({
+          ...service,
+          details,
+          isPartial: false,
+        });
+      }
+      return;
+    }
+    const matchingDetails = details.filter((detail) => {
+      const detailEntry = getBillingDetailTag(
+        tagProvider,
+        tagServiceName,
+        detail.name
+      );
+      const detailProductApp = detailEntry?.productApp || "";
+      if (filterValue === BILLING_UNTAGGED_FILTER) {
+        return !productApp && !detailProductApp;
+      }
+      return detailProductApp === filterValue;
+    });
+    if (filterValue === BILLING_UNTAGGED_FILTER) {
+      if (productApp) {
+        return;
+      }
+      if (!matchingDetails.length) {
+        return;
+      }
+      const partialCost = matchingDetails.reduce(
+        (sum, detail) => sum + (Number.isFinite(detail.cost) ? detail.cost : 0),
+        0
+      );
+      filtered.push({
+        ...service,
+        cost: partialCost,
+        rowCount: matchingDetails.reduce(
+          (sum, detail) => sum + (Number.isFinite(detail.rowCount) ? detail.rowCount : 0),
+          0
+        ),
+        detailCount: matchingDetails.length,
+        details: matchingDetails,
+        isPartial: true,
+      });
+      return;
+    }
+    if (!matchingDetails.length) {
+      return;
+    }
+    const partialCost = matchingDetails.reduce(
+      (sum, detail) => sum + (Number.isFinite(detail.cost) ? detail.cost : 0),
+      0
+    );
+    filtered.push({
+      ...service,
+      cost: partialCost,
+      rowCount: matchingDetails.reduce(
+        (sum, detail) => sum + (Number.isFinite(detail.rowCount) ? detail.rowCount : 0),
+        0
+      ),
+      detailCount: matchingDetails.length,
+      details: matchingDetails,
+      isPartial: true,
+    });
+  });
+  return filtered;
+}
+
+function updateBillingTagEditorFields() {
+  if (!billingTagService || !billingTagProductApp || !billingTagCustom) {
+    return;
+  }
+  const serviceName = billingTagService.value;
+  if (!serviceName) {
+    billingTagProductApp.value = "";
+    billingTagCustom.value = "";
+    return;
+  }
+  const entry = getBillingServiceTag(currentBillingProvider, serviceName);
+  billingTagProductApp.value = entry?.productApp || "";
+  billingTagCustom.value = Array.isArray(entry?.tags)
+    ? entry.tags.join(", ")
+    : "";
+}
+
+function syncBillingControls(data) {
+  const normalizedProvider = normalizeBillingProvider(currentBillingProvider);
+  const isUnified = normalizedProvider === "unified";
+  const hasData = Boolean(data && Array.isArray(data.services) && data.services.length);
+  if (billingImportButton) {
+    billingImportButton.disabled = isUnified;
+  }
+  if (billingClearButton) {
+    billingClearButton.disabled = isUnified || !hasData;
+  }
+  if (billingExportButton) {
+    billingExportButton.disabled = !hasData;
+  }
+  if (billingProductFilter) {
+    const currentValue = getBillingCurrentFilter(currentBillingProvider);
+    const options = [
+      { key: "", label: "All product apps" },
+      { key: BILLING_UNTAGGED_FILTER, label: "Untagged" },
+    ];
+    if (hasData) {
+      const apps = new Set();
+      data.services.forEach((service) => {
+        const sourceProvider = isUnified
+          ? normalizeBillingProvider(service.sourceProvider)
+          : normalizedProvider;
+        const sourceServiceName = isUnified
+          ? String(service.sourceServiceName || service.name)
+          : service.name;
+        const tagMap = getBillingProviderTagMap(sourceProvider);
+        const detailTagMap = getBillingProviderDetailTagMap(sourceProvider);
+        const entry = normalizeBillingTagEntry(tagMap[sourceServiceName]);
+        if (entry.productApp) {
+          apps.add(entry.productApp);
+        }
+        const detailTags = detailTagMap[sourceServiceName];
+        if (!detailTags || typeof detailTags !== "object") {
+          return;
+        }
+        Object.values(detailTags).forEach((detailEntry) => {
+          const normalized = normalizeBillingTagEntry(detailEntry);
+          if (normalized.productApp) {
+            apps.add(normalized.productApp);
+          }
+        });
+      });
+      Array.from(apps)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((name) => {
+          options.push({ key: name, label: name });
+        });
+    }
+    setSelectOptionsWithLabels(billingProductFilter, options, currentValue);
+    const selected = billingProductFilter.value;
+    setBillingCurrentFilter(selected, currentBillingProvider);
+    billingProductFilter.disabled = !hasData;
+  }
+  if (billingChartGroup) {
+    const chartOptions = [
+      { key: "service", label: "Service" },
+      { key: "account", label: "Account" },
+      { key: "productApp", label: "Product app" },
+      { key: "tag", label: "Tag" },
+    ];
+    const chartGroup = getBillingCurrentChartGroup(currentBillingProvider);
+    setSelectOptionsWithLabels(billingChartGroup, chartOptions, chartGroup);
+    const selected = billingChartGroup.value || "service";
+    setBillingCurrentChartGroup(selected, currentBillingProvider);
+    billingChartGroup.disabled = !hasData;
+  }
+  if (billingTagService) {
+    const serviceOptions = [{ key: "", label: "Select service" }];
+    if (hasData && !isUnified) {
+      data.services.forEach((service) => {
+        serviceOptions.push({ key: service.name, label: service.name });
+      });
+    }
+    const currentService = billingTagService.value;
+    setSelectOptionsWithLabels(billingTagService, serviceOptions, currentService);
+    billingTagService.disabled = !hasData || isUnified;
+  }
+  if (billingTagProductApp) {
+    billingTagProductApp.disabled = !hasData || isUnified;
+  }
+  if (billingTagCustom) {
+    billingTagCustom.disabled = !hasData || isUnified;
+  }
+  if (billingApplyTagsButton) {
+    billingApplyTagsButton.disabled = !hasData || isUnified;
+  }
+  if (billingClearTagsButton) {
+    billingClearTagsButton.disabled = !hasData || isUnified;
+  }
+  if (billingBulkProductApp) {
+    billingBulkProductApp.disabled = !hasData || isUnified;
+  }
+  if (billingBulkTags) {
+    billingBulkTags.disabled = !hasData || isUnified;
+  }
+  const selectedCount = getBillingSelectedDetailCount(currentBillingProvider);
+  if (billingBulkSelectVisible) {
+    billingBulkSelectVisible.disabled = !hasData || isUnified;
+  }
+  if (billingBulkClearSelection) {
+    billingBulkClearSelection.disabled = !hasData || isUnified || selectedCount === 0;
+  }
+  if (billingBulkApply) {
+    billingBulkApply.disabled = !hasData || isUnified || selectedCount === 0;
+  }
+  if (billingBulkClearTags) {
+    billingBulkClearTags.disabled = !hasData || isUnified || selectedCount === 0;
+  }
+  updateBillingBulkSelectionSummary(currentBillingProvider);
+  updateBillingTagEditorFields();
 }
 
 function parseBillingCurrency(value) {
@@ -7449,6 +8045,253 @@ function parseBillingImportCsv(text, provider) {
     chargeTypeColumn: chargeTypeIndex >= 0 ? rows[0][chargeTypeIndex] : "",
     usageDateColumn: usageDateIndex >= 0 ? rows[0][usageDateIndex] : "",
     services,
+    sourceDatasetCount: 1,
+    sourceFiles: [],
+    sourceAccounts: [],
+  };
+}
+
+function pickMergedBillingColumn(datasets, key, fallback) {
+  const values = new Set();
+  datasets.forEach((dataset) => {
+    const value = String(dataset?.[key] || "").trim();
+    if (value) {
+      values.add(value);
+    }
+  });
+  if (!values.size) {
+    return fallback;
+  }
+  if (values.size === 1) {
+    return Array.from(values)[0];
+  }
+  return "Mixed";
+}
+
+function mergeBillingImportDatasets(provider, datasets = []) {
+  const normalizedProvider = normalizeBillingProvider(provider);
+  const validDatasets = datasets.filter(
+    (dataset) => dataset && Array.isArray(dataset.services)
+  );
+  if (!validDatasets.length) {
+    return null;
+  }
+
+  let totalCost = 0;
+  let rowCount = 0;
+  let latestImportedAt = 0;
+  let sourceDatasetCount = 0;
+  const sourceFiles = [];
+  const sourceAccountMap = new Map();
+  const serviceBuckets = new Map();
+
+  validDatasets.forEach((dataset) => {
+    totalCost += Number.isFinite(dataset.totalCost) ? dataset.totalCost : 0;
+    rowCount += Number.isFinite(dataset.rowCount) ? dataset.rowCount : 0;
+    sourceDatasetCount += Number.isFinite(dataset.sourceDatasetCount)
+      ? dataset.sourceDatasetCount
+      : 1;
+    if (Array.isArray(dataset.sourceFiles) && dataset.sourceFiles.length) {
+      dataset.sourceFiles.forEach((name) => {
+        const text = String(name || "").trim();
+        if (text && !sourceFiles.includes(text)) {
+          sourceFiles.push(text);
+        }
+      });
+    }
+    const defaultDatasetAccount = normalizeBillingAccountName(
+      Array.isArray(dataset.sourceAccounts) && dataset.sourceAccounts.length === 1
+        ? dataset.sourceAccounts[0]?.name
+        : ""
+    );
+    if (Array.isArray(dataset.sourceAccounts) && dataset.sourceAccounts.length) {
+      dataset.sourceAccounts.forEach((account) => {
+        const accountName = normalizeBillingAccountName(account?.name);
+        if (!accountName) {
+          return;
+        }
+        if (!sourceAccountMap.has(accountName)) {
+          sourceAccountMap.set(accountName, {
+            name: accountName,
+            cost: 0,
+            rowCount: 0,
+            fileCount: 0,
+            datasetCount: 0,
+          });
+        }
+        const target = sourceAccountMap.get(accountName);
+        target.cost += Number.isFinite(account?.cost) ? account.cost : 0;
+        target.rowCount += Number.isFinite(account?.rowCount) ? account.rowCount : 0;
+        target.fileCount += Number.isFinite(account?.fileCount) ? account.fileCount : 0;
+        target.datasetCount += Number.isFinite(account?.datasetCount)
+          ? account.datasetCount
+          : 1;
+      });
+    } else if (defaultDatasetAccount) {
+      if (!sourceAccountMap.has(defaultDatasetAccount)) {
+        sourceAccountMap.set(defaultDatasetAccount, {
+          name: defaultDatasetAccount,
+          cost: 0,
+          rowCount: 0,
+          fileCount: 0,
+          datasetCount: 0,
+        });
+      }
+      const target = sourceAccountMap.get(defaultDatasetAccount);
+      target.cost += Number.isFinite(dataset.totalCost) ? dataset.totalCost : 0;
+      target.rowCount += Number.isFinite(dataset.rowCount) ? dataset.rowCount : 0;
+      target.fileCount +=
+        Array.isArray(dataset.sourceFiles) && dataset.sourceFiles.length
+          ? dataset.sourceFiles.length
+          : 1;
+      target.datasetCount += Number.isFinite(dataset.sourceDatasetCount)
+        ? dataset.sourceDatasetCount
+        : 1;
+    }
+    const importedAtMs = Date.parse(dataset.importedAt || "");
+    if (Number.isFinite(importedAtMs)) {
+      latestImportedAt = Math.max(latestImportedAt, importedAtMs);
+    }
+
+    dataset.services.forEach((service) => {
+      const serviceName = String(service.name || "").trim() || "Uncategorized";
+      const sourceAccountName = normalizeBillingAccountName(
+        service.sourceAccountName,
+        defaultDatasetAccount
+      );
+      const bucketKey = `${sourceAccountName}@@${serviceName}`;
+      let bucket = serviceBuckets.get(bucketKey);
+      if (!bucket) {
+        bucket = {
+          name: serviceName,
+          sourceServiceName: String(
+            service.sourceServiceName || serviceName
+          ).trim(),
+          sourceAccountName,
+          cost: 0,
+          rowCount: 0,
+          minDate: null,
+          maxDate: null,
+          detailBuckets: new Map(),
+          chargeTypeBuckets: new Map(),
+        };
+        serviceBuckets.set(bucketKey, bucket);
+      }
+
+      const serviceCost = Number.isFinite(service.cost) ? service.cost : 0;
+      const serviceRows = Number.isFinite(service.rowCount) ? service.rowCount : 0;
+      bucket.cost += serviceCost;
+      bucket.rowCount += serviceRows;
+
+      if (Number.isFinite(service.minDate)) {
+        bucket.minDate =
+          bucket.minDate === null
+            ? service.minDate
+            : Math.min(bucket.minDate, service.minDate);
+      }
+      if (Number.isFinite(service.maxDate)) {
+        bucket.maxDate =
+          bucket.maxDate === null
+            ? service.maxDate
+            : Math.max(bucket.maxDate, service.maxDate);
+      }
+
+      if (Array.isArray(service.topChargeTypes)) {
+        service.topChargeTypes.forEach((chargeType) => {
+          const key = String(chargeType || "").trim();
+          if (!key) {
+            return;
+          }
+          const count = bucket.chargeTypeBuckets.get(key) || 0;
+          bucket.chargeTypeBuckets.set(key, count + 1);
+        });
+      }
+
+      const details = Array.isArray(service.details) ? service.details : [];
+      details.forEach((detail) => {
+        const detailName = String(detail.name || "").trim() || "Line item";
+        let detailBucket = bucket.detailBuckets.get(detailName);
+        if (!detailBucket) {
+          detailBucket = {
+            name: detailName,
+            cost: 0,
+            rowCount: 0,
+          };
+          bucket.detailBuckets.set(detailName, detailBucket);
+        }
+        detailBucket.cost += Number.isFinite(detail.cost) ? detail.cost : 0;
+        detailBucket.rowCount += Number.isFinite(detail.rowCount)
+          ? detail.rowCount
+          : 0;
+      });
+    });
+  });
+
+  const services = Array.from(serviceBuckets.values())
+    .map((bucket) => {
+      const details = Array.from(bucket.detailBuckets.values())
+        .map((detail) => ({
+          name: detail.name,
+          cost: detail.cost,
+          rowCount: detail.rowCount,
+          share: bucket.cost !== 0 ? (detail.cost / bucket.cost) * 100 : 0,
+        }))
+        .sort((a, b) => b.cost - a.cost);
+      const topChargeTypes = Array.from(bucket.chargeTypeBuckets.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+      return {
+        name: bucket.name,
+        sourceServiceName: bucket.sourceServiceName || bucket.name,
+        sourceAccountName: bucket.sourceAccountName || "",
+        cost: bucket.cost,
+        rowCount: bucket.rowCount,
+        share: totalCost !== 0 ? (bucket.cost / totalCost) * 100 : 0,
+        detailCount: details.length,
+        details,
+        topChargeTypes,
+        minDate: bucket.minDate,
+        maxDate: bucket.maxDate,
+      };
+    })
+    .sort((a, b) => b.cost - a.cost);
+
+  return {
+    provider: normalizedProvider,
+    importedAt: latestImportedAt
+      ? new Date(latestImportedAt).toISOString()
+      : new Date().toISOString(),
+    rowCount,
+    serviceCount: services.length,
+    totalCost,
+    serviceColumn: pickMergedBillingColumn(
+      validDatasets,
+      "serviceColumn",
+      "Service"
+    ),
+    costColumn: pickMergedBillingColumn(validDatasets, "costColumn", "Cost"),
+    detailColumn: pickMergedBillingColumn(
+      validDatasets,
+      "detailColumn",
+      "Detail"
+    ),
+    chargeTypeColumn: pickMergedBillingColumn(
+      validDatasets,
+      "chargeTypeColumn",
+      ""
+    ),
+    usageDateColumn: pickMergedBillingColumn(
+      validDatasets,
+      "usageDateColumn",
+      ""
+    ),
+    services,
+    sourceDatasetCount,
+    sourceFiles,
+    sourceAccounts: Array.from(sourceAccountMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    ),
   };
 }
 
@@ -7476,16 +8319,233 @@ function getBillingExpandedServiceSet(provider) {
   return billingExpandedServices[key];
 }
 
+function buildUnifiedBillingData() {
+  const sources = BILLING_IMPORT_PROVIDERS.map((provider) => ({
+    provider,
+    data: billingImportStore[provider],
+  })).filter((entry) => entry.data && Array.isArray(entry.data.services));
+  if (!sources.length) {
+    return null;
+  }
+  const services = [];
+  let totalCost = 0;
+  let rowCount = 0;
+  let latestImportedAt = 0;
+  let sourceDatasetCount = 0;
+  const sourceFiles = [];
+  const sourceAccountMap = new Map();
+  sources.forEach(({ provider, data }) => {
+    const importedAtMs = Date.parse(data.importedAt || "");
+    if (Number.isFinite(importedAtMs)) {
+      latestImportedAt = Math.max(latestImportedAt, importedAtMs);
+    }
+    rowCount += Number.isFinite(data.rowCount) ? data.rowCount : 0;
+    totalCost += Number.isFinite(data.totalCost) ? data.totalCost : 0;
+    sourceDatasetCount += Number.isFinite(data.sourceDatasetCount)
+      ? data.sourceDatasetCount
+      : 1;
+    if (Array.isArray(data.sourceFiles)) {
+      data.sourceFiles.forEach((name) => {
+        const text = String(name || "").trim();
+        if (text && !sourceFiles.includes(text)) {
+          sourceFiles.push(text);
+        }
+      });
+    }
+    if (Array.isArray(data.sourceAccounts)) {
+      data.sourceAccounts.forEach((account) => {
+        const accountName = normalizeBillingAccountName(account?.name);
+        if (!accountName) {
+          return;
+        }
+        const key = `${provider}@@${accountName}`;
+        if (!sourceAccountMap.has(key)) {
+          sourceAccountMap.set(key, {
+            name: `${getBillingProviderDisplayName(provider)} / ${accountName}`,
+            cost: 0,
+            rowCount: 0,
+            fileCount: 0,
+            datasetCount: 0,
+          });
+        }
+        const target = sourceAccountMap.get(key);
+        target.cost += Number.isFinite(account?.cost) ? account.cost : 0;
+        target.rowCount += Number.isFinite(account?.rowCount) ? account.rowCount : 0;
+        target.fileCount += Number.isFinite(account?.fileCount) ? account.fileCount : 0;
+        target.datasetCount += Number.isFinite(account?.datasetCount)
+          ? account.datasetCount
+          : 1;
+      });
+    }
+    const providerLabel = getBillingProviderDisplayName(provider);
+    data.services.forEach((service) => {
+      const clonedDetails = Array.isArray(service.details)
+        ? service.details.map((detail) => ({ ...detail }))
+        : [];
+      services.push({
+        ...service,
+        name: service.name,
+        details: clonedDetails,
+        sourceProvider: provider,
+        sourceProviderLabel: providerLabel,
+        sourceServiceName: service.name,
+        sourceAccountName: service.sourceAccountName || "",
+      });
+    });
+  });
+  services.forEach((service) => {
+    service.share = totalCost > 0 ? (service.cost / totalCost) * 100 : 0;
+  });
+  services.sort((a, b) => b.cost - a.cost);
+  return {
+    provider: "unified",
+    importedAt: latestImportedAt
+      ? new Date(latestImportedAt).toISOString()
+      : new Date().toISOString(),
+    rowCount,
+    serviceCount: services.length,
+    totalCost,
+    serviceColumn: "Provider / Service",
+    costColumn: "Cost",
+    detailColumn: "Detail",
+    chargeTypeColumn: "",
+    usageDateColumn: "",
+    services,
+    sourceDatasetCount,
+    sourceFiles,
+    sourceAccounts: Array.from(sourceAccountMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    ),
+  };
+}
+
+function getBillingPanelData(provider = currentBillingProvider) {
+  const normalized = normalizeBillingProvider(provider);
+  if (normalized === "unified") {
+    return buildUnifiedBillingData();
+  }
+  return billingImportStore[normalized] || null;
+}
+
+function addBillingBucketCost(map, key, amount) {
+  const name = String(key || "").trim() || "Untagged";
+  const current = map.get(name) || 0;
+  map.set(name, current + amount);
+}
+
+function buildBillingChartBuckets(services, provider, groupBy) {
+  const isUnified = normalizeBillingProvider(provider) === "unified";
+  const buckets = new Map();
+  if (groupBy === "account") {
+    services.forEach((service) => {
+      const accountName = normalizeBillingAccountName(
+        service.sourceAccountName,
+        "Unlabeled"
+      );
+      const bucketKey = isUnified
+        ? `${getBillingProviderDisplayName(service.sourceProvider)} / ${accountName}`
+        : accountName;
+      addBillingBucketCost(
+        buckets,
+        bucketKey,
+        Number.isFinite(service.cost) ? service.cost : 0
+      );
+    });
+    return buckets;
+  }
+  if (groupBy === "service") {
+    services.forEach((service) => {
+      const serviceKey = isUnified
+        ? `${getBillingProviderDisplayName(service.sourceProvider)} / ${service.name}`
+        : service.name;
+      addBillingBucketCost(
+        buckets,
+        serviceKey,
+        Number.isFinite(service.cost) ? service.cost : 0
+      );
+    });
+    return buckets;
+  }
+
+  services.forEach((service) => {
+    const serviceCost = Number.isFinite(service.cost) ? service.cost : 0;
+    const details = Array.isArray(service.details) ? service.details : [];
+    const tagProvider = isUnified
+      ? normalizeBillingProvider(service.sourceProvider)
+      : normalizeBillingProvider(provider);
+    const tagServiceName = isUnified
+      ? String(service.sourceServiceName || service.name)
+      : service.name;
+    const serviceTag = getBillingServiceTag(tagProvider, tagServiceName);
+    if (serviceTag?.productApp && groupBy === "productApp") {
+      addBillingBucketCost(buckets, serviceTag.productApp, serviceCost);
+      return;
+    }
+    if (Array.isArray(serviceTag?.tags) && serviceTag.tags.length && groupBy === "tag") {
+      const share = serviceCost / serviceTag.tags.length;
+      serviceTag.tags.forEach((tag) => {
+        addBillingBucketCost(buckets, tag, share);
+      });
+      return;
+    }
+    if (!details.length) {
+      addBillingBucketCost(buckets, "Untagged", serviceCost);
+      return;
+    }
+
+    let distributed = 0;
+    details.forEach((detail) => {
+      const detailCost = Number.isFinite(detail.cost) ? detail.cost : 0;
+      const detailTag = getBillingDetailTag(
+        tagProvider,
+        tagServiceName,
+        detail.name
+      );
+      if (groupBy === "productApp") {
+        addBillingBucketCost(
+          buckets,
+          detailTag?.productApp || "Untagged",
+          detailCost
+        );
+      } else {
+        const tags = Array.isArray(detailTag?.tags) ? detailTag.tags : [];
+        if (tags.length) {
+          const share = detailCost / tags.length;
+          tags.forEach((tag) => {
+            addBillingBucketCost(buckets, tag, share);
+          });
+        } else {
+          addBillingBucketCost(buckets, "Untagged", detailCost);
+        }
+      }
+      distributed += detailCost;
+    });
+
+    const remainder = serviceCost - distributed;
+    if (Math.abs(remainder) >= 0.01) {
+      addBillingBucketCost(buckets, "Untagged", remainder);
+    }
+  });
+  return buckets;
+}
+
 function renderBillingImportPanel() {
   if (!billingSummary || !billingChart || !billingTable) {
     return;
   }
-  const data = billingImportStore[currentBillingProvider];
+  const normalizedProvider = normalizeBillingProvider(currentBillingProvider);
+  const isUnified = normalizedProvider === "unified";
+  const data = getBillingPanelData(currentBillingProvider);
+  syncBillingControls(data);
   if (!data) {
     billingSummary.innerHTML = `
       <article class="billing-summary-card">
-        <h4>${currentBillingProvider.toUpperCase()}</h4>
-        <p>No CSV imported for this provider yet.</p>
+        <h4>${getBillingProviderDisplayName(currentBillingProvider)}</h4>
+        <p>${
+          isUnified
+            ? "Import at least one provider CSV to populate Unified view."
+            : "No CSV imported for this provider yet."
+        }</p>
       </article>`;
     billingChart.innerHTML = `<p class="billing-empty">Import a billing CSV to visualize service allocation.</p>`;
     billingTable.innerHTML = "";
@@ -7495,11 +8555,53 @@ function renderBillingImportPanel() {
     return;
   }
 
-  const topServices = data.services.slice(0, 10);
-  const maxValue = topServices.length ? Math.max(...topServices.map((row) => row.cost)) : 0;
+  const activeFilter = getBillingCurrentFilter(currentBillingProvider);
+  const filterLabel =
+    activeFilter === BILLING_UNTAGGED_FILTER
+      ? "Untagged"
+      : activeFilter || "All product apps";
+  const filteredServices = getBillingFilteredServices(
+    data,
+    currentBillingProvider
+  );
+  const filteredTotal = filteredServices.reduce(
+    (sum, service) => sum + (Number.isFinite(service.cost) ? service.cost : 0),
+    0
+  );
+  const chartGroup = getBillingCurrentChartGroup(currentBillingProvider);
+  const chartBuckets = Array.from(
+    buildBillingChartBuckets(filteredServices, currentBillingProvider, chartGroup).entries()
+  )
+    .map(([name, cost]) => ({
+      name,
+      cost: Number.isFinite(cost) ? cost : 0,
+    }))
+    .filter((row) => Math.abs(row.cost) >= 0.01)
+    .sort((a, b) => b.cost - a.cost);
+  const topServices = chartBuckets.slice(0, 20);
+  const maxValue = topServices.length
+    ? Math.max(...topServices.map((row) => row.cost))
+    : 0;
+  const chartLabel =
+    chartGroup === "account"
+      ? "Account"
+      : chartGroup === "productApp"
+      ? "Product app"
+      : chartGroup === "tag"
+      ? "Tag"
+      : "Service";
+  const sourceDatasetCount = Number.isFinite(data.sourceDatasetCount)
+    ? data.sourceDatasetCount
+    : 1;
+  const sourceFileCount = Array.isArray(data.sourceFiles)
+    ? data.sourceFiles.length
+    : 0;
+  const sourceAccountCount = Array.isArray(data.sourceAccounts)
+    ? data.sourceAccounts.length
+    : 0;
   billingSummary.innerHTML = `
     <article class="billing-summary-card">
-      <h4>${currentBillingProvider.toUpperCase()}</h4>
+      <h4>${getBillingProviderDisplayName(currentBillingProvider)}</h4>
       <p>Total imported</p>
       <strong>${formatMoney(data.totalCost)}</strong>
     </article>
@@ -7509,9 +8611,29 @@ function renderBillingImportPanel() {
       <strong>${data.rowCount}</strong>
     </article>
     <article class="billing-summary-card">
+      <h4>CSV files</h4>
+      <p>Imported datasets</p>
+      <strong>${sourceDatasetCount} (${sourceFileCount} files tracked)</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Accounts</h4>
+      <p>Named sources</p>
+      <strong>${sourceAccountCount || "n/a"}</strong>
+    </article>
+    <article class="billing-summary-card">
       <h4>Services</h4>
       <p>Distinct services</p>
       <strong>${data.serviceCount}</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Filter</h4>
+      <p>${escapeMarkup(filterLabel)}</p>
+      <strong>${formatMoney(filteredTotal)} (${filteredServices.length} services)</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Chart view</h4>
+      <p>Grouped by ${escapeMarkup(chartLabel)}</p>
+      <strong>${topServices.length} buckets</strong>
     </article>
     <article class="billing-summary-card">
       <h4>Columns</h4>
@@ -7528,11 +8650,12 @@ function renderBillingImportPanel() {
     ? topServices
         .map((service) => {
           const width = maxValue > 0 ? (service.cost / maxValue) * 100 : 0;
+          const share = filteredTotal > 0 ? (service.cost / filteredTotal) * 100 : 0;
           return `
             <div class="billing-bar-row">
               <div class="billing-bar-meta">
                 <span class="billing-bar-label">${escapeMarkup(service.name)}</span>
-                <span class="billing-bar-value">${formatMoney(service.cost)} (${service.share.toFixed(1)}%)</span>
+                <span class="billing-bar-value">${formatMoney(service.cost)} (${share.toFixed(1)}%)</span>
               </div>
               <div class="billing-bar-track">
                 <div class="billing-bar-fill" style="width: ${Math.max(0, Math.min(100, width))}%"></div>
@@ -7540,36 +8663,138 @@ function renderBillingImportPanel() {
             </div>`;
         })
         .join("")
-    : `<p class="billing-empty">No service rows were parsed.</p>`;
+    : `<p class="billing-empty">No ${escapeMarkup(chartLabel.toLowerCase())} buckets match the current Product App filter.</p>`;
 
   const expandedServices = getBillingExpandedServiceSet(currentBillingProvider);
-  const tableRows = data.services
+  const selectedDetails = getBillingSelectedDetailSet(currentBillingProvider);
+  const selectedCount = selectedDetails.size;
+  const bulkSelectionBanner =
+    !isUnified && selectedCount > 0
+      ? `
+    <div class="billing-inline-bulk-bar">
+      <strong>${selectedCount} line items selected</strong>
+      <input
+        type="text"
+        class="billing-inline-input"
+        data-billing-inline-bulk-product-app
+        placeholder="Product app"
+      />
+      <input
+        type="text"
+        class="billing-inline-input"
+        data-billing-inline-bulk-tags
+        placeholder="Tags (comma-separated)"
+      />
+      <button type="button" class="table-action" data-billing-inline-bulk-apply>
+        Apply to selected
+      </button>
+      <button type="button" class="table-action" data-billing-inline-bulk-clear-tags>
+        Clear selected tags
+      </button>
+      <button type="button" class="table-action" data-billing-inline-bulk-clear-selection>
+        Clear selection
+      </button>
+    </div>`
+      : "";
+  const tableRows = filteredServices
     .slice(0, 100)
     .map((service) => {
-      const isExpanded = expandedServices.has(service.name);
+      const serviceExpandKey = isUnified
+        ? `${normalizeBillingProvider(service.sourceProvider)}@@${String(
+            service.sourceServiceName || service.name
+          )}`
+        : service.name;
+      const isExpanded = expandedServices.has(serviceExpandKey);
       const toggleLabel = isExpanded ? "-" : "+";
       const details = Array.isArray(service.details) ? service.details : [];
+      const tagProvider = isUnified
+        ? normalizeBillingProvider(service.sourceProvider)
+        : normalizedProvider;
+      const tagServiceName = isUnified
+        ? String(service.sourceServiceName || service.name)
+        : service.name;
+      const tagEntry = getBillingServiceTag(tagProvider, tagServiceName);
+      const productApp = tagEntry?.productApp || "—";
+      const customTags =
+        Array.isArray(tagEntry?.tags) && tagEntry.tags.length
+          ? tagEntry.tags.join(", ")
+          : "—";
+      const serviceShare =
+        filteredTotal > 0 ? (service.cost / filteredTotal) * 100 : 0;
       const detailRows = isExpanded
         ? details
             .slice(0, 200)
-            .map(
-              (detail) => `
+            .map((detail) => {
+              const detailKey = encodeBillingDetailKey(service.name, detail.name);
+              const detailChecked = selectedDetails.has(detailKey) ? "checked" : "";
+              const detailTag = getBillingDetailTag(
+                tagProvider,
+                tagServiceName,
+                detail.name
+              );
+              const detailApp = detailTag?.productApp || "";
+              const detailTags =
+                Array.isArray(detailTag?.tags) && detailTag.tags.length
+                  ? detailTag.tags.join(", ")
+                  : "";
+              if (isUnified) {
+                return `
               <tr class="billing-detail-row">
                 <td></td>
                 <td class="billing-detail-name">${escapeMarkup(detail.name)}</td>
+                <td>${escapeMarkup(detailApp || "—")}</td>
+                <td>${escapeMarkup(detailTags || "—")}</td>
                 <td>${formatMoney(detail.cost)}</td>
                 <td>${detail.share.toFixed(2)}%</td>
                 <td>${detail.rowCount}</td>
                 <td>Line item</td>
-              </tr>`
-            )
+              </tr>`;
+              }
+              return `
+              <tr class="billing-detail-row">
+                <td>
+                  <input
+                    type="checkbox"
+                    class="billing-detail-select"
+                    data-billing-detail-select="${detailKey}"
+                    ${detailChecked}
+                  />
+                </td>
+                <td class="billing-detail-name">${escapeMarkup(detail.name)}</td>
+                <td>
+                  <input
+                    type="text"
+                    class="billing-inline-input"
+                    data-billing-detail-product-app="${detailKey}"
+                    value="${escapeMarkup(detailApp)}"
+                    placeholder="Product app"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    class="billing-inline-input"
+                    data-billing-detail-tags="${detailKey}"
+                    value="${escapeMarkup(detailTags)}"
+                    placeholder="tag1, tag2"
+                  />
+                </td>
+                <td>${formatMoney(detail.cost)}</td>
+                <td>${detail.share.toFixed(2)}%</td>
+                <td>${detail.rowCount}</td>
+                <td class="billing-inline-actions">
+                  <button type="button" class="table-action" data-billing-detail-save="${detailKey}">Save</button>
+                  <button type="button" class="table-action" data-billing-detail-clear="${detailKey}">Clear</button>
+                </td>
+              </tr>`;
+            })
             .join("") +
           (() => {
             if (details.length > 200) {
               return `
                 <tr class="billing-detail-row">
                   <td></td>
-                  <td class="billing-detail-name" colspan="5">
+                  <td class="billing-detail-name" colspan="7">
                     Showing top 200 line items by cost (${details.length} total).
                   </td>
                 </tr>`;
@@ -7592,7 +8817,7 @@ function renderBillingImportPanel() {
             return `
               <tr class="billing-detail-row billing-detail-meta">
                 <td></td>
-                <td colspan="5">${escapeMarkup(tags.join(" | "))}</td>
+                <td colspan="7">${escapeMarkup(tags.join(" | "))}</td>
               </tr>`;
           })()
         : "";
@@ -7602,31 +8827,52 @@ function renderBillingImportPanel() {
             <button
               type="button"
               class="billing-expand-btn"
-              data-billing-toggle="${encodeURIComponent(service.name)}"
+              data-billing-toggle="${encodeURIComponent(serviceExpandKey)}"
               title="${isExpanded ? "Collapse" : "Expand"} line items"
             >
               ${toggleLabel}
             </button>
           </td>
-          <td>${escapeMarkup(service.name)}</td>
+          <td>${
+            isUnified
+              ? `${escapeMarkup(
+                  getBillingProviderDisplayName(service.sourceProvider)
+                )} / ${
+                  service.sourceAccountName
+                    ? `${escapeMarkup(service.sourceAccountName)} / `
+                    : ""
+                }${escapeMarkup(service.name)}`
+              : `${
+                  service.sourceAccountName
+                    ? `${escapeMarkup(service.sourceAccountName)} / `
+                    : ""
+                }${escapeMarkup(service.name)}`
+          }</td>
+          <td>${escapeMarkup(productApp)}</td>
+          <td>${escapeMarkup(customTags)}</td>
           <td>${formatMoney(service.cost)}</td>
-          <td>${service.share.toFixed(2)}%</td>
+          <td>${serviceShare.toFixed(2)}%</td>
           <td>${service.rowCount}</td>
-          <td>${service.detailCount || details.length}</td>
+          <td>${service.detailCount || details.length}${
+            service.isPartial ? " (filtered)" : ""
+          }</td>
         </tr>
         ${detailRows}`;
     })
     .join("");
   billingTable.innerHTML = `
+    ${bulkSelectionBanner}
     <table>
       <thead>
         <tr>
           <th></th>
           <th>Service</th>
+          <th>Product app</th>
+          <th>Tags</th>
           <th>Cost</th>
           <th>Share</th>
           <th>Rows</th>
-          <th>Line items</th>
+          <th>Line items / actions</th>
         </tr>
       </thead>
       <tbody>
@@ -7635,20 +8881,414 @@ function renderBillingImportPanel() {
     </table>`;
 }
 
+function pruneBillingProviderTags(provider, validServiceNames) {
+  const map = getBillingProviderTagMap(provider);
+  const allowed = new Set(validServiceNames || []);
+  let changed = false;
+  Object.keys(map).forEach((serviceName) => {
+    if (!allowed.has(serviceName)) {
+      delete map[serviceName];
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+function buildBillingExportCsv(data, services, provider, filterLabel) {
+  const rows = [
+    [
+      "Provider",
+      "Account",
+      "Service",
+      "ProductApp",
+      "Tags",
+      "Cost",
+      "SharePercent",
+      "Rows",
+      "LineItems",
+      "RecordType",
+      "LineItem",
+      "ImportedAt",
+      "FilterProductApp",
+      "ServiceColumn",
+      "CostColumn",
+      "DetailColumn",
+      "UsageDateColumn",
+    ],
+  ];
+  const total = services.reduce(
+    (sum, service) => sum + (Number.isFinite(service.cost) ? service.cost : 0),
+    0
+  );
+  services.forEach((service) => {
+    const sourceProvider =
+      normalizeBillingProvider(provider) === "unified"
+        ? normalizeBillingProvider(service.sourceProvider)
+        : normalizeBillingProvider(provider);
+    const sourceServiceName =
+      normalizeBillingProvider(provider) === "unified"
+        ? String(service.sourceServiceName || service.name)
+        : service.name;
+    const entry = getBillingServiceTag(sourceProvider, sourceServiceName);
+    const share = total > 0 ? (service.cost / total) * 100 : 0;
+    rows.push([
+      getBillingProviderDisplayName(sourceProvider),
+      service.sourceAccountName || "",
+      service.name,
+      entry?.productApp || "",
+      Array.isArray(entry?.tags) ? entry.tags.join("|") : "",
+      Number.isFinite(service.cost) ? service.cost.toFixed(2) : "",
+      share.toFixed(4),
+      service.rowCount || 0,
+      service.detailCount || 0,
+      "service",
+      "",
+      data.importedAt || "",
+      filterLabel || "All product apps",
+      data.serviceColumn || "",
+      data.costColumn || "",
+      data.detailColumn || "",
+      data.usageDateColumn || "",
+    ]);
+    const details = Array.isArray(service.details) ? service.details : [];
+    details.forEach((detail) => {
+      const detailEntry = getBillingDetailTag(
+        sourceProvider,
+        sourceServiceName,
+        detail.name
+      );
+      const detailShare = total > 0 ? (detail.cost / total) * 100 : 0;
+      rows.push([
+        getBillingProviderDisplayName(sourceProvider),
+        service.sourceAccountName || "",
+        service.name,
+        detailEntry?.productApp || "",
+        Array.isArray(detailEntry?.tags) ? detailEntry.tags.join("|") : "",
+        Number.isFinite(detail.cost) ? detail.cost.toFixed(2) : "",
+        detailShare.toFixed(4),
+        detail.rowCount || 0,
+        1,
+        "line-item",
+        detail.name || "",
+        data.importedAt || "",
+        filterLabel || "All product apps",
+        data.serviceColumn || "",
+        data.costColumn || "",
+        data.detailColumn || "",
+        data.usageDateColumn || "",
+      ]);
+    });
+  });
+  return rows.map((row) => row.map((value) => escapeCsv(value)).join(",")).join("\n");
+}
+
+function handleBillingExportCsv() {
+  const data = getBillingPanelData(currentBillingProvider);
+  if (!data) {
+    setInlineNote(billingNote, "Import a billing CSV first.", true);
+    return;
+  }
+  const filter = getBillingCurrentFilter(currentBillingProvider);
+  const filterLabel =
+    filter === BILLING_UNTAGGED_FILTER ? "Untagged" : filter || "All product apps";
+  const services = getBillingFilteredServices(data, currentBillingProvider);
+  if (!services.length) {
+    setInlineNote(
+      billingNote,
+      "No rows match the current Product App filter.",
+      true
+    );
+    return;
+  }
+  const csv = buildBillingExportCsv(
+    data,
+    services,
+    currentBillingProvider,
+    filterLabel
+  );
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const providerLabel = currentBillingProvider.toLowerCase();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  link.href = url;
+  link.download = `billing-${providerLabel}-${stamp}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  setInlineNote(
+    billingNote,
+    `${getBillingProviderDisplayName(
+      currentBillingProvider
+    )} billing CSV exported (${services.length} services).`
+  );
+}
+
+function handleBillingProductFilterChange() {
+  if (!billingProductFilter) {
+    return;
+  }
+  setBillingCurrentFilter(billingProductFilter.value, currentBillingProvider);
+  renderBillingImportPanel();
+}
+
+function handleBillingChartGroupChange() {
+  if (!billingChartGroup) {
+    return;
+  }
+  setBillingCurrentChartGroup(billingChartGroup.value, currentBillingProvider);
+  renderBillingImportPanel();
+}
+
+function getVisibleBillingDetailKeys() {
+  if (!billingTable) {
+    return [];
+  }
+  return Array.from(
+    billingTable.querySelectorAll("[data-billing-detail-select]")
+  )
+    .map((input) => String(input.dataset.billingDetailSelect || "").trim())
+    .filter(Boolean);
+}
+
+function handleBillingBulkSelectVisible() {
+  const data = getBillingPanelData(currentBillingProvider);
+  if (!data) {
+    setInlineNote(billingNote, "Import a billing CSV first.", true);
+    return;
+  }
+  const selected = getBillingSelectedDetailSet(currentBillingProvider);
+  getVisibleBillingDetailKeys().forEach((key) => {
+    selected.add(key);
+  });
+  renderBillingImportPanel();
+  setInlineNote(
+    billingNote,
+    `Selected ${selected.size} line items for bulk tagging.`
+  );
+}
+
+function handleBillingBulkClearSelection() {
+  const selected = getBillingSelectedDetailSet(currentBillingProvider);
+  selected.clear();
+  renderBillingImportPanel();
+  setInlineNote(billingNote, "Cleared line-item selection.");
+}
+
+function handleBillingBulkApply() {
+  const data = getBillingPanelData(currentBillingProvider);
+  if (!data) {
+    setInlineNote(billingNote, "Import a billing CSV first.", true);
+    return;
+  }
+  const productApp = String(billingBulkProductApp?.value || "").trim();
+  const tags = parseBillingCustomTags(billingBulkTags?.value || "");
+  applyBillingTagsToSelected(productApp, tags, false);
+}
+
+function handleBillingBulkClearTags() {
+  const data = getBillingPanelData(currentBillingProvider);
+  if (!data) {
+    setInlineNote(billingNote, "Import a billing CSV first.", true);
+    return;
+  }
+  applyBillingTagsToSelected("", [], true);
+}
+
+function applyBillingTagsToSelected(productApp, tags, clear = false) {
+  if (normalizeBillingProvider(currentBillingProvider) === "unified") {
+    setInlineNote(
+      billingNote,
+      "Tag editing is disabled in Unified view. Switch to a specific provider.",
+      true
+    );
+    return false;
+  }
+  const selected = getBillingSelectedDetailSet(currentBillingProvider);
+  if (!selected.size) {
+    setInlineNote(billingNote, "Select one or more line items first.", true);
+    return false;
+  }
+  const normalizedProductApp = String(productApp || "").trim();
+  const normalizedTags = Array.isArray(tags) ? tags : [];
+  if (!clear && !normalizedProductApp && !normalizedTags.length) {
+    setInlineNote(
+      billingNote,
+      "Provide a Product app or tags for bulk apply.",
+      true
+    );
+    return false;
+  }
+  let updated = 0;
+  selected.forEach((key) => {
+    const { serviceName, detailName } = decodeBillingDetailKey(key);
+    if (!serviceName || !detailName) {
+      return;
+    }
+    if (clear) {
+      setBillingDetailTag(currentBillingProvider, serviceName, detailName, null);
+    } else {
+      setBillingDetailTag(currentBillingProvider, serviceName, detailName, {
+        productApp: normalizedProductApp,
+        tags: normalizedTags,
+      });
+    }
+    updated += 1;
+  });
+  persistBillingDetailTagsStore(billingDetailTagStore);
+  renderBillingImportPanel();
+  const action = clear ? "Cleared tags for" : "Applied bulk tags to";
+  setInlineNote(
+    billingNote,
+    `${action} ${updated} line items on ${getBillingProviderDisplayName(
+      currentBillingProvider
+    )}.`
+  );
+  return true;
+}
+
+function handleBillingApplyTags() {
+  if (normalizeBillingProvider(currentBillingProvider) === "unified") {
+    setInlineNote(
+      billingNote,
+      "Tag editing is disabled in Unified view. Switch to a specific provider.",
+      true
+    );
+    return;
+  }
+  const data = getBillingPanelData(currentBillingProvider);
+  if (!data) {
+    setInlineNote(billingNote, "Import a billing CSV first.", true);
+    return;
+  }
+  const serviceName = String(billingTagService?.value || "").trim();
+  if (!serviceName) {
+    setInlineNote(billingNote, "Select a service to tag.", true);
+    return;
+  }
+  const productApp = String(billingTagProductApp?.value || "").trim();
+  const tags = parseBillingCustomTags(billingTagCustom?.value || "");
+  setBillingServiceTag(currentBillingProvider, serviceName, { productApp, tags });
+  persistBillingTagsStore(billingTagStore);
+  renderBillingImportPanel();
+  setInlineNote(
+    billingNote,
+    `Saved tags for "${serviceName}" on ${getBillingProviderDisplayName(
+      currentBillingProvider
+    )}.`
+  );
+}
+
+function handleBillingClearTags() {
+  if (normalizeBillingProvider(currentBillingProvider) === "unified") {
+    setInlineNote(
+      billingNote,
+      "Tag editing is disabled in Unified view. Switch to a specific provider.",
+      true
+    );
+    return;
+  }
+  const data = getBillingPanelData(currentBillingProvider);
+  if (!data) {
+    setInlineNote(billingNote, "Import a billing CSV first.", true);
+    return;
+  }
+  const serviceName = String(billingTagService?.value || "").trim();
+  if (!serviceName) {
+    setInlineNote(billingNote, "Select a service to clear tags.", true);
+    return;
+  }
+  setBillingServiceTag(currentBillingProvider, serviceName, null);
+  persistBillingTagsStore(billingTagStore);
+  renderBillingImportPanel();
+  setInlineNote(
+    billingNote,
+    `Cleared tags for "${serviceName}" on ${getBillingProviderDisplayName(
+      currentBillingProvider
+    )}.`
+  );
+}
+
 async function handleBillingImportFile(event) {
-  const file = event?.target?.files?.[0];
-  if (!file) {
+  const files = Array.from(event?.target?.files || []);
+  if (!files.length) {
+    return;
+  }
+  if (normalizeBillingProvider(currentBillingProvider) === "unified") {
+    setInlineNote(
+      billingNote,
+      "Import is disabled on Unified. Select AWS, Azure, GCP, or Rackspace.",
+      true
+    );
+    if (billingImportInput) {
+      billingImportInput.value = "";
+    }
     return;
   }
   try {
-    const text = await file.text();
-    const parsed = parseBillingImportCsv(text, currentBillingProvider);
-    billingImportStore[currentBillingProvider] = parsed;
+    const parsedImports = [];
+    const failedImports = [];
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const parsed = parseBillingImportCsv(text, currentBillingProvider);
+        const defaultLabel = String(file.name || "")
+          .replace(/\.[^.]+$/, "")
+          .trim();
+        const sourceAccountName = normalizeBillingAccountName(
+          defaultLabel,
+          "Unlabeled"
+        );
+        parsed.sourceFiles = [file.name];
+        parsed.sourceDatasetCount = 1;
+        parsed.sourceAccounts = [
+          {
+            name: sourceAccountName || "Unlabeled",
+            cost: Number.isFinite(parsed.totalCost) ? parsed.totalCost : 0,
+            rowCount: Number.isFinite(parsed.rowCount) ? parsed.rowCount : 0,
+            fileCount: 1,
+            datasetCount: 1,
+          },
+        ];
+        parsed.services = (parsed.services || []).map((service) => ({
+          ...service,
+          sourceServiceName: String(service.name || "").trim() || service.name,
+          sourceAccountName: sourceAccountName || "",
+        }));
+        parsedImports.push(parsed);
+      } catch (error) {
+        failedImports.push(
+          `${file.name}: ${error?.message || "Could not parse CSV"}`
+        );
+      }
+    }
+    if (!parsedImports.length) {
+      throw new Error(
+        failedImports.join(" | ") || "Could not parse any selected CSV files."
+      );
+    }
+    const existing = billingImportStore[currentBillingProvider];
+    const merged = mergeBillingImportDatasets(currentBillingProvider, [
+      ...(existing ? [existing] : []),
+      ...parsedImports,
+    ]);
+    billingImportStore[currentBillingProvider] = merged;
+    // Keep service/detail tags across imports so monthly files can auto-match by name.
+    persistBillingTagsStore(billingTagStore);
+    persistBillingDetailTagsStore(billingDetailTagStore);
     billingExpandedServices[currentBillingProvider] = new Set();
+    billingSelectedDetailKeys[currentBillingProvider] = new Set();
     persistBillingImportStore(billingImportStore);
     setInlineNote(
       billingNote,
-      `${currentBillingProvider.toUpperCase()} billing CSV imported (${parsed.rowCount} rows).`
+      `${getBillingProviderDisplayName(currentBillingProvider)} imported ${
+        parsedImports.length
+      } file(s), merged rows: ${merged?.rowCount || 0}.${
+        failedImports.length
+          ? ` Failed: ${failedImports.length} (${failedImports.join(" | ")}).`
+          : ""
+      }`
     );
     renderBillingImportPanel();
   } catch (error) {
@@ -7665,22 +9305,53 @@ async function handleBillingImportFile(event) {
 }
 
 function handleBillingClearProvider() {
+  if (normalizeBillingProvider(currentBillingProvider) === "unified") {
+    setInlineNote(
+      billingNote,
+      "Clear provider is disabled on Unified. Use Clear all if needed.",
+      true
+    );
+    return;
+  }
   billingImportStore[currentBillingProvider] = null;
+  billingTagStore[currentBillingProvider] = {};
+  billingDetailTagStore[currentBillingProvider] = {};
+  billingSelectedDetailKeys[currentBillingProvider] = new Set();
+  persistBillingTagsStore(billingTagStore);
+  persistBillingDetailTagsStore(billingDetailTagStore);
+  setBillingCurrentFilter("", currentBillingProvider);
   billingExpandedServices[currentBillingProvider] = new Set();
   persistBillingImportStore(billingImportStore);
   setInlineNote(
     billingNote,
-    `Cleared ${currentBillingProvider.toUpperCase()} billing import.`
+    `Cleared ${getBillingProviderDisplayName(
+      currentBillingProvider
+    )} billing import.`
   );
   renderBillingImportPanel();
 }
 
 function handleBillingClearAll() {
   billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
+  billingTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+  billingDetailTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+  billingSelectedDetailKeys.aws = new Set();
+  billingSelectedDetailKeys.azure = new Set();
+  billingSelectedDetailKeys.gcp = new Set();
+  billingSelectedDetailKeys.rackspace = new Set();
+  billingSelectedDetailKeys.unified = new Set();
+  persistBillingTagsStore(billingTagStore);
+  persistBillingDetailTagsStore(billingDetailTagStore);
+  setBillingCurrentFilter("", "aws");
+  setBillingCurrentFilter("", "azure");
+  setBillingCurrentFilter("", "gcp");
+  setBillingCurrentFilter("", "rackspace");
+  setBillingCurrentFilter("", "unified");
   billingExpandedServices.aws = new Set();
   billingExpandedServices.azure = new Set();
   billingExpandedServices.gcp = new Set();
   billingExpandedServices.rackspace = new Set();
+  billingExpandedServices.unified = new Set();
   persistBillingImportStore(billingImportStore);
   setInlineNote(billingNote, "Cleared billing imports for all providers.");
   renderBillingImportPanel();
@@ -8617,19 +10288,150 @@ if (billingImportButton && billingImportInput) {
   });
   billingImportInput.addEventListener("change", handleBillingImportFile);
 }
+if (billingExportButton) {
+  billingExportButton.addEventListener("click", handleBillingExportCsv);
+}
 if (billingClearButton) {
   billingClearButton.addEventListener("click", handleBillingClearProvider);
 }
 if (billingClearAllButton) {
   billingClearAllButton.addEventListener("click", handleBillingClearAll);
 }
+if (billingProductFilter) {
+  billingProductFilter.addEventListener("change", handleBillingProductFilterChange);
+}
+if (billingChartGroup) {
+  billingChartGroup.addEventListener("change", handleBillingChartGroupChange);
+}
+if (billingTagService) {
+  billingTagService.addEventListener("change", updateBillingTagEditorFields);
+}
+if (billingApplyTagsButton) {
+  billingApplyTagsButton.addEventListener("click", handleBillingApplyTags);
+}
+if (billingClearTagsButton) {
+  billingClearTagsButton.addEventListener("click", handleBillingClearTags);
+}
+if (billingBulkSelectVisible) {
+  billingBulkSelectVisible.addEventListener("click", handleBillingBulkSelectVisible);
+}
+if (billingBulkClearSelection) {
+  billingBulkClearSelection.addEventListener(
+    "click",
+    handleBillingBulkClearSelection
+  );
+}
+if (billingBulkApply) {
+  billingBulkApply.addEventListener("click", handleBillingBulkApply);
+}
+if (billingBulkClearTags) {
+  billingBulkClearTags.addEventListener("click", handleBillingBulkClearTags);
+}
 if (billingTable) {
-  billingTable.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-billing-toggle]");
-    if (!button) {
+  billingTable.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-billing-detail-select]");
+    if (!checkbox) {
       return;
     }
-    const encodedName = button.dataset.billingToggle || "";
+    const key = String(checkbox.dataset.billingDetailSelect || "").trim();
+    if (!key) {
+      return;
+    }
+    const selected = getBillingSelectedDetailSet(currentBillingProvider);
+    if (checkbox.checked) {
+      selected.add(key);
+    } else {
+      selected.delete(key);
+    }
+    updateBillingBulkSelectionSummary(currentBillingProvider);
+    syncBillingControls(getBillingPanelData(currentBillingProvider));
+  });
+  billingTable.addEventListener("click", (event) => {
+    const inlineApplyButton = event.target.closest(
+      "[data-billing-inline-bulk-apply]"
+    );
+    if (inlineApplyButton) {
+      const appInput = billingTable.querySelector(
+        "[data-billing-inline-bulk-product-app]"
+      );
+      const tagInput = billingTable.querySelector(
+        "[data-billing-inline-bulk-tags]"
+      );
+      const productApp = String(appInput?.value || "").trim();
+      const tags = parseBillingCustomTags(tagInput?.value || "");
+      applyBillingTagsToSelected(productApp, tags, false);
+      return;
+    }
+
+    const inlineClearTagsButton = event.target.closest(
+      "[data-billing-inline-bulk-clear-tags]"
+    );
+    if (inlineClearTagsButton) {
+      applyBillingTagsToSelected("", [], true);
+      return;
+    }
+
+    const inlineClearSelectionButton = event.target.closest(
+      "[data-billing-inline-bulk-clear-selection]"
+    );
+    if (inlineClearSelectionButton) {
+      const selected = getBillingSelectedDetailSet(currentBillingProvider);
+      selected.clear();
+      renderBillingImportPanel();
+      setInlineNote(billingNote, "Cleared line-item selection.");
+      return;
+    }
+
+    const saveButton = event.target.closest("[data-billing-detail-save]");
+    if (saveButton) {
+      const key = saveButton.dataset.billingDetailSave || "";
+      const { serviceName, detailName } = decodeBillingDetailKey(key);
+      if (!serviceName || !detailName) {
+        return;
+      }
+      const productInput = Array.from(
+        billingTable.querySelectorAll("[data-billing-detail-product-app]")
+      ).find((input) => input.dataset.billingDetailProductApp === key);
+      const tagsInput = Array.from(
+        billingTable.querySelectorAll("[data-billing-detail-tags]")
+      ).find((input) => input.dataset.billingDetailTags === key);
+      const productApp = String(productInput?.value || "").trim();
+      const tags = parseBillingCustomTags(tagsInput?.value || "");
+      setBillingDetailTag(currentBillingProvider, serviceName, detailName, {
+        productApp,
+        tags,
+      });
+      persistBillingDetailTagsStore(billingDetailTagStore);
+      renderBillingImportPanel();
+      setInlineNote(
+        billingNote,
+        `Saved line-item tags for "${detailName}" in "${serviceName}".`
+      );
+      return;
+    }
+
+    const clearButton = event.target.closest("[data-billing-detail-clear]");
+    if (clearButton) {
+      const key = clearButton.dataset.billingDetailClear || "";
+      const { serviceName, detailName } = decodeBillingDetailKey(key);
+      if (!serviceName || !detailName) {
+        return;
+      }
+      setBillingDetailTag(currentBillingProvider, serviceName, detailName, null);
+      persistBillingDetailTagsStore(billingDetailTagStore);
+      renderBillingImportPanel();
+      setInlineNote(
+        billingNote,
+        `Cleared line-item tags for "${detailName}" in "${serviceName}".`
+      );
+      return;
+    }
+
+    const toggleButton = event.target.closest("[data-billing-toggle]");
+    if (!toggleButton) {
+      return;
+    }
+    const encodedName = toggleButton.dataset.billingToggle || "";
     const serviceName = decodeURIComponent(encodedName);
     if (!serviceName) {
       return;
@@ -8658,6 +10460,8 @@ sqlEditionSelect.addEventListener("change", () => {
 window.addEventListener("load", async () => {
   scenarioStore = loadScenarioStore();
   billingImportStore = loadBillingImportStore();
+  billingTagStore = loadBillingTagsStore();
+  billingDetailTagStore = loadBillingDetailTagsStore();
   savedCompareScenarioSelections = loadSavedCompareSelections(
     SAVED_COMPARE_SCENARIOS_KEY
   );

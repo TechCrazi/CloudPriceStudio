@@ -1456,6 +1456,13 @@
                 >
                   Rackspace
                 </button>
+                <button
+                  type="button"
+                  class="focus-tab"
+                  data-billing-provider="unified"
+                >
+                  Unified
+                </button>
               </div>
               <button
                 type="button"
@@ -1463,6 +1470,13 @@
                 id="billing-import-csv"
               >
                 Import CSV
+              </button>
+              <button
+                type="button"
+                class="secondary-btn"
+                id="billing-export-csv"
+              >
+                Export CSV
               </button>
               <button type="button" class="secondary-btn" id="billing-clear">
                 Clear provider
@@ -1479,10 +1493,128 @@
               type="file"
               id="billing-import-file"
               accept=".csv,text/csv"
+              multiple
               class="is-hidden"
             />
             <p class="form-note" id="billing-note"></p>
             <p class="form-note billing-format-hint" id="billing-format-hint"></p>
+            <div class="billing-tools">
+              <div class="billing-filter">
+                <label>
+                  Product app filter
+                  <select id="billing-product-filter">
+                    <option value="">All product apps</option>
+                    <option value="__untagged__">Untagged</option>
+                  </select>
+                </label>
+                <label>
+                  Graph by
+                  <select id="billing-chart-group">
+                    <option value="service">Service</option>
+                    <option value="account">Account</option>
+                    <option value="productApp">Product app</option>
+                    <option value="tag">Tag</option>
+                  </select>
+                </label>
+              </div>
+              <div class="billing-tag-editor">
+                <label>
+                  Service
+                  <select id="billing-tag-service">
+                    <option value="">Select service</option>
+                  </select>
+                </label>
+                <label>
+                  Product app
+                  <input
+                    type="text"
+                    id="billing-tag-product-app"
+                    placeholder="e.g. LKInterface"
+                  />
+                </label>
+                <label>
+                  Custom tags (comma-separated)
+                  <input
+                    type="text"
+                    id="billing-tag-custom"
+                    placeholder="env:prod, owner:platform"
+                  />
+                </label>
+                <div class="billing-tag-actions">
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="billing-apply-tags"
+                  >
+                    Apply tags
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="billing-clear-tags"
+                  >
+                    Clear tags
+                  </button>
+                </div>
+              </div>
+              <div class="billing-bulk-editor">
+                <label>
+                  Selected line items
+                  <input
+                    type="text"
+                    id="billing-bulk-count"
+                    value="0 selected"
+                    readonly
+                  />
+                </label>
+                <label>
+                  Bulk product app
+                  <input
+                    type="text"
+                    id="billing-bulk-product-app"
+                    placeholder="e.g. LKOasis"
+                  />
+                </label>
+                <label>
+                  Bulk tags (comma-separated)
+                  <input
+                    type="text"
+                    id="billing-bulk-tags"
+                    placeholder="tag1, tag2"
+                  />
+                </label>
+                <div class="billing-tag-actions">
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="billing-bulk-select-visible"
+                  >
+                    Select visible
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="billing-bulk-clear-selection"
+                  >
+                    Clear selection
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="billing-bulk-apply"
+                  >
+                    Apply to selected
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="billing-bulk-clear-tags"
+                  >
+                    Clear selected tags
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="billing-summary" id="billing-summary"></div>
             <div class="billing-chart" id="billing-chart"></div>
             <div class="saved-compare-table" id="billing-table"></div>

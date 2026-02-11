@@ -114,11 +114,17 @@ allocation by service.
   falls back to common column names when exact headers differ.
 - AWS import expects Cost Explorer `Service view` CSV format.
 - Azure import expects Cost Analysis `Meter view` CSV format.
+- Add custom tags per service (including `Product app`) with multi-tag input
+  (comma-separated tags).
+- Filter Billing Import views by `Product app` (including an `Untagged` filter).
+- Export provider billing CSV from the active filter; exported rows include
+  `ProductApp` and `Tags` columns.
 - Rackspace CSV mapping supports columns like `SERVICE_TYPE` (service),
   `AMOUNT` (cost), and `RES_NAME`/`IMPACT_TYPE`/`EVENT_TYPE` (line-item
   detail), with usage date range from `EVENT_START_DATE`/`EVENT_END_DATE`
   when present.
-- Imported billing datasets are stored in browser localStorage per provider.
+- Imported billing datasets and billing tags are stored in browser localStorage
+  per provider.
 - Unit economics shares now include backups and DR, plus an `Other` residual
   bucket so provider percentages reconcile to the monthly total.
 
