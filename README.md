@@ -112,11 +112,15 @@ allocation by service.
   rows grouped under `ServiceName`).
 - CSV parsing auto-detects service, cost, and detail columns by provider and
   falls back to common column names when exact headers differ.
+- AWS import expects Cost Explorer `Service view` CSV format.
+- Azure import expects Cost Analysis `Meter view` CSV format.
 - Rackspace CSV mapping supports columns like `SERVICE_TYPE` (service),
   `AMOUNT` (cost), and `RES_NAME`/`IMPACT_TYPE`/`EVENT_TYPE` (line-item
   detail), with usage date range from `EVENT_START_DATE`/`EVENT_END_DATE`
   when present.
 - Imported billing datasets are stored in browser localStorage per provider.
+- Unit economics shares now include backups and DR, plus an `Other` residual
+  bucket so provider percentages reconcile to the monthly total.
 
 ## Pricing cache warm-up
 

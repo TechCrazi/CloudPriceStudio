@@ -182,6 +182,7 @@ const billingImportInput = document.getElementById("billing-import-file");
 const billingClearButton = document.getElementById("billing-clear");
 const billingClearAllButton = document.getElementById("billing-clear-all");
 const billingNote = document.getElementById("billing-note");
+const billingFormatHint = document.getElementById("billing-format-hint");
 const billingSummary = document.getElementById("billing-summary");
 const billingChart = document.getElementById("billing-chart");
 const billingTable = document.getElementById("billing-table");
@@ -4356,12 +4357,20 @@ function renderUnitEconomics(data) {
       Number.isFinite(total) && Number.isFinite(info.divisor) && info.divisor > 0
         ? total / info.divisor
         : null;
-    const compute = Number.isFinite(totals?.computeMonthly)
+    const computeBase = Number.isFinite(totals?.computeMonthly)
       ? totals.computeMonthly
       : 0;
+    const controlPlane = Number.isFinite(totals?.controlPlaneMonthly)
+      ? totals.controlPlaneMonthly
+      : 0;
+    const compute = computeBase + controlPlane;
     const storage = Number.isFinite(totals?.storageMonthly)
       ? totals.storageMonthly
       : 0;
+    const backups = Number.isFinite(totals?.backupMonthly)
+      ? totals.backupMonthly
+      : 0;
+    const dr = Number.isFinite(totals?.drMonthly) ? totals.drMonthly : 0;
     const network = Number.isFinite(totals?.networkMonthly)
       ? totals.networkMonthly
       : 0;
@@ -4373,6 +4382,12 @@ function renderUnitEconomics(data) {
       (Number.isFinite(totals?.windowsLicenseMonthly)
         ? totals.windowsLicenseMonthly
         : 0);
+    const trackedTotal =
+      compute + storage + backups + dr + network + egress + licenses;
+    let other = Number.isFinite(total) ? total - trackedTotal : 0;
+    if (Math.abs(other) < 0.01) {
+      other = 0;
+    }
     const denominator = Number.isFinite(total) && total > 0 ? total : null;
     const share = (value) =>
       denominator ? `${((value / denominator) * 100).toFixed(1)}%` : "n/a";
@@ -4383,9 +4398,12 @@ function renderUnitEconomics(data) {
       unit: info.label,
       computeShare: share(compute),
       storageShare: share(storage),
+      backupShare: share(backups),
+      drShare: share(dr),
       networkShare: share(network),
       egressShare: share(egress),
       licenseShare: share(licenses),
+      otherShare: share(other),
     };
   });
   unitEconTable.innerHTML = `
@@ -4396,9 +4414,12 @@ function renderUnitEconomics(data) {
         <th>Normalized</th>
         <th>Compute</th>
         <th>Storage</th>
+        <th>Backups</th>
+        <th>DR</th>
         <th>Network</th>
         <th>Egress</th>
         <th>Licenses</th>
+        <th>Other</th>
       </tr>
     </thead>
     <tbody>
@@ -4415,9 +4436,12 @@ function renderUnitEconomics(data) {
           }</td>
           <td>${row.computeShare}</td>
           <td>${row.storageShare}</td>
+          <td>${row.backupShare}</td>
+          <td>${row.drShare}</td>
           <td>${row.networkShare}</td>
           <td>${row.egressShare}</td>
           <td>${row.licenseShare}</td>
+          <td>${row.otherShare}</td>
         </tr>`
         )
         .join("")}
@@ -4436,8 +4460,8 @@ function renderUnitEconomics(data) {
   }
   unitEconNote.textContent =
     data.input?.mode === "k8s"
-      ? "Normalized per node count."
-      : "Normalized per VM count.";
+      ? "Normalized per node count. Shares include backups/DR and reconcile with an Other residual."
+      : "Normalized per VM count. Shares include backups/DR and reconcile with an Other residual.";
 }
 
 function buildRecommendations(data) {
@@ -6870,6 +6894,9 @@ function escapeCsv(value) {
 }
 
 function parseCsvRows(text) {
+  if (typeof text === "string" && text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
   const rows = [];
   let row = [];
   let value = "";
@@ -6949,6 +6976,20 @@ function normalizeBillingProvider(provider) {
   return "aws";
 }
 
+function getBillingImportFormatHint(provider) {
+  const normalized = normalizeBillingProvider(provider);
+  if (normalized === "aws") {
+    return "AWS CSV format: Cost Explorer Service view (Cost and usage breakdown by Service).";
+  }
+  if (normalized === "azure") {
+    return "Azure CSV format: Cost Analysis Meter view.";
+  }
+  if (normalized === "gcp") {
+    return "GCP CSV format: Billing export with service/SKU/cost columns.";
+  }
+  return "Rackspace CSV format: invoice usage export with SERVICE_TYPE and AMOUNT columns.";
+}
+
 function loadBillingImportStore() {
   try {
     const raw = localStorage.getItem(BILLING_IMPORT_KEY);
@@ -7023,6 +7064,99 @@ function escapeMarkup(value) {
     .replace(/'/g, "&#39;");
 }
 
+function parseAwsServiceViewMatrix(rows, headers) {
+  const firstHeader = headers[0] || "";
+  const totalCostsColumnIndex = headers.findIndex((header) =>
+    header.includes("total costs")
+  );
+  if (
+    firstHeader !== "service" ||
+    rows.length < 2 ||
+    totalCostsColumnIndex < 0 ||
+    headers.length < 3
+  ) {
+    return null;
+  }
+
+  const dataRows = rows.slice(1);
+  const summaryRow =
+    dataRows.find((row) => normalizeCsvHeader(row[0]) === "service total") ||
+    dataRows[0];
+  if (!summaryRow) {
+    return null;
+  }
+  const usageRow = dataRows.find((row) =>
+    /^\d{4}-\d{2}-\d{2}/.test(String(row[0] || "").trim())
+  );
+  const usageTimestamp = usageRow
+    ? new Date(String(usageRow[0] || "").trim()).getTime()
+    : Number.NaN;
+
+  const services = [];
+  let totalCost = parseBillingCurrency(summaryRow[totalCostsColumnIndex]);
+  for (let col = 1; col < headers.length; col += 1) {
+    const normalizedHeader = headers[col];
+    if (!normalizedHeader || normalizedHeader.includes("total costs")) {
+      continue;
+    }
+    const rawName = String(rows[0][col] || "").trim();
+    const serviceName = rawName.replace(/\s*\((\$|usd)\)\s*$/i, "").trim();
+    if (!serviceName) {
+      continue;
+    }
+    let serviceCost = parseBillingCurrency(summaryRow[col]);
+    if (!Number.isFinite(serviceCost) && usageRow) {
+      serviceCost = parseBillingCurrency(usageRow[col]);
+    }
+    if (!Number.isFinite(serviceCost)) {
+      continue;
+    }
+    services.push({
+      name: serviceName,
+      cost: serviceCost,
+      rowCount: 1,
+      share: 0,
+      detailCount: 1,
+      details: [
+        {
+          name: String(summaryRow[0] || "Service total"),
+          cost: serviceCost,
+          rowCount: 1,
+          share: 100,
+        },
+      ],
+      topChargeTypes: [],
+      minDate: Number.isFinite(usageTimestamp) ? usageTimestamp : null,
+      maxDate: Number.isFinite(usageTimestamp) ? usageTimestamp : null,
+    });
+  }
+
+  if (!services.length) {
+    return null;
+  }
+  if (!Number.isFinite(totalCost)) {
+    totalCost = services.reduce((sum, service) => sum + service.cost, 0);
+  }
+  services.forEach((service) => {
+    service.share = totalCost !== 0 ? (service.cost / totalCost) * 100 : 0;
+  });
+  services.sort((a, b) => b.cost - a.cost);
+
+  return {
+    provider: "aws",
+    importedAt: new Date().toISOString(),
+    rowCount: services.length,
+    serviceCount: services.length,
+    totalCost,
+    serviceColumn: rows[0][0] || "Service",
+    costColumn: rows[0][totalCostsColumnIndex] || "Total costs($)",
+    detailColumn: String(summaryRow[0] || "Service total"),
+    chargeTypeColumn: "",
+    usageDateColumn: usageRow ? rows[0][0] || "Service" : "",
+    services,
+  };
+}
+
 function parseBillingImportCsv(text, provider) {
   const rows = parseCsvRows(text).filter((row) =>
     row.some((value) => String(value || "").trim() !== "")
@@ -7032,6 +7166,12 @@ function parseBillingImportCsv(text, provider) {
   }
   const normalizedProvider = normalizeBillingProvider(provider);
   const headers = rows[0].map((value) => normalizeCsvHeader(value));
+  if (normalizedProvider === "aws") {
+    const matrixParse = parseAwsServiceViewMatrix(rows, headers);
+    if (matrixParse) {
+      return matrixParse;
+    }
+  }
   const serviceCandidatesByProvider = {
     aws: [
       "product/productname",
@@ -7320,6 +7460,11 @@ function setBillingProvider(provider) {
       button.dataset.billingProvider === currentBillingProvider
     );
   });
+  if (billingFormatHint) {
+    billingFormatHint.textContent = getBillingImportFormatHint(
+      currentBillingProvider
+    );
+  }
   renderBillingImportPanel();
 }
 
