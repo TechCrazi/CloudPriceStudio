@@ -1554,6 +1554,12 @@
             <div class="billing-tools">
               <div class="billing-filter">
                 <label>
+                  Billing month
+                  <select id="billing-month-filter">
+                    <option value="all">All months</option>
+                  </select>
+                </label>
+                <label>
                   Product app filter
                   <select id="billing-product-filter">
                     <option value="">All product apps</option>
@@ -1703,6 +1709,38 @@
               </p>
               <p class="data-transfer-text" id="data-transfer-scope"></p>
               <p class="form-note" id="data-transfer-note"></p>
+            </section>
+            <section class="admin-card data-transfer-card">
+              <div class="form-section">Rollback history</div>
+              <p class="data-transfer-text">
+                Every saved change creates a version. The app keeps the last 50
+                versions per user on this browser.
+              </p>
+              <div class="data-transfer-history-controls">
+                <label>
+                  Saved versions
+                  <select id="data-version-select">
+                    <option value="">No versions available</option>
+                  </select>
+                </label>
+                <div class="data-transfer-history-actions">
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="data-version-rollback"
+                  >
+                    Roll Back to Selected
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="data-version-refresh"
+                  >
+                    Refresh Versions
+                  </button>
+                </div>
+              </div>
+              <p class="form-note" id="data-version-note"></p>
             </section>
           </div>
           <div class="results-panel is-hidden" id="admin-panel">

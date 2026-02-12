@@ -113,10 +113,12 @@ Retail (Vantage) mode does not require credentials.
 
 ## Login + profile persistence
 
-By default (guest mode), app state remains browser-local only (`localStorage`).
+By default (`Guest mode`), app state is stored in browser cache/localStorage
+only and is not synced to the cloud database.
 
 If login is configured and a valid user signs in:
 
+- The header status shows that profile data is synced to the cloud database.
 - The app syncs scenario/private/billing state to server-side local storage
   inside the container SQLite database
   (`/tmp/cloud-price-data/cloudprice.db` by default).
@@ -155,6 +157,9 @@ login action.
 - Import the same JSON on any machine/browser.
 - If signed in, imported data is immediately synced to the user DB profile.
 - If guest, imported data is applied to browser-local storage only.
+- Automatic rollback history: every saved change creates a version.
+- Version retention: last 50 versions per user (or guest) in the browser.
+- Roll back from the `User Data` tab by selecting a version and restoring it.
 
 When signed in as an admin user, an `Admin` tab appears to:
 - Add users
@@ -170,10 +175,14 @@ localStorage and can be loaded later from the dropdown.
 ## Billing Import
 
 Use the `Billing Import` tab to import provider billing CSV files and visualize
-allocation by service.
+allocation by service, month, and tags.
 
 - Provider-specific import views for AWS, Azure, GCP, and Rackspace.
 - Unified billing view merges imported datasets across providers.
+- Billing month dropdown is available on every provider tab and Unified tab
+  (`All months` or a specific month bucket).
+- Multi-month CSV imports are grouped into per-month buckets so historical
+  month-over-month imports accumulate instead of replacing prior months.
 - Aggregated totals, service share, and top service bar visualization.
 - Expandable line-item drilldown in the service table:
   click `+` beside a service to open detailed items (for example Azure `Meter`
@@ -187,14 +196,17 @@ allocation by service.
 - Optional detail-level tags for expanded line items plus bulk apply/clear
   across selected visible rows.
 - Filter Billing Import views by `Product app` (including an `Untagged` filter).
+- Existing service/detail tags are retained and automatically reused for future
+  monthly imports when service names match.
 - Export provider billing CSV from the active filter; exported rows include
   `ProductApp` and `Tags` columns.
 - Rackspace CSV mapping supports columns like `SERVICE_TYPE` (service),
   `AMOUNT` (cost), and `RES_NAME`/`IMPACT_TYPE`/`EVENT_TYPE` (line-item
   detail), with usage date range from `EVENT_START_DATE`/`EVENT_END_DATE`
   when present.
-- Imported billing datasets and billing tags are stored in browser localStorage
-  per provider.
+- In guest mode, imported billing datasets/tags stay in browser localStorage.
+  When logged in, this billing data is synced to the user profile in the local
+  DB so historical month data persists across sessions.
 - Unit economics shares now include backups and DR, plus an `Other` residual
   bucket so provider percentages reconcile to the monthly total.
 

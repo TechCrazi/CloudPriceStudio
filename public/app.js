@@ -193,6 +193,10 @@ const dataTransferImportInput = document.getElementById(
 );
 const dataTransferScope = document.getElementById("data-transfer-scope");
 const dataTransferNote = document.getElementById("data-transfer-note");
+const dataVersionSelect = document.getElementById("data-version-select");
+const dataVersionRollbackButton = document.getElementById("data-version-rollback");
+const dataVersionRefreshButton = document.getElementById("data-version-refresh");
+const dataVersionNote = document.getElementById("data-version-note");
 const adminPanel = document.getElementById("admin-panel");
 const adminRefreshUsersButton = document.getElementById("admin-refresh-users");
 const adminAddUserForm = document.getElementById("admin-add-user-form");
@@ -214,6 +218,7 @@ const billingClearButton = document.getElementById("billing-clear");
 const billingClearAllButton = document.getElementById("billing-clear-all");
 const billingNote = document.getElementById("billing-note");
 const billingFormatHint = document.getElementById("billing-format-hint");
+const billingMonthFilter = document.getElementById("billing-month-filter");
 const billingProductFilter = document.getElementById("billing-product-filter");
 const billingChartGroup = document.getElementById("billing-chart-group");
 const billingTagService = document.getElementById("billing-tag-service");
@@ -423,6 +428,7 @@ const MAX_VENDOR_OPTIONS = 4;
 const BILLING_IMPORT_KEY = "cloud-price-billing-import";
 const BILLING_TAGS_KEY = "cloud-price-billing-tags";
 const BILLING_DETAIL_TAGS_KEY = "cloud-price-billing-detail-tags";
+const BILLING_MONTH_UNKNOWN_KEY = "unknown";
 const AUTH_SYNC_STORAGE_KEYS = [
   SCENARIO_STORAGE_KEY,
   SAVED_COMPARE_SCENARIOS_KEY,
@@ -438,6 +444,8 @@ const AUTH_SYNC_STORAGE_PREFIX = "cloud-price-";
 const AUTH_SYNC_STORAGE_KEY_SET = new Set(AUTH_SYNC_STORAGE_KEYS);
 const AUTH_STATE_VERSION = 1;
 const AUTH_SYNC_DEBOUNCE_MS = 1200;
+const DATA_HISTORY_STORAGE_PREFIX = "cps-state-history";
+const DATA_HISTORY_MAX_ENTRIES = 50;
 const BILLING_UNTAGGED_FILTER = "__untagged__";
 const SCENARIO_SCHEMA_VERSION = 2;
 const QUALITY_WARNING_LIMIT = 8;
@@ -498,7 +506,7 @@ const vendorOptionState = {
   private: [],
 };
 let scenarioStore = [];
-let billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
+let billingImportStore = buildEmptyBillingImportStore();
 let billingTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
 let billingDetailTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
 let authSession = null;
@@ -513,6 +521,13 @@ const billingProductFilterSelections = {
   gcp: "",
   rackspace: "",
   unified: "",
+};
+const billingMonthSelections = {
+  aws: "all",
+  azure: "all",
+  gcp: "all",
+  rackspace: "all",
+  unified: "all",
 };
 const billingChartGroupSelections = {
   aws: "service",
@@ -4944,6 +4959,199 @@ function setDataTransferNote(message, isError = false) {
   dataTransferNote.classList.toggle("negative", isError);
 }
 
+function setDataVersionNote(message, isError = false) {
+  if (!dataVersionNote) {
+    return;
+  }
+  dataVersionNote.textContent = message || "";
+  dataVersionNote.classList.toggle("negative", isError);
+}
+
+function getDataHistoryUserKey(user = authSession?.user || null) {
+  const username = String(user?.username || "")
+    .trim()
+    .toLowerCase();
+  return username || "__guest__";
+}
+
+function getDataHistoryStorageKey(user = authSession?.user || null) {
+  return `${DATA_HISTORY_STORAGE_PREFIX}:${getDataHistoryUserKey(user)}`;
+}
+
+function normalizeDataHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+  const id = String(entry.id || "").trim();
+  const savedAt = String(entry.savedAt || "").trim();
+  const state = normalizeSyncedStatePayload(entry.state);
+  if (!id || !savedAt || !state) {
+    return null;
+  }
+  return { id, savedAt, state };
+}
+
+function loadDataHistory(user = authSession?.user || null) {
+  try {
+    const raw = localStorage.getItem(getDataHistoryStorageKey(user));
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map((entry) => normalizeDataHistoryEntry(entry))
+      .filter(Boolean);
+  } catch (error) {
+    return [];
+  }
+}
+
+function persistDataHistory(history, user = authSession?.user || null) {
+  const key = getDataHistoryStorageKey(user);
+  let entries = Array.isArray(history)
+    ? history
+        .map((entry) => normalizeDataHistoryEntry(entry))
+        .filter(Boolean)
+        .slice(-DATA_HISTORY_MAX_ENTRIES)
+    : [];
+  while (entries.length >= 0) {
+    try {
+      localStorage.setItem(key, JSON.stringify(entries));
+      return entries;
+    } catch (error) {
+      if (!entries.length) {
+        break;
+      }
+      entries = entries.slice(1);
+    }
+  }
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    // Ignore storage errors.
+  }
+  return [];
+}
+
+function renderDataVersionHistory(user = authSession?.user || null, options = {}) {
+  if (!dataVersionSelect) {
+    return;
+  }
+  const selected = String(options.selectedId || dataVersionSelect.value || "");
+  const history = loadDataHistory(user);
+  dataVersionSelect.innerHTML = "";
+  if (!history.length) {
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "No versions available";
+    dataVersionSelect.appendChild(empty);
+    dataVersionSelect.disabled = true;
+    if (dataVersionRollbackButton) {
+      dataVersionRollbackButton.disabled = true;
+    }
+    return;
+  }
+  history
+    .slice()
+    .reverse()
+    .forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = entry.id;
+      const keyCount = Object.keys(entry.state.localStorage || {}).length;
+      option.textContent = `${formatDateTime(entry.savedAt)} (${keyCount} key${
+        keyCount === 1 ? "" : "s"
+      })`;
+      dataVersionSelect.appendChild(option);
+    });
+  const hasSelected = history.some((entry) => entry.id === selected);
+  dataVersionSelect.value = hasSelected ? selected : dataVersionSelect.options[0].value;
+  dataVersionSelect.disabled = false;
+  if (dataVersionRollbackButton) {
+    dataVersionRollbackButton.disabled = false;
+  }
+}
+
+function recordDataHistoryVersion(stateRaw = null, options = {}) {
+  const user = options.user || authSession?.user || null;
+  const state = cloneSyncedStatePayload(stateRaw || buildSyncedStatePayload());
+  if (!state) {
+    return false;
+  }
+  const history = loadDataHistory(user);
+  const latest = history.length ? history[history.length - 1] : null;
+  if (latest?.state && areSyncedStatePayloadsEqual(latest.state, state)) {
+    return false;
+  }
+  const nextEntry = {
+    id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    savedAt: new Date().toISOString(),
+    state,
+  };
+  const nextHistory = persistDataHistory([...history, nextEntry], user);
+  if (activePanel === "data-transfer") {
+    renderDataVersionHistory(user, { selectedId: nextEntry.id });
+  }
+  return nextHistory.length > 0;
+}
+
+function refreshDataVersionHistory(options = {}) {
+  const user = options.user || authSession?.user || null;
+  renderDataVersionHistory(user, options);
+  const versionCount = loadDataHistory(user).length;
+  setDataVersionNote(
+    versionCount
+      ? `Loaded ${versionCount} version${versionCount === 1 ? "" : "s"}.`
+      : "No versions available yet."
+  );
+}
+
+async function handleDataVersionRollback() {
+  const selectedId = String(dataVersionSelect?.value || "").trim();
+  if (!selectedId) {
+    setDataVersionNote("Select a version to roll back.", true);
+    return;
+  }
+  const history = loadDataHistory(authSession?.user || null);
+  const entry = history.find((item) => item.id === selectedId);
+  if (!entry?.state) {
+    setDataVersionNote("Selected version was not found.", true);
+    return;
+  }
+  const approved = window.confirm(
+    "Roll back to this version? Current saved workspace data will be replaced."
+  );
+  if (!approved) {
+    setDataVersionNote("Rollback canceled.");
+    return;
+  }
+  try {
+    applySyncedStatePayload(entry.state);
+    reloadPersistentStateFromLocalStorage();
+    setPendingGuestImportState(null);
+    setAuthUi(authSession?.user || null, {
+      loginEnabled: authSession?.loginEnabled !== false,
+    });
+    if (authSession?.authenticated) {
+      await pushSyncedStateToServer(entry.state);
+    }
+    recordDataHistoryVersion(entry.state);
+    renderDataVersionHistory(authSession?.user || null);
+    setDataVersionNote(`Rolled back to ${formatDateTime(entry.savedAt)}.`);
+    if (
+      activePanel !== "private" &&
+      activePanel !== "scenarios" &&
+      activePanel !== "saved" &&
+      activePanel !== "billing" &&
+      activePanel !== "data-transfer" &&
+      activePanel !== "admin"
+    ) {
+      await handleCompare();
+    }
+  } catch (error) {
+    setDataVersionNote(error?.message || "Rollback failed.", true);
+  }
+}
+
 function renderDataTransferScope(user = null) {
   if (!dataTransferScope) {
     return;
@@ -4955,6 +5163,9 @@ function renderDataTransferScope(user = null) {
   }
   dataTransferScope.textContent =
     "Guest mode: data transfer works browser-locally for this device/session.";
+  if (activePanel === "data-transfer") {
+    renderDataVersionHistory(user || null);
+  }
 }
 
 function renderAdminUsersTable() {
@@ -5220,10 +5431,10 @@ function setAuthUi(user, options = {}) {
   renderDataTransferScope(user);
   if (authStatus) {
     if (user?.username) {
-      authStatus.textContent = `Signed in as ${user.username}. Profile data is synced to this container.`;
+      authStatus.textContent = `Signed in as ${user.username}. Profile data is synced to the cloud database.`;
     } else if (loginEnabled) {
       authStatus.textContent =
-        "Guest mode: using browser-only temporary storage.";
+        "Guest mode: data is stored in browser cache and is not synced to the cloud database.";
     } else {
       authStatus.textContent = "Guest user";
     }
@@ -5455,6 +5666,8 @@ async function handleImportUserDataFile(event) {
     } else {
       setDataTransferNote("Import complete. Data applied to guest browser storage.");
     }
+    recordDataHistoryVersion(importedState);
+    renderDataVersionHistory(authSession?.user || null);
     if (
       activePanel !== "private" &&
       activePanel !== "scenarios" &&
@@ -5544,6 +5757,7 @@ async function pushSyncedStateToServer(stateOverride = null) {
 }
 
 function scheduleSyncedStatePush() {
+  recordDataHistoryVersion();
   if (!authSession?.authenticated) {
     return;
   }
@@ -5591,6 +5805,7 @@ async function initializeAuthSession() {
       } else {
         reloadPersistentStateFromLocalStorage();
       }
+      recordDataHistoryVersion(null, { user: me.user });
       if (activePanel === "admin") {
         loadAdminUsers({ silent: true });
       }
@@ -5645,6 +5860,7 @@ async function handleAuthLoginSubmit(event) {
       applySyncedStatePayload(guestSnapshot);
       reloadPersistentStateFromLocalStorage();
       await pushSyncedStateToServer(guestSnapshot);
+      recordDataHistoryVersion(guestSnapshot, { user: authSession.user });
       setAuthNote(
         `Signed in as ${authSession.user.username}. Guest data saved to your DB profile.`
       );
@@ -5659,6 +5875,7 @@ async function handleAuthLoginSubmit(event) {
         `Signed in as ${authSession.user.username}. Server profile loaded. Click "Import Guest Data" to save your guest work to DB.`
       );
     } else {
+      recordDataHistoryVersion(null, { user: authSession.user });
       setAuthNote(`Signed in as ${authSession.user.username}.`);
     }
     if (authPasswordInput) {
@@ -5686,6 +5903,7 @@ async function handleImportGuestState() {
     applySyncedStatePayload(nextState);
     reloadPersistentStateFromLocalStorage();
     await pushSyncedStateToServer(nextState);
+    recordDataHistoryVersion(nextState, { user: authSession.user });
     setPendingGuestImportState(null);
     setAuthUi(authSession.user, { loginEnabled: true });
     setAuthNote("Guest data imported and saved to your DB profile.");
@@ -8057,22 +8275,296 @@ function normalizeBillingDetailTagStore(store) {
   return base;
 }
 
+function normalizeBillingMonthKey(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) {
+    return BILLING_MONTH_UNKNOWN_KEY;
+  }
+  if (text === BILLING_MONTH_UNKNOWN_KEY) {
+    return BILLING_MONTH_UNKNOWN_KEY;
+  }
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) {
+    return text;
+  }
+  return BILLING_MONTH_UNKNOWN_KEY;
+}
+
+function formatBillingMonthLabel(monthKey) {
+  const normalized = normalizeBillingMonthKey(monthKey);
+  if (normalized === BILLING_MONTH_UNKNOWN_KEY) {
+    return "Unknown date";
+  }
+  const [yearText, monthText] = normalized.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return normalized;
+  }
+  return new Date(year, month - 1, 1).toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function getBillingDatasetUsageRange(dataset) {
+  if (!dataset || !Array.isArray(dataset.services)) {
+    return { min: null, max: null };
+  }
+  let min = null;
+  let max = null;
+  dataset.services.forEach((service) => {
+    if (Number.isFinite(service?.minDate)) {
+      min =
+        min === null ? Number(service.minDate) : Math.min(min, Number(service.minDate));
+    }
+    if (Number.isFinite(service?.maxDate)) {
+      max =
+        max === null ? Number(service.maxDate) : Math.max(max, Number(service.maxDate));
+    }
+  });
+  return { min, max };
+}
+
+function monthKeyFromTimestamp(timestamp) {
+  if (!Number.isFinite(timestamp)) {
+    return BILLING_MONTH_UNKNOWN_KEY;
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return BILLING_MONTH_UNKNOWN_KEY;
+  }
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function inferBillingDatasetMonthKey(dataset) {
+  const range = getBillingDatasetUsageRange(dataset);
+  if (!Number.isFinite(range.min) && !Number.isFinite(range.max)) {
+    return BILLING_MONTH_UNKNOWN_KEY;
+  }
+  const minKey = monthKeyFromTimestamp(
+    Number.isFinite(range.min) ? range.min : range.max
+  );
+  const maxKey = monthKeyFromTimestamp(
+    Number.isFinite(range.max) ? range.max : range.min
+  );
+  if (minKey === maxKey) {
+    return minKey;
+  }
+  return BILLING_MONTH_UNKNOWN_KEY;
+}
+
+function cloneBillingDataset(dataset) {
+  if (!dataset || typeof dataset !== "object" || Array.isArray(dataset)) {
+    return null;
+  }
+  return {
+    ...dataset,
+    services: Array.isArray(dataset.services)
+      ? dataset.services.map((service) => ({
+          ...service,
+          details: Array.isArray(service.details)
+            ? service.details.map((detail) => ({ ...detail }))
+            : [],
+        }))
+      : [],
+    sourceFiles: Array.isArray(dataset.sourceFiles) ? [...dataset.sourceFiles] : [],
+    sourceAccounts: Array.isArray(dataset.sourceAccounts)
+      ? dataset.sourceAccounts.map((account) => ({ ...account }))
+      : [],
+  };
+}
+
+function normalizeBillingImportDataset(dataset) {
+  if (!dataset || typeof dataset !== "object" || Array.isArray(dataset)) {
+    return null;
+  }
+  if (!Array.isArray(dataset.services)) {
+    return null;
+  }
+  return cloneBillingDataset(dataset);
+}
+
+function normalizeBillingProviderImportEntry(entry, provider = "aws") {
+  const normalizedProvider = normalizeBillingProvider(provider);
+  const base = { months: {} };
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return base;
+  }
+  if (entry.months && typeof entry.months === "object" && !Array.isArray(entry.months)) {
+    Object.entries(entry.months).forEach(([rawMonthKey, dataset]) => {
+      const normalizedDataset = normalizeBillingImportDataset(dataset);
+      if (!normalizedDataset) {
+        return;
+      }
+      normalizedDataset.provider = normalizedProvider;
+      const monthKey = normalizeBillingMonthKey(rawMonthKey);
+      const current = base.months[monthKey];
+      base.months[monthKey] = current
+        ? mergeBillingImportDatasets(normalizedProvider, [
+            current,
+            normalizedDataset,
+          ])
+        : normalizedDataset;
+    });
+    return base;
+  }
+  const legacyDataset = normalizeBillingImportDataset(entry);
+  if (!legacyDataset) {
+    return base;
+  }
+  legacyDataset.provider = normalizedProvider;
+  base.months[inferBillingDatasetMonthKey(legacyDataset)] = legacyDataset;
+  return base;
+}
+
+function buildEmptyBillingImportStore() {
+  return {
+    aws: { months: {} },
+    azure: { months: {} },
+    gcp: { months: {} },
+    rackspace: { months: {} },
+  };
+}
+
+function normalizeBillingImportStore(store) {
+  const base = buildEmptyBillingImportStore();
+  if (!store || typeof store !== "object") {
+    return base;
+  }
+  BILLING_IMPORT_PROVIDERS.forEach((provider) => {
+    base[provider] = normalizeBillingProviderImportEntry(store[provider], provider);
+  });
+  return base;
+}
+
+function getBillingProviderImportEntry(provider) {
+  const normalizedProvider = normalizeBillingProvider(provider);
+  if (normalizedProvider === "unified") {
+    return { months: {} };
+  }
+  const entry = billingImportStore[normalizedProvider];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    billingImportStore[normalizedProvider] = { months: {} };
+    return billingImportStore[normalizedProvider];
+  }
+  if (!entry.months || typeof entry.months !== "object" || Array.isArray(entry.months)) {
+    entry.months = {};
+  }
+  return entry;
+}
+
+function getBillingProviderMonthMap(provider) {
+  return getBillingProviderImportEntry(provider).months;
+}
+
+function listBillingMonthKeysForProvider(provider) {
+  const months = getBillingProviderMonthMap(provider);
+  const keys = Object.keys(months || {}).map((key) => normalizeBillingMonthKey(key));
+  const unique = Array.from(new Set(keys));
+  return unique.sort((left, right) => {
+    if (left === BILLING_MONTH_UNKNOWN_KEY) {
+      return 1;
+    }
+    if (right === BILLING_MONTH_UNKNOWN_KEY) {
+      return -1;
+    }
+    return right.localeCompare(left);
+  });
+}
+
+function listBillingMonthKeysForUnified() {
+  const keys = new Set();
+  BILLING_IMPORT_PROVIDERS.forEach((provider) => {
+    listBillingMonthKeysForProvider(provider).forEach((monthKey) => {
+      keys.add(monthKey);
+    });
+  });
+  return Array.from(keys).sort((left, right) => {
+    if (left === BILLING_MONTH_UNKNOWN_KEY) {
+      return 1;
+    }
+    if (right === BILLING_MONTH_UNKNOWN_KEY) {
+      return -1;
+    }
+    return right.localeCompare(left);
+  });
+}
+
+function listBillingMonthKeys(provider = currentBillingProvider) {
+  const normalizedProvider = normalizeBillingProvider(provider);
+  if (normalizedProvider === "unified") {
+    return listBillingMonthKeysForUnified();
+  }
+  return listBillingMonthKeysForProvider(normalizedProvider);
+}
+
+function getBillingCurrentMonth(provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  const value = String(billingMonthSelections[key] || "all")
+    .trim()
+    .toLowerCase();
+  if (value === "all") {
+    return "all";
+  }
+  return normalizeBillingMonthKey(value);
+}
+
+function setBillingCurrentMonth(value, provider = currentBillingProvider) {
+  const key = normalizeBillingProvider(provider);
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
+  billingMonthSelections[key] = text === "all" ? "all" : normalizeBillingMonthKey(text);
+}
+
+function getBillingProviderDataByMonth(provider, monthKey = "all", options = {}) {
+  const fallbackToAllWhenMissing = options.fallbackToAllWhenMissing !== false;
+  const normalizedProvider = normalizeBillingProvider(provider);
+  if (normalizedProvider === "unified") {
+    return null;
+  }
+  const monthMap = getBillingProviderMonthMap(normalizedProvider);
+  const entries = Object.entries(monthMap)
+    .map(([rawMonthKey, dataset]) => ({
+      monthKey: normalizeBillingMonthKey(rawMonthKey),
+      dataset,
+    }))
+    .filter(({ dataset }) => dataset && Array.isArray(dataset.services));
+  if (!entries.length) {
+    return null;
+  }
+  const normalizedMonth = String(monthKey || "all")
+    .trim()
+    .toLowerCase();
+  if (normalizedMonth === "all") {
+    return mergeBillingImportDatasets(
+      normalizedProvider,
+      entries.map((entry) => entry.dataset)
+    );
+  }
+  const targetMonth = normalizeBillingMonthKey(normalizedMonth);
+  const match = entries.find((entry) => entry.monthKey === targetMonth);
+  if (match) {
+    return match.dataset;
+  }
+  if (!fallbackToAllWhenMissing) {
+    return null;
+  }
+  return mergeBillingImportDatasets(
+    normalizedProvider,
+    entries.map((entry) => entry.dataset)
+  );
+}
+
 function loadBillingImportStore() {
   try {
     const raw = localStorage.getItem(BILLING_IMPORT_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
-    if (parsed && typeof parsed === "object") {
-      return {
-        aws: parsed.aws || null,
-        azure: parsed.azure || null,
-        gcp: parsed.gcp || null,
-        rackspace: parsed.rackspace || null,
-      };
-    }
+    return normalizeBillingImportStore(parsed);
   } catch (error) {
     // Ignore storage errors.
   }
-  return { aws: null, azure: null, gcp: null, rackspace: null };
+  return buildEmptyBillingImportStore();
 }
 
 function persistBillingImportStore(store) {
@@ -8255,6 +8747,14 @@ function setBillingCurrentFilter(value, provider = currentBillingProvider) {
   billingProductFilterSelections[key] = String(value || "");
 }
 
+function getBillingCurrentMonthForProvider(provider = currentBillingProvider) {
+  return getBillingCurrentMonth(provider);
+}
+
+function setBillingCurrentMonthForProvider(value, provider = currentBillingProvider) {
+  setBillingCurrentMonth(value, provider);
+}
+
 function getBillingCurrentChartGroup(provider = currentBillingProvider) {
   const key = normalizeBillingProvider(provider);
   return billingChartGroupSelections[key] || "service";
@@ -8400,6 +8900,7 @@ function syncBillingControls(data) {
   const normalizedProvider = normalizeBillingProvider(currentBillingProvider);
   const isUnified = normalizedProvider === "unified";
   const hasData = Boolean(data && Array.isArray(data.services) && data.services.length);
+  const monthKeys = listBillingMonthKeys(currentBillingProvider);
   if (billingImportButton) {
     billingImportButton.disabled = isUnified;
   }
@@ -8408,6 +8909,20 @@ function syncBillingControls(data) {
   }
   if (billingExportButton) {
     billingExportButton.disabled = !hasData;
+  }
+  if (billingMonthFilter) {
+    const monthOptions = [{ key: "all", label: "All months" }];
+    monthKeys.forEach((monthKey) => {
+      monthOptions.push({
+        key: monthKey,
+        label: formatBillingMonthLabel(monthKey),
+      });
+    });
+    const currentMonth = getBillingCurrentMonth(currentBillingProvider);
+    setSelectOptionsWithLabels(billingMonthFilter, monthOptions, currentMonth);
+    const selected = billingMonthFilter.value || "all";
+    setBillingCurrentMonth(selected, currentBillingProvider);
+    billingMonthFilter.disabled = monthOptions.length <= 1;
   }
   if (billingProductFilter) {
     const currentValue = getBillingCurrentFilter(currentBillingProvider);
@@ -8550,6 +9065,86 @@ function findBillingHeaderIndex(headers, candidates = []) {
   return -1;
 }
 
+function addBillingCostRowToServiceTotals(
+  totalsByService,
+  serviceName,
+  detailName,
+  cost,
+  chargeTypeRaw,
+  usageTimestamp
+) {
+  let serviceBucket = totalsByService.get(serviceName);
+  if (!serviceBucket) {
+    serviceBucket = {
+      name: serviceName,
+      cost: 0,
+      rowCount: 0,
+      details: new Map(),
+      chargeTypes: new Map(),
+      minDate: null,
+      maxDate: null,
+    };
+    totalsByService.set(serviceName, serviceBucket);
+  }
+  serviceBucket.cost += cost;
+  serviceBucket.rowCount += 1;
+  let detailBucket = serviceBucket.details.get(detailName);
+  if (!detailBucket) {
+    detailBucket = {
+      name: detailName,
+      cost: 0,
+      rowCount: 0,
+    };
+    serviceBucket.details.set(detailName, detailBucket);
+  }
+  detailBucket.cost += cost;
+  detailBucket.rowCount += 1;
+  if (chargeTypeRaw) {
+    serviceBucket.chargeTypes.set(
+      chargeTypeRaw,
+      (serviceBucket.chargeTypes.get(chargeTypeRaw) || 0) + 1
+    );
+  }
+  if (Number.isFinite(usageTimestamp)) {
+    if (!serviceBucket.minDate || usageTimestamp < serviceBucket.minDate) {
+      serviceBucket.minDate = usageTimestamp;
+    }
+    if (!serviceBucket.maxDate || usageTimestamp > serviceBucket.maxDate) {
+      serviceBucket.maxDate = usageTimestamp;
+    }
+  }
+}
+
+function buildBillingServicesFromTotals(totalsByService, totalCost) {
+  return Array.from(totalsByService.values())
+    .map((bucket) => {
+      const details = Array.from(bucket.details.values())
+        .map((detail) => ({
+          name: detail.name,
+          cost: detail.cost,
+          rowCount: detail.rowCount,
+          share: bucket.cost !== 0 ? (detail.cost / bucket.cost) * 100 : 0,
+        }))
+        .sort((a, b) => b.cost - a.cost);
+      const topChargeTypes = Array.from(bucket.chargeTypes.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+      return {
+        name: bucket.name,
+        cost: bucket.cost,
+        rowCount: bucket.rowCount,
+        share: totalCost !== 0 ? (bucket.cost / totalCost) * 100 : 0,
+        detailCount: details.length,
+        details,
+        topChargeTypes,
+        minDate: bucket.minDate,
+        maxDate: bucket.maxDate,
+      };
+    })
+    .sort((a, b) => b.cost - a.cost);
+}
+
 function escapeMarkup(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -8637,7 +9232,7 @@ function parseAwsServiceViewMatrix(rows, headers) {
   });
   services.sort((a, b) => b.cost - a.cost);
 
-  return {
+  const payload = {
     provider: "aws",
     importedAt: new Date().toISOString(),
     rowCount: services.length,
@@ -8650,6 +9245,11 @@ function parseAwsServiceViewMatrix(rows, headers) {
     usageDateColumn: usageRow ? rows[0][0] || "Service" : "",
     services,
   };
+  const monthKey = inferBillingDatasetMonthKey(payload);
+  payload.monthDatasets = {
+    [monthKey]: cloneBillingDataset(payload),
+  };
+  return payload;
 }
 
 function parseBillingImportCsv(text, provider) {
@@ -8838,6 +9438,7 @@ function parseBillingImportCsv(text, provider) {
   }
 
   const totalsByService = new Map();
+  const totalsByMonth = new Map();
   let importedRows = 0;
   let totalCost = 0;
   for (const row of rows.slice(1)) {
@@ -8853,50 +9454,39 @@ function parseBillingImportCsv(text, provider) {
       usageDateIndex >= 0 ? String(row[usageDateIndex] || "").trim() : "";
     const chargeTypeRaw =
       chargeTypeIndex >= 0 ? String(row[chargeTypeIndex] || "").trim() : "";
-    let serviceBucket = totalsByService.get(service);
-    if (!serviceBucket) {
-      serviceBucket = {
-        name: service,
-        cost: 0,
+    const parsedDate = usageDateRaw ? new Date(usageDateRaw) : null;
+    const usageTimestamp =
+      parsedDate && !Number.isNaN(parsedDate.getTime())
+        ? parsedDate.getTime()
+        : null;
+    addBillingCostRowToServiceTotals(
+      totalsByService,
+      service,
+      detail,
+      cost,
+      chargeTypeRaw,
+      usageTimestamp
+    );
+    const monthKey = normalizeBillingMonthKey(monthKeyFromTimestamp(usageTimestamp));
+    let monthBucket = totalsByMonth.get(monthKey);
+    if (!monthBucket) {
+      monthBucket = {
+        totalsByService: new Map(),
         rowCount: 0,
-        details: new Map(),
-        chargeTypes: new Map(),
-        minDate: null,
-        maxDate: null,
+        totalCost: 0,
       };
-      totalsByService.set(service, serviceBucket);
+      totalsByMonth.set(monthKey, monthBucket);
     }
-    serviceBucket.cost += cost;
-    serviceBucket.rowCount += 1;
-    let detailBucket = serviceBucket.details.get(detail);
-    if (!detailBucket) {
-      detailBucket = {
-        name: detail,
-        cost: 0,
-        rowCount: 0,
-      };
-      serviceBucket.details.set(detail, detailBucket);
-    }
-    detailBucket.cost += cost;
-    detailBucket.rowCount += 1;
-    if (chargeTypeRaw) {
-      serviceBucket.chargeTypes.set(
-        chargeTypeRaw,
-        (serviceBucket.chargeTypes.get(chargeTypeRaw) || 0) + 1
-      );
-    }
-    if (usageDateRaw) {
-      const parsedDate = new Date(usageDateRaw);
-      if (!Number.isNaN(parsedDate.getTime())) {
-        const currentTime = parsedDate.getTime();
-        if (!serviceBucket.minDate || currentTime < serviceBucket.minDate) {
-          serviceBucket.minDate = currentTime;
-        }
-        if (!serviceBucket.maxDate || currentTime > serviceBucket.maxDate) {
-          serviceBucket.maxDate = currentTime;
-        }
-      }
-    }
+    addBillingCostRowToServiceTotals(
+      monthBucket.totalsByService,
+      service,
+      detail,
+      cost,
+      chargeTypeRaw,
+      usageTimestamp
+    );
+    monthBucket.rowCount += 1;
+    monthBucket.totalCost += cost;
     importedRows += 1;
     totalCost += cost;
   }
@@ -8904,35 +9494,8 @@ function parseBillingImportCsv(text, provider) {
     throw new Error("No numeric cost rows found in CSV.");
   }
 
-  const services = Array.from(totalsByService.values())
-    .map((bucket) => {
-      const details = Array.from(bucket.details.values())
-        .map((detail) => ({
-          name: detail.name,
-          cost: detail.cost,
-          rowCount: detail.rowCount,
-          share: bucket.cost !== 0 ? (detail.cost / bucket.cost) * 100 : 0,
-        }))
-        .sort((a, b) => b.cost - a.cost);
-      const topChargeTypes = Array.from(bucket.chargeTypes.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([name]) => name);
-      return {
-        name: bucket.name,
-        cost: bucket.cost,
-        rowCount: bucket.rowCount,
-        share: totalCost !== 0 ? (bucket.cost / totalCost) * 100 : 0,
-        detailCount: details.length,
-        details,
-        topChargeTypes,
-        minDate: bucket.minDate,
-        maxDate: bucket.maxDate,
-      };
-    })
-    .sort((a, b) => b.cost - a.cost);
-
-  return {
+  const services = buildBillingServicesFromTotals(totalsByService, totalCost);
+  const payload = {
     provider: normalizedProvider,
     importedAt: new Date().toISOString(),
     rowCount: importedRows,
@@ -8948,6 +9511,31 @@ function parseBillingImportCsv(text, provider) {
     sourceFiles: [],
     sourceAccounts: [],
   };
+  const monthDatasets = {};
+  totalsByMonth.forEach((monthBucket, monthKey) => {
+    const monthServices = buildBillingServicesFromTotals(
+      monthBucket.totalsByService,
+      monthBucket.totalCost
+    );
+    monthDatasets[monthKey] = {
+      provider: normalizedProvider,
+      importedAt: payload.importedAt,
+      rowCount: monthBucket.rowCount,
+      serviceCount: monthServices.length,
+      totalCost: monthBucket.totalCost,
+      serviceColumn: payload.serviceColumn,
+      costColumn: payload.costColumn,
+      detailColumn: payload.detailColumn,
+      chargeTypeColumn: payload.chargeTypeColumn,
+      usageDateColumn: payload.usageDateColumn,
+      services: monthServices,
+      sourceDatasetCount: 1,
+      sourceFiles: [],
+      sourceAccounts: [],
+    };
+  });
+  payload.monthDatasets = monthDatasets;
+  return payload;
 }
 
 function pickMergedBillingColumn(datasets, key, fallback) {
@@ -9218,10 +9806,15 @@ function getBillingExpandedServiceSet(provider) {
   return billingExpandedServices[key];
 }
 
-function buildUnifiedBillingData() {
+function buildUnifiedBillingData(monthKey = "all") {
+  const normalizedMonth = String(monthKey || "all")
+    .trim()
+    .toLowerCase();
   const sources = BILLING_IMPORT_PROVIDERS.map((provider) => ({
     provider,
-    data: billingImportStore[provider],
+    data: getBillingProviderDataByMonth(provider, normalizedMonth, {
+      fallbackToAllWhenMissing: false,
+    }),
   })).filter((entry) => entry.data && Array.isArray(entry.data.services));
   if (!sources.length) {
     return null;
@@ -9287,7 +9880,7 @@ function buildUnifiedBillingData() {
         details: clonedDetails,
         sourceProvider: provider,
         sourceProviderLabel: providerLabel,
-        sourceServiceName: service.name,
+        sourceServiceName: String(service.sourceServiceName || service.name),
         sourceAccountName: service.sourceAccountName || "",
       });
     });
@@ -9320,10 +9913,15 @@ function buildUnifiedBillingData() {
 
 function getBillingPanelData(provider = currentBillingProvider) {
   const normalized = normalizeBillingProvider(provider);
+  const monthKey = getBillingCurrentMonth(normalized);
   if (normalized === "unified") {
-    return buildUnifiedBillingData();
+    const unified = buildUnifiedBillingData(monthKey);
+    if (unified || monthKey === "all") {
+      return unified;
+    }
+    return buildUnifiedBillingData("all");
   }
-  return billingImportStore[normalized] || null;
+  return getBillingProviderDataByMonth(normalized, monthKey);
 }
 
 function addBillingBucketCost(map, key, amount) {
@@ -9455,6 +10053,10 @@ function renderBillingImportPanel() {
   }
 
   const activeFilter = getBillingCurrentFilter(currentBillingProvider);
+  const monthKey = getBillingCurrentMonth(currentBillingProvider);
+  const monthLabel =
+    monthKey === "all" ? "All months" : formatBillingMonthLabel(monthKey);
+  const monthBucketCount = listBillingMonthKeys(currentBillingProvider).length;
   const filterLabel =
     activeFilter === BILLING_UNTAGGED_FILTER
       ? "Untagged"
@@ -9503,6 +10105,11 @@ function renderBillingImportPanel() {
       <h4>${getBillingProviderDisplayName(currentBillingProvider)}</h4>
       <p>Total imported</p>
       <strong>${formatMoney(data.totalCost)}</strong>
+    </article>
+    <article class="billing-summary-card">
+      <h4>Month scope</h4>
+      <p>${escapeMarkup(monthLabel)}</p>
+      <strong>${monthBucketCount} month bucket(s)</strong>
     </article>
     <article class="billing-summary-card">
       <h4>Rows</h4>
@@ -9932,6 +10539,14 @@ function handleBillingProductFilterChange() {
   renderBillingImportPanel();
 }
 
+function handleBillingMonthFilterChange() {
+  if (!billingMonthFilter) {
+    return;
+  }
+  setBillingCurrentMonth(billingMonthFilter.value, currentBillingProvider);
+  renderBillingImportPanel();
+}
+
 function handleBillingChartGroupChange() {
   if (!billingChartGroup) {
     return;
@@ -10128,6 +10743,7 @@ async function handleBillingImportFile(event) {
   try {
     const parsedImports = [];
     const failedImports = [];
+    const importedMonthKeys = new Set();
     for (const file of files) {
       try {
         const text = await file.text();
@@ -10155,6 +10771,57 @@ async function handleBillingImportFile(event) {
           sourceServiceName: String(service.name || "").trim() || service.name,
           sourceAccountName: sourceAccountName || "",
         }));
+        const parsedMonthDatasets =
+          parsed.monthDatasets &&
+          typeof parsed.monthDatasets === "object" &&
+          !Array.isArray(parsed.monthDatasets)
+            ? parsed.monthDatasets
+            : {
+                [inferBillingDatasetMonthKey(parsed)]: cloneBillingDataset(parsed),
+              };
+        const normalizedMonthDatasets = {};
+        Object.entries(parsedMonthDatasets).forEach(([rawMonthKey, dataset]) => {
+          const normalizedDataset = normalizeBillingImportDataset(dataset);
+          if (!normalizedDataset) {
+            return;
+          }
+          const monthKey = normalizeBillingMonthKey(rawMonthKey);
+          importedMonthKeys.add(monthKey);
+          normalizedDataset.provider = normalizeBillingProvider(currentBillingProvider);
+          normalizedDataset.sourceFiles = [file.name];
+          normalizedDataset.sourceDatasetCount = 1;
+          normalizedDataset.sourceAccounts = [
+            {
+              name: sourceAccountName || "Unlabeled",
+              cost: Number.isFinite(normalizedDataset.totalCost)
+                ? normalizedDataset.totalCost
+                : 0,
+              rowCount: Number.isFinite(normalizedDataset.rowCount)
+                ? normalizedDataset.rowCount
+                : 0,
+              fileCount: 1,
+              datasetCount: 1,
+            },
+          ];
+          normalizedDataset.services = (normalizedDataset.services || []).map(
+            (service) => ({
+              ...service,
+              sourceServiceName:
+                String(service.sourceServiceName || service.name || "").trim() ||
+                service.name,
+              sourceAccountName: sourceAccountName || "",
+            })
+          );
+          if (normalizedMonthDatasets[monthKey]) {
+            normalizedMonthDatasets[monthKey] = mergeBillingImportDatasets(
+              currentBillingProvider,
+              [normalizedMonthDatasets[monthKey], normalizedDataset]
+            );
+          } else {
+            normalizedMonthDatasets[monthKey] = normalizedDataset;
+          }
+        });
+        parsed.monthDatasets = normalizedMonthDatasets;
         parsedImports.push(parsed);
       } catch (error) {
         failedImports.push(
@@ -10167,23 +10834,56 @@ async function handleBillingImportFile(event) {
         failedImports.join(" | ") || "Could not parse any selected CSV files."
       );
     }
-    const existing = billingImportStore[currentBillingProvider];
-    const merged = mergeBillingImportDatasets(currentBillingProvider, [
-      ...(existing ? [existing] : []),
-      ...parsedImports,
-    ]);
-    billingImportStore[currentBillingProvider] = merged;
+    const providerEntry = getBillingProviderImportEntry(currentBillingProvider);
+    parsedImports.forEach((parsed) => {
+      const monthDatasets = parsed?.monthDatasets || {};
+      Object.entries(monthDatasets).forEach(([monthKey, dataset]) => {
+        const normalizedMonthKey = normalizeBillingMonthKey(monthKey);
+        const normalizedDataset = normalizeBillingImportDataset(dataset);
+        if (!normalizedDataset) {
+          return;
+        }
+        const existingDataset = providerEntry.months[normalizedMonthKey];
+        providerEntry.months[normalizedMonthKey] = existingDataset
+          ? mergeBillingImportDatasets(currentBillingProvider, [
+              existingDataset,
+              normalizedDataset,
+            ])
+          : normalizedDataset;
+      });
+    });
+    const merged = getBillingProviderDataByMonth(currentBillingProvider, "all");
     // Keep service/detail tags across imports so monthly files can auto-match by name.
     persistBillingTagsStore(billingTagStore);
     persistBillingDetailTagsStore(billingDetailTagStore);
     billingExpandedServices[currentBillingProvider] = new Set();
     billingSelectedDetailKeys[currentBillingProvider] = new Set();
     persistBillingImportStore(billingImportStore);
+    const importedMonthLabels = Array.from(importedMonthKeys)
+      .sort((left, right) => {
+        if (left === BILLING_MONTH_UNKNOWN_KEY) {
+          return 1;
+        }
+        if (right === BILLING_MONTH_UNKNOWN_KEY) {
+          return -1;
+        }
+        return right.localeCompare(left);
+      })
+      .map((monthKey) => formatBillingMonthLabel(monthKey));
+    const monthSummary = importedMonthLabels.length
+      ? importedMonthLabels.length <= 4
+        ? importedMonthLabels.join(", ")
+        : `${importedMonthLabels.slice(0, 4).join(", ")} (+${
+            importedMonthLabels.length - 4
+          } more)`
+      : "All months";
     setInlineNote(
       billingNote,
       `${getBillingProviderDisplayName(currentBillingProvider)} imported ${
         parsedImports.length
-      } file(s), merged rows: ${merged?.rowCount || 0}.${
+      } file(s), month buckets updated: ${
+        importedMonthKeys.size
+      } (${monthSummary}), merged rows: ${merged?.rowCount || 0}.${
         failedImports.length
           ? ` Failed: ${failedImports.length} (${failedImports.join(" | ")}).`
           : ""
@@ -10212,12 +10912,13 @@ function handleBillingClearProvider() {
     );
     return;
   }
-  billingImportStore[currentBillingProvider] = null;
+  billingImportStore[currentBillingProvider] = { months: {} };
   billingTagStore[currentBillingProvider] = {};
   billingDetailTagStore[currentBillingProvider] = {};
   billingSelectedDetailKeys[currentBillingProvider] = new Set();
   persistBillingTagsStore(billingTagStore);
   persistBillingDetailTagsStore(billingDetailTagStore);
+  setBillingCurrentMonth("all", currentBillingProvider);
   setBillingCurrentFilter("", currentBillingProvider);
   billingExpandedServices[currentBillingProvider] = new Set();
   persistBillingImportStore(billingImportStore);
@@ -10231,7 +10932,7 @@ function handleBillingClearProvider() {
 }
 
 function handleBillingClearAll() {
-  billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
+  billingImportStore = buildEmptyBillingImportStore();
   billingTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
   billingDetailTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
   billingSelectedDetailKeys.aws = new Set();
@@ -10246,6 +10947,11 @@ function handleBillingClearAll() {
   setBillingCurrentFilter("", "gcp");
   setBillingCurrentFilter("", "rackspace");
   setBillingCurrentFilter("", "unified");
+  setBillingCurrentMonth("all", "aws");
+  setBillingCurrentMonth("all", "azure");
+  setBillingCurrentMonth("all", "gcp");
+  setBillingCurrentMonth("all", "rackspace");
+  setBillingCurrentMonth("all", "unified");
   billingExpandedServices.aws = new Set();
   billingExpandedServices.azure = new Set();
   billingExpandedServices.gcp = new Set();
@@ -11015,6 +11721,14 @@ if (dataTransferImportButton && dataTransferImportInput) {
   });
   dataTransferImportInput.addEventListener("change", handleImportUserDataFile);
 }
+if (dataVersionRefreshButton) {
+  dataVersionRefreshButton.addEventListener("click", () => {
+    refreshDataVersionHistory();
+  });
+}
+if (dataVersionRollbackButton) {
+  dataVersionRollbackButton.addEventListener("click", handleDataVersionRollback);
+}
 if (adminAddUserForm) {
   adminAddUserForm.addEventListener("submit", handleAdminAddUserSubmit);
 }
@@ -11213,6 +11927,7 @@ modeTabs.forEach((tab) => {
       nextPanel !== "scenarios" &&
       nextPanel !== "saved" &&
       nextPanel !== "billing" &&
+      nextPanel !== "data-transfer" &&
       nextPanel !== "admin"
     ) {
       handleCompare();
@@ -11262,6 +11977,9 @@ if (billingClearAllButton) {
 }
 if (billingProductFilter) {
   billingProductFilter.addEventListener("change", handleBillingProductFilterChange);
+}
+if (billingMonthFilter) {
+  billingMonthFilter.addEventListener("change", handleBillingMonthFilterChange);
 }
 if (billingChartGroup) {
   billingChartGroup.addEventListener("change", handleBillingChartGroupChange);
