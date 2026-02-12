@@ -8353,6 +8353,21 @@ function inferBillingDatasetMonthKey(dataset) {
   return BILLING_MONTH_UNKNOWN_KEY;
 }
 
+function normalizeBillingSourceSignatures(value) {
+  const entries = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const signatures = [];
+  entries.forEach((entry) => {
+    const signature = String(entry || "").trim();
+    if (!signature || seen.has(signature)) {
+      return;
+    }
+    seen.add(signature);
+    signatures.push(signature);
+  });
+  return signatures;
+}
+
 function cloneBillingDataset(dataset) {
   if (!dataset || typeof dataset !== "object" || Array.isArray(dataset)) {
     return null;
@@ -8371,6 +8386,7 @@ function cloneBillingDataset(dataset) {
     sourceAccounts: Array.isArray(dataset.sourceAccounts)
       ? dataset.sourceAccounts.map((account) => ({ ...account }))
       : [],
+    sourceSignatures: normalizeBillingSourceSignatures(dataset.sourceSignatures),
   };
 }
 
@@ -8382,6 +8398,30 @@ function normalizeBillingImportDataset(dataset) {
     return null;
   }
   return cloneBillingDataset(dataset);
+}
+
+async function computeBillingImportSignature(text, provider) {
+  const normalizedProvider = normalizeBillingProvider(provider);
+  const normalizedText = String(text || "").replace(/\r\n/g, "\n");
+  const payload = `${normalizedProvider}\n${normalizedText}`;
+  try {
+    if (window.crypto?.subtle && typeof TextEncoder !== "undefined") {
+      const encoded = new TextEncoder().encode(payload);
+      const digest = await window.crypto.subtle.digest("SHA-256", encoded);
+      const bytes = new Uint8Array(digest);
+      const hash = Array.from(bytes)
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      return `sha256:${hash}`;
+    }
+  } catch (error) {
+    // Fallback hash below.
+  }
+  let rolling = 0;
+  for (let index = 0; index < payload.length; index += 1) {
+    rolling = (rolling * 31 + payload.charCodeAt(index)) >>> 0;
+  }
+  return `fallback:${normalizedProvider}:${payload.length}:${rolling.toString(16)}`;
 }
 
 function normalizeBillingProviderImportEntry(entry, provider = "aws") {
@@ -9563,6 +9603,32 @@ function mergeBillingImportDatasets(provider, datasets = []) {
   if (!validDatasets.length) {
     return null;
   }
+  const sourceSignatures = [];
+  const seenSourceSignatures = new Set();
+  const dedupedDatasets = [];
+  validDatasets.forEach((dataset) => {
+    const signatures = normalizeBillingSourceSignatures(dataset.sourceSignatures);
+    if (
+      signatures.length &&
+      signatures.every((signature) => seenSourceSignatures.has(signature))
+    ) {
+      return;
+    }
+    signatures.forEach((signature) => {
+      if (seenSourceSignatures.has(signature)) {
+        return;
+      }
+      seenSourceSignatures.add(signature);
+      sourceSignatures.push(signature);
+    });
+    dedupedDatasets.push({
+      ...dataset,
+      sourceSignatures: signatures,
+    });
+  });
+  if (!dedupedDatasets.length) {
+    return null;
+  }
 
   let totalCost = 0;
   let rowCount = 0;
@@ -9572,7 +9638,7 @@ function mergeBillingImportDatasets(provider, datasets = []) {
   const sourceAccountMap = new Map();
   const serviceBuckets = new Map();
 
-  validDatasets.forEach((dataset) => {
+  dedupedDatasets.forEach((dataset) => {
     totalCost += Number.isFinite(dataset.totalCost) ? dataset.totalCost : 0;
     rowCount += Number.isFinite(dataset.rowCount) ? dataset.rowCount : 0;
     sourceDatasetCount += Number.isFinite(dataset.sourceDatasetCount)
@@ -9753,23 +9819,23 @@ function mergeBillingImportDatasets(provider, datasets = []) {
     serviceCount: services.length,
     totalCost,
     serviceColumn: pickMergedBillingColumn(
-      validDatasets,
+      dedupedDatasets,
       "serviceColumn",
       "Service"
     ),
-    costColumn: pickMergedBillingColumn(validDatasets, "costColumn", "Cost"),
+    costColumn: pickMergedBillingColumn(dedupedDatasets, "costColumn", "Cost"),
     detailColumn: pickMergedBillingColumn(
-      validDatasets,
+      dedupedDatasets,
       "detailColumn",
       "Detail"
     ),
     chargeTypeColumn: pickMergedBillingColumn(
-      validDatasets,
+      dedupedDatasets,
       "chargeTypeColumn",
       ""
     ),
     usageDateColumn: pickMergedBillingColumn(
-      validDatasets,
+      dedupedDatasets,
       "usageDateColumn",
       ""
     ),
@@ -9779,6 +9845,7 @@ function mergeBillingImportDatasets(provider, datasets = []) {
     sourceAccounts: Array.from(sourceAccountMap.values()).sort((a, b) =>
       a.name.localeCompare(b.name)
     ),
+    sourceSignatures,
   };
 }
 
@@ -10747,6 +10814,10 @@ async function handleBillingImportFile(event) {
     for (const file of files) {
       try {
         const text = await file.text();
+        const importSignature = await computeBillingImportSignature(
+          text,
+          currentBillingProvider
+        );
         const parsed = parseBillingImportCsv(text, currentBillingProvider);
         const defaultLabel = String(file.name || "")
           .replace(/\.[^.]+$/, "")
@@ -10757,6 +10828,7 @@ async function handleBillingImportFile(event) {
         );
         parsed.sourceFiles = [file.name];
         parsed.sourceDatasetCount = 1;
+        parsed.sourceSignatures = [`${importSignature}:all`];
         parsed.sourceAccounts = [
           {
             name: sourceAccountName || "Unlabeled",
@@ -10790,6 +10862,7 @@ async function handleBillingImportFile(event) {
           normalizedDataset.provider = normalizeBillingProvider(currentBillingProvider);
           normalizedDataset.sourceFiles = [file.name];
           normalizedDataset.sourceDatasetCount = 1;
+          normalizedDataset.sourceSignatures = [`${importSignature}:${monthKey}`];
           normalizedDataset.sourceAccounts = [
             {
               name: sourceAccountName || "Unlabeled",
@@ -10835,6 +10908,8 @@ async function handleBillingImportFile(event) {
       );
     }
     const providerEntry = getBillingProviderImportEntry(currentBillingProvider);
+    let skippedDuplicateBuckets = 0;
+    let mergedBuckets = 0;
     parsedImports.forEach((parsed) => {
       const monthDatasets = parsed?.monthDatasets || {};
       Object.entries(monthDatasets).forEach(([monthKey, dataset]) => {
@@ -10844,12 +10919,51 @@ async function handleBillingImportFile(event) {
           return;
         }
         const existingDataset = providerEntry.months[normalizedMonthKey];
+        const incomingSignatures = normalizeBillingSourceSignatures(
+          normalizedDataset.sourceSignatures
+        );
+        const existingSignatures = normalizeBillingSourceSignatures(
+          existingDataset?.sourceSignatures
+        );
+        const incomingFiles = Array.isArray(normalizedDataset.sourceFiles)
+          ? normalizedDataset.sourceFiles
+              .map((name) => String(name || "").trim())
+              .filter(Boolean)
+          : [];
+        const existingFiles = Array.isArray(existingDataset?.sourceFiles)
+          ? existingDataset.sourceFiles
+              .map((name) => String(name || "").trim())
+              .filter(Boolean)
+          : [];
+        const hasLegacyLikeDuplicate =
+          Boolean(existingDataset) &&
+          incomingFiles.length > 0 &&
+          incomingFiles.every((name) => existingFiles.includes(name)) &&
+          Number.isFinite(existingDataset?.rowCount) &&
+          Number.isFinite(normalizedDataset.rowCount) &&
+          Number(existingDataset.rowCount) === Number(normalizedDataset.rowCount) &&
+          Number.isFinite(existingDataset?.totalCost) &&
+          Number.isFinite(normalizedDataset.totalCost) &&
+          Math.abs(
+            Number(existingDataset.totalCost) - Number(normalizedDataset.totalCost)
+          ) < 0.01;
+        if (
+          (incomingSignatures.length &&
+            incomingSignatures.every((signature) =>
+              existingSignatures.includes(signature)
+            )) ||
+          hasLegacyLikeDuplicate
+        ) {
+          skippedDuplicateBuckets += 1;
+          return;
+        }
         providerEntry.months[normalizedMonthKey] = existingDataset
           ? mergeBillingImportDatasets(currentBillingProvider, [
               existingDataset,
               normalizedDataset,
             ])
           : normalizedDataset;
+        mergedBuckets += 1;
       });
     });
     const merged = getBillingProviderDataByMonth(currentBillingProvider, "all");
@@ -10884,6 +10998,14 @@ async function handleBillingImportFile(event) {
       } file(s), month buckets updated: ${
         importedMonthKeys.size
       } (${monthSummary}), merged rows: ${merged?.rowCount || 0}.${
+        skippedDuplicateBuckets
+          ? ` Skipped duplicate month bucket(s): ${skippedDuplicateBuckets}.`
+          : ""
+      }${
+        mergedBuckets === 0 && !failedImports.length
+          ? " No new data was added."
+          : ""
+      }${
         failedImports.length
           ? ` Failed: ${failedImports.length} (${failedImports.join(" | ")}).`
           : ""
