@@ -133,7 +133,7 @@ Auth configuration options:
   Example: `APP_AUTH_USERS='ops1:Secret1,ops2:Secret2'`
 - Or `APP_LOGIN_USER` + `APP_LOGIN_PASSWORD` for a single user.
 - `APP_ADMIN_USERS` (optional): comma-separated admin usernames used as
-  default/seed admins for new or migrated auth records. Default is `smit`.
+  default/seed admins for new or migrated auth records. Default is `admin`.
 - `AUTH_DATA_DIR` (optional): base path for auth files
   (default `/tmp/cloud-price-data`).
 - `AUTH_DB_FILE` (optional): SQLite file path
