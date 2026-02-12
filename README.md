@@ -40,14 +40,13 @@ Environment sample:
 
 ```bash
 cp .env.example .env
-set -a
-source .env
-set +a
 npm run dev
 ```
 
 `.env.example` includes all supported runtime/auth/pricing environment options.
-The app does not auto-load `.env`, so export or source it before launch.
+For local runs, the app auto-loads `.env` if present.
+In Docker/containers, `.env` auto-load is skipped; pass env vars with `-e` or
+`--env-file`.
 
 ## Docker
 

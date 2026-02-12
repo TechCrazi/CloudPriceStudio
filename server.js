@@ -6,6 +6,70 @@ const express = require("express");
 const initSqlJs = require("sql.js");
 const { PricingClient, GetProductsCommand } = require("@aws-sdk/client-pricing");
 
+function isContainerRuntime() {
+  if (fs.existsSync("/.dockerenv")) {
+    return true;
+  }
+  try {
+    const cgroup = fs.readFileSync("/proc/1/cgroup", "utf8");
+    return /(docker|containerd|kubepods|podman)/i.test(cgroup);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function loadLocalEnvFile() {
+  if (isContainerRuntime()) {
+    return;
+  }
+  const envPath = path.resolve(__dirname, ".env");
+  if (!fs.existsSync(envPath)) {
+    return;
+  }
+  try {
+    if (typeof process.loadEnvFile === "function") {
+      process.loadEnvFile(envPath);
+    } else {
+      const raw = fs.readFileSync(envPath, "utf8");
+      raw.split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) {
+          return;
+        }
+        const content = trimmed.startsWith("export ")
+          ? trimmed.slice(7).trim()
+          : trimmed;
+        const separator = content.indexOf("=");
+        if (separator <= 0) {
+          return;
+        }
+        const key = content.slice(0, separator).trim();
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+          return;
+        }
+        let value = content.slice(separator + 1).trim();
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+        if (process.env[key] === undefined) {
+          process.env[key] = value;
+        }
+      });
+    }
+    console.log(`[env] Loaded ${envPath} for local development.`);
+  } catch (error) {
+    console.warn(
+      `[env] Failed to load ${envPath}:`,
+      error?.message || String(error)
+    );
+  }
+}
+
+loadLocalEnvFile();
+
 const fetcher =
   global.fetch ||
   ((...args) =>
