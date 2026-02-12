@@ -189,6 +189,10 @@ allocation by service, month, and tags.
   rows grouped under `ServiceName`).
 - CSV parsing auto-detects service, cost, and detail columns by provider and
   falls back to common column names when exact headers differ.
+- If a bill is imported on the wrong provider tab, the app auto-detects the
+  provider and imports into the correct provider tab.
+- Duplicate monthly imports are de-duplicated by file content signature (and
+  legacy fallback checks) so repeated uploads do not double-count totals.
 - AWS import expects Cost Explorer `Service view` CSV format.
 - Azure import expects Cost Analysis `Meter view` CSV format.
 - Add custom tags per service (including `Product app`) with multi-tag input

@@ -9105,6 +9105,238 @@ function findBillingHeaderIndex(headers, candidates = []) {
   return -1;
 }
 
+const BILLING_SERVICE_CANDIDATES_BY_PROVIDER = {
+  aws: [
+    "product/productname",
+    "product/servicename",
+    "product/servicecode",
+    "lineitem/productcode",
+    "lineitem/lineitemdescription",
+    "lineitem/usagetype",
+  ],
+  azure: [
+    "servicename",
+    "metercategory",
+    "productname",
+    "metername",
+    "resourcegroup",
+  ],
+  gcp: [
+    "service description",
+    "service.description",
+    "service",
+    "sku description",
+    "sku.description",
+  ],
+  rackspace: [
+    "service_type",
+    "impact_type",
+    "event_type",
+    "res_name",
+    "attribute_1",
+  ],
+};
+
+const BILLING_COST_CANDIDATES_BY_PROVIDER = {
+  aws: [
+    "lineitem/unblendedcost",
+    "lineitem/netunblendedcost",
+    "lineitem/blendedcost",
+    "lineitem/netamortizedcost",
+    "amortizedcost",
+    "cost",
+    "charge",
+    "amount",
+  ],
+  azure: ["costinbillingcurrency", "pretaxcost", "cost", "charge", "amount"],
+  gcp: ["cost", "net cost", "effective cost", "charge", "amount"],
+  rackspace: ["amount", "cost", "charge", "rate"],
+};
+
+const BILLING_DETAIL_CANDIDATES_BY_PROVIDER = {
+  aws: [
+    "lineitem/lineitemdescription",
+    "lineitem/usagetype",
+    "lineitem/resourceid",
+    "product/instancetype",
+    "product/location",
+    "lineitem/operation",
+  ],
+  azure: [
+    "meter",
+    "metername",
+    "metercategory",
+    "meterid",
+    "resourcegroup",
+    "resourcetype",
+    "partnumber",
+  ],
+  gcp: [
+    "sku description",
+    "sku.description",
+    "sku id",
+    "sku.id",
+    "project id",
+    "project.id",
+    "resource name",
+  ],
+  rackspace: [
+    "res_name",
+    "impact_type",
+    "event_type",
+    "res_id",
+    "region_id",
+    "attribute_1",
+    "attribute_2",
+    "attribute_3",
+    "attribute_4",
+    "attribute_5",
+    "attribute_6",
+    "attribute_7",
+    "attribute_8",
+  ],
+};
+
+const BILLING_CHARGE_TYPE_CANDIDATES_BY_PROVIDER = {
+  aws: ["lineitem/lineitemtype", "lineitem/chargetype", "chargetype"],
+  azure: ["chargetype", "charge type", "pricingmodel"],
+  gcp: ["cost type", "costtype", "charge type"],
+  rackspace: ["event_type", "impact_type"],
+};
+
+const BILLING_USAGE_DATE_CANDIDATES_BY_PROVIDER = {
+  aws: ["lineitem/usagestartdate", "usagedate", "date"],
+  azure: ["date", "usagedate", "billingperiodstartdate"],
+  gcp: ["usage_start_time", "date", "usage date"],
+  rackspace: [
+    "event_start_date",
+    "event_end_date",
+    "bill_start_date",
+    "bill_end_date",
+    "usage_date",
+    "date",
+  ],
+};
+
+function scoreBillingProviderByHeaders(headers, provider) {
+  const normalizedProvider = normalizeBillingProvider(provider);
+  const headerSet = new Set(
+    (Array.isArray(headers) ? headers : [])
+      .map((header) => normalizeCsvHeader(header))
+      .filter(Boolean)
+  );
+  let score = 0;
+  BILLING_SERVICE_CANDIDATES_BY_PROVIDER[normalizedProvider].forEach((candidate) => {
+    if (headerSet.has(candidate)) {
+      score += 2;
+    }
+  });
+  BILLING_COST_CANDIDATES_BY_PROVIDER[normalizedProvider].forEach((candidate) => {
+    if (headerSet.has(candidate)) {
+      score += 3;
+    }
+  });
+  BILLING_DETAIL_CANDIDATES_BY_PROVIDER[normalizedProvider].forEach((candidate) => {
+    if (headerSet.has(candidate)) {
+      score += 1;
+    }
+  });
+  BILLING_CHARGE_TYPE_CANDIDATES_BY_PROVIDER[normalizedProvider].forEach(
+    (candidate) => {
+      if (headerSet.has(candidate)) {
+        score += 1;
+      }
+    }
+  );
+  BILLING_USAGE_DATE_CANDIDATES_BY_PROVIDER[normalizedProvider].forEach(
+    (candidate) => {
+      if (headerSet.has(candidate)) {
+        score += 2;
+      }
+    }
+  );
+
+  if (normalizedProvider === "aws") {
+    const hasAwsPrefix = Array.from(headerSet).some(
+      (header) => header.startsWith("lineitem/") || header.startsWith("product/")
+    );
+    if (hasAwsPrefix) {
+      score += 8;
+    }
+  } else if (normalizedProvider === "azure") {
+    if (
+      headerSet.has("costinbillingcurrency") ||
+      headerSet.has("metercategory") ||
+      headerSet.has("billingperiodstartdate")
+    ) {
+      score += 8;
+    }
+  } else if (normalizedProvider === "gcp") {
+    if (
+      headerSet.has("service.description") ||
+      headerSet.has("sku.description") ||
+      headerSet.has("usage_start_time")
+    ) {
+      score += 8;
+    }
+  } else if (normalizedProvider === "rackspace") {
+    if (
+      headerSet.has("service_type") ||
+      headerSet.has("impact_type") ||
+      headerSet.has("event_type")
+    ) {
+      score += 8;
+    }
+  }
+  return score;
+}
+
+function detectBillingCsvProvider(rows, headers) {
+  const normalizedHeaders = Array.isArray(headers)
+    ? headers.map((header) => normalizeCsvHeader(header))
+    : [];
+  const scores = {
+    aws: scoreBillingProviderByHeaders(normalizedHeaders, "aws"),
+    azure: scoreBillingProviderByHeaders(normalizedHeaders, "azure"),
+    gcp: scoreBillingProviderByHeaders(normalizedHeaders, "gcp"),
+    rackspace: scoreBillingProviderByHeaders(normalizedHeaders, "rackspace"),
+  };
+  const awsMatrix = parseAwsServiceViewMatrix(rows || [], normalizedHeaders);
+  if (awsMatrix) {
+    scores.aws += 14;
+  }
+  const ranked = Object.entries(scores)
+    .map(([provider, score]) => ({ provider, score }))
+    .sort((left, right) => right.score - left.score);
+  const top = ranked[0];
+  const second = ranked[1];
+  const confident =
+    top &&
+    top.score >= 8 &&
+    (!second || top.score >= second.score + 3);
+  return {
+    provider: confident ? top.provider : null,
+    scores,
+  };
+}
+
+function validateBillingCsvProvider(rows, headers, expectedProvider) {
+  const expected = normalizeBillingProvider(expectedProvider);
+  const detected = detectBillingCsvProvider(rows, headers);
+  if (detected.provider && detected.provider !== expected) {
+    return {
+      ok: false,
+      expected,
+      detected: detected.provider,
+    };
+  }
+  return {
+    ok: true,
+    expected,
+    detected: detected.provider,
+  };
+}
+
 function addBillingCostRowToServiceTotals(
   totalsByService,
   serviceName,
@@ -9301,134 +9533,34 @@ function parseBillingImportCsv(text, provider) {
   }
   const normalizedProvider = normalizeBillingProvider(provider);
   const headers = rows[0].map((value) => normalizeCsvHeader(value));
+  const providerValidation = validateBillingCsvProvider(
+    rows,
+    headers,
+    normalizedProvider
+  );
+  if (!providerValidation.ok) {
+    throw new Error(
+      `CSV appears to be ${getBillingProviderDisplayName(
+        providerValidation.detected
+      )} billing data. Switch to ${getBillingProviderDisplayName(
+        providerValidation.expected
+      )} tab and import again.`
+    );
+  }
   if (normalizedProvider === "aws") {
     const matrixParse = parseAwsServiceViewMatrix(rows, headers);
     if (matrixParse) {
       return matrixParse;
     }
   }
-  const serviceCandidatesByProvider = {
-    aws: [
-      "product/productname",
-      "product/servicename",
-      "product/servicecode",
-      "lineitem/productcode",
-      "lineitem/lineitemdescription",
-      "lineitem/usagetype",
-    ],
-    azure: [
-      "servicename",
-      "metercategory",
-      "productname",
-      "metername",
-      "resourcegroup",
-    ],
-    gcp: [
-      "service description",
-      "service.description",
-      "service",
-      "sku description",
-      "sku.description",
-    ],
-    rackspace: [
-      "service_type",
-      "impact_type",
-      "event_type",
-      "res_name",
-      "attribute_1",
-    ],
-  };
-  const costCandidatesByProvider = {
-    aws: [
-      "lineitem/unblendedcost",
-      "lineitem/netunblendedcost",
-      "lineitem/blendedcost",
-      "lineitem/netamortizedcost",
-      "amortizedcost",
-      "cost",
-      "charge",
-      "amount",
-    ],
-    azure: [
-      "costinbillingcurrency",
-      "pretaxcost",
-      "cost",
-      "charge",
-      "amount",
-    ],
-    gcp: ["cost", "net cost", "effective cost", "charge", "amount"],
-    rackspace: ["amount", "cost", "charge", "rate"],
-  };
-  const detailCandidatesByProvider = {
-    aws: [
-      "lineitem/lineitemdescription",
-      "lineitem/usagetype",
-      "lineitem/resourceid",
-      "product/instancetype",
-      "product/location",
-      "lineitem/operation",
-    ],
-    azure: [
-      "meter",
-      "metername",
-      "metercategory",
-      "meterid",
-      "resourcegroup",
-      "resourcetype",
-      "partnumber",
-    ],
-    gcp: [
-      "sku description",
-      "sku.description",
-      "sku id",
-      "sku.id",
-      "project id",
-      "project.id",
-      "resource name",
-    ],
-    rackspace: [
-      "res_name",
-      "impact_type",
-      "event_type",
-      "res_id",
-      "region_id",
-      "attribute_1",
-      "attribute_2",
-      "attribute_3",
-      "attribute_4",
-      "attribute_5",
-      "attribute_6",
-      "attribute_7",
-      "attribute_8",
-    ],
-  };
-  const chargeTypeCandidatesByProvider = {
-    aws: ["lineitem/lineitemtype", "lineitem/chargetype", "chargetype"],
-    azure: ["chargetype", "charge type", "pricingmodel"],
-    gcp: ["cost type", "costtype", "charge type"],
-    rackspace: ["event_type", "impact_type"],
-  };
-  const usageDateCandidatesByProvider = {
-    aws: ["lineitem/usagestartdate", "usagedate", "date"],
-    azure: ["date", "usagedate", "billingperiodstartdate"],
-    gcp: ["usage_start_time", "date", "usage date"],
-    rackspace: [
-      "event_start_date",
-      "event_end_date",
-      "bill_start_date",
-      "bill_end_date",
-      "usage_date",
-      "date",
-    ],
-  };
 
   let serviceIndex = findBillingHeaderIndex(
     headers,
-    serviceCandidatesByProvider[normalizedProvider]
+    BILLING_SERVICE_CANDIDATES_BY_PROVIDER[normalizedProvider]
   );
   let costIndex = findBillingHeaderIndex(
     headers,
-    costCandidatesByProvider[normalizedProvider]
+    BILLING_COST_CANDIDATES_BY_PROVIDER[normalizedProvider]
   );
   if (serviceIndex < 0) {
     serviceIndex = findBillingHeaderIndex(headers, [
@@ -9445,7 +9577,7 @@ function parseBillingImportCsv(text, provider) {
   }
   let detailIndex = findBillingHeaderIndex(
     headers,
-    detailCandidatesByProvider[normalizedProvider]
+    BILLING_DETAIL_CANDIDATES_BY_PROVIDER[normalizedProvider]
   );
   if (detailIndex < 0) {
     detailIndex = findBillingHeaderIndex(headers, [
@@ -9461,11 +9593,11 @@ function parseBillingImportCsv(text, provider) {
   }
   const chargeTypeIndex = findBillingHeaderIndex(
     headers,
-    chargeTypeCandidatesByProvider[normalizedProvider]
+    BILLING_CHARGE_TYPE_CANDIDATES_BY_PROVIDER[normalizedProvider]
   );
   const usageDateIndex = findBillingHeaderIndex(
     headers,
-    usageDateCandidatesByProvider[normalizedProvider]
+    BILLING_USAGE_DATE_CANDIDATES_BY_PROVIDER[normalizedProvider]
   );
   if (costIndex < 0) {
     throw new Error("Could not find a cost column in CSV.");
@@ -10808,17 +10940,51 @@ async function handleBillingImportFile(event) {
     return;
   }
   try {
-    const parsedImports = [];
+    const selectedProvider = normalizeBillingProvider(currentBillingProvider);
+    const parsedImportsByProvider = {
+      aws: [],
+      azure: [],
+      gcp: [],
+      rackspace: [],
+    };
+    const importedMonthKeysByProvider = {
+      aws: new Set(),
+      azure: new Set(),
+      gcp: new Set(),
+      rackspace: new Set(),
+    };
+    const reroutedFilesByProvider = {
+      aws: 0,
+      azure: 0,
+      gcp: 0,
+      rackspace: 0,
+    };
     const failedImports = [];
-    const importedMonthKeys = new Set();
     for (const file of files) {
       try {
         const text = await file.text();
+        const previewRows = parseCsvRows(text).filter((row) =>
+          row.some((value) => String(value || "").trim() !== "")
+        );
+        if (previewRows.length < 2) {
+          throw new Error("CSV needs a header and at least one data row.");
+        }
+        const previewHeaders = previewRows[0].map((value) =>
+          normalizeCsvHeader(value)
+        );
+        const detectedProvider = detectBillingCsvProvider(
+          previewRows,
+          previewHeaders
+        ).provider;
+        const targetProvider = normalizeBillingProvider(
+          detectedProvider || selectedProvider
+        );
+        const wasRerouted = targetProvider !== selectedProvider;
         const importSignature = await computeBillingImportSignature(
           text,
-          currentBillingProvider
+          targetProvider
         );
-        const parsed = parseBillingImportCsv(text, currentBillingProvider);
+        const parsed = parseBillingImportCsv(text, targetProvider);
         const defaultLabel = String(file.name || "")
           .replace(/\.[^.]+$/, "")
           .trim();
@@ -10858,8 +11024,8 @@ async function handleBillingImportFile(event) {
             return;
           }
           const monthKey = normalizeBillingMonthKey(rawMonthKey);
-          importedMonthKeys.add(monthKey);
-          normalizedDataset.provider = normalizeBillingProvider(currentBillingProvider);
+          importedMonthKeysByProvider[targetProvider].add(monthKey);
+          normalizedDataset.provider = targetProvider;
           normalizedDataset.sourceFiles = [file.name];
           normalizedDataset.sourceDatasetCount = 1;
           normalizedDataset.sourceSignatures = [`${importSignature}:${monthKey}`];
@@ -10887,7 +11053,7 @@ async function handleBillingImportFile(event) {
           );
           if (normalizedMonthDatasets[monthKey]) {
             normalizedMonthDatasets[monthKey] = mergeBillingImportDatasets(
-              currentBillingProvider,
+              targetProvider,
               [normalizedMonthDatasets[monthKey], normalizedDataset]
             );
           } else {
@@ -10895,117 +11061,165 @@ async function handleBillingImportFile(event) {
           }
         });
         parsed.monthDatasets = normalizedMonthDatasets;
-        parsedImports.push(parsed);
+        parsed.provider = targetProvider;
+        parsedImportsByProvider[targetProvider].push(parsed);
+        if (wasRerouted) {
+          reroutedFilesByProvider[targetProvider] += 1;
+        }
       } catch (error) {
         failedImports.push(
           `${file.name}: ${error?.message || "Could not parse CSV"}`
         );
       }
     }
-    if (!parsedImports.length) {
+    const totalImportedFiles = BILLING_IMPORT_PROVIDERS.reduce(
+      (sum, provider) => sum + parsedImportsByProvider[provider].length,
+      0
+    );
+    if (!totalImportedFiles) {
       throw new Error(
         failedImports.join(" | ") || "Could not parse any selected CSV files."
       );
     }
-    const providerEntry = getBillingProviderImportEntry(currentBillingProvider);
-    let skippedDuplicateBuckets = 0;
-    let mergedBuckets = 0;
-    parsedImports.forEach((parsed) => {
-      const monthDatasets = parsed?.monthDatasets || {};
-      Object.entries(monthDatasets).forEach(([monthKey, dataset]) => {
-        const normalizedMonthKey = normalizeBillingMonthKey(monthKey);
-        const normalizedDataset = normalizeBillingImportDataset(dataset);
-        if (!normalizedDataset) {
-          return;
-        }
-        const existingDataset = providerEntry.months[normalizedMonthKey];
-        const incomingSignatures = normalizeBillingSourceSignatures(
-          normalizedDataset.sourceSignatures
-        );
-        const existingSignatures = normalizeBillingSourceSignatures(
-          existingDataset?.sourceSignatures
-        );
-        const incomingFiles = Array.isArray(normalizedDataset.sourceFiles)
-          ? normalizedDataset.sourceFiles
-              .map((name) => String(name || "").trim())
-              .filter(Boolean)
-          : [];
-        const existingFiles = Array.isArray(existingDataset?.sourceFiles)
-          ? existingDataset.sourceFiles
-              .map((name) => String(name || "").trim())
-              .filter(Boolean)
-          : [];
-        const hasLegacyLikeDuplicate =
-          Boolean(existingDataset) &&
-          incomingFiles.length > 0 &&
-          incomingFiles.every((name) => existingFiles.includes(name)) &&
-          Number.isFinite(existingDataset?.rowCount) &&
-          Number.isFinite(normalizedDataset.rowCount) &&
-          Number(existingDataset.rowCount) === Number(normalizedDataset.rowCount) &&
-          Number.isFinite(existingDataset?.totalCost) &&
-          Number.isFinite(normalizedDataset.totalCost) &&
-          Math.abs(
-            Number(existingDataset.totalCost) - Number(normalizedDataset.totalCost)
-          ) < 0.01;
-        if (
-          (incomingSignatures.length &&
-            incomingSignatures.every((signature) =>
-              existingSignatures.includes(signature)
-            )) ||
-          hasLegacyLikeDuplicate
-        ) {
-          skippedDuplicateBuckets += 1;
-          return;
-        }
-        providerEntry.months[normalizedMonthKey] = existingDataset
-          ? mergeBillingImportDatasets(currentBillingProvider, [
-              existingDataset,
-              normalizedDataset,
-            ])
-          : normalizedDataset;
-        mergedBuckets += 1;
+    const providerSummaries = [];
+    BILLING_IMPORT_PROVIDERS.forEach((provider) => {
+      const imports = parsedImportsByProvider[provider] || [];
+      if (!imports.length) {
+        return;
+      }
+      const providerEntry = getBillingProviderImportEntry(provider);
+      let skippedDuplicateBuckets = 0;
+      let mergedBuckets = 0;
+      imports.forEach((parsed) => {
+        const monthDatasets = parsed?.monthDatasets || {};
+        Object.entries(monthDatasets).forEach(([monthKey, dataset]) => {
+          const normalizedMonthKey = normalizeBillingMonthKey(monthKey);
+          const normalizedDataset = normalizeBillingImportDataset(dataset);
+          if (!normalizedDataset) {
+            return;
+          }
+          const existingDataset = providerEntry.months[normalizedMonthKey];
+          const incomingSignatures = normalizeBillingSourceSignatures(
+            normalizedDataset.sourceSignatures
+          );
+          const existingSignatures = normalizeBillingSourceSignatures(
+            existingDataset?.sourceSignatures
+          );
+          const incomingFiles = Array.isArray(normalizedDataset.sourceFiles)
+            ? normalizedDataset.sourceFiles
+                .map((name) => String(name || "").trim())
+                .filter(Boolean)
+            : [];
+          const existingFiles = Array.isArray(existingDataset?.sourceFiles)
+            ? existingDataset.sourceFiles
+                .map((name) => String(name || "").trim())
+                .filter(Boolean)
+            : [];
+          const hasLegacyLikeDuplicate =
+            Boolean(existingDataset) &&
+            incomingFiles.length > 0 &&
+            incomingFiles.every((name) => existingFiles.includes(name)) &&
+            Number.isFinite(existingDataset?.rowCount) &&
+            Number.isFinite(normalizedDataset.rowCount) &&
+            Number(existingDataset.rowCount) === Number(normalizedDataset.rowCount) &&
+            Number.isFinite(existingDataset?.totalCost) &&
+            Number.isFinite(normalizedDataset.totalCost) &&
+            Math.abs(
+              Number(existingDataset.totalCost) - Number(normalizedDataset.totalCost)
+            ) < 0.01;
+          if (
+            (incomingSignatures.length &&
+              incomingSignatures.every((signature) =>
+                existingSignatures.includes(signature)
+              )) ||
+            hasLegacyLikeDuplicate
+          ) {
+            skippedDuplicateBuckets += 1;
+            return;
+          }
+          providerEntry.months[normalizedMonthKey] = existingDataset
+            ? mergeBillingImportDatasets(provider, [existingDataset, normalizedDataset])
+            : normalizedDataset;
+          mergedBuckets += 1;
+        });
       });
+      const merged = getBillingProviderDataByMonth(provider, "all");
+      const importedMonthLabels = Array.from(importedMonthKeysByProvider[provider])
+        .sort((left, right) => {
+          if (left === BILLING_MONTH_UNKNOWN_KEY) {
+            return 1;
+          }
+          if (right === BILLING_MONTH_UNKNOWN_KEY) {
+            return -1;
+          }
+          return right.localeCompare(left);
+        })
+        .map((monthKey) => formatBillingMonthLabel(monthKey));
+      const monthSummary = importedMonthLabels.length
+        ? importedMonthLabels.length <= 4
+          ? importedMonthLabels.join(", ")
+          : `${importedMonthLabels.slice(0, 4).join(", ")} (+${
+              importedMonthLabels.length - 4
+            } more)`
+        : "All months";
+      providerSummaries.push({
+        provider,
+        fileCount: imports.length,
+        mergedRows: merged?.rowCount || 0,
+        mergedBuckets,
+        skippedDuplicateBuckets,
+        monthBucketCount: importedMonthKeysByProvider[provider].size,
+        monthSummary,
+        reroutedFiles: reroutedFilesByProvider[provider] || 0,
+      });
+      billingExpandedServices[provider] = new Set();
+      billingSelectedDetailKeys[provider] = new Set();
     });
-    const merged = getBillingProviderDataByMonth(currentBillingProvider, "all");
     // Keep service/detail tags across imports so monthly files can auto-match by name.
     persistBillingTagsStore(billingTagStore);
     persistBillingDetailTagsStore(billingDetailTagStore);
-    billingExpandedServices[currentBillingProvider] = new Set();
-    billingSelectedDetailKeys[currentBillingProvider] = new Set();
     persistBillingImportStore(billingImportStore);
-    const importedMonthLabels = Array.from(importedMonthKeys)
-      .sort((left, right) => {
-        if (left === BILLING_MONTH_UNKNOWN_KEY) {
-          return 1;
-        }
-        if (right === BILLING_MONTH_UNKNOWN_KEY) {
-          return -1;
-        }
-        return right.localeCompare(left);
+    const totalReroutedFiles = providerSummaries.reduce(
+      (sum, summary) => sum + summary.reroutedFiles,
+      0
+    );
+    const perProviderMessage = providerSummaries
+      .map((summary) => {
+        return `${getBillingProviderDisplayName(summary.provider)} imported ${
+          summary.fileCount
+        } file(s), month buckets updated: ${summary.monthBucketCount} (${
+          summary.monthSummary
+        }), merged rows: ${summary.mergedRows}${
+          summary.skippedDuplicateBuckets
+            ? `, skipped duplicates: ${summary.skippedDuplicateBuckets}`
+            : ""
+        }${
+          summary.mergedBuckets === 0 ? ", no new data added" : ""
+        }${
+          summary.reroutedFiles
+            ? `, auto-routed from ${
+                getBillingProviderDisplayName(selectedProvider)
+              } tab: ${summary.reroutedFiles}`
+            : ""
+        }`;
       })
-      .map((monthKey) => formatBillingMonthLabel(monthKey));
-    const monthSummary = importedMonthLabels.length
-      ? importedMonthLabels.length <= 4
-        ? importedMonthLabels.join(", ")
-        : `${importedMonthLabels.slice(0, 4).join(", ")} (+${
-            importedMonthLabels.length - 4
-          } more)`
-      : "All months";
+      .join(" | ");
+    let rerouteNote = "";
+    if (totalReroutedFiles === 1) {
+      const reroutedTarget = providerSummaries.find(
+        (summary) => summary.reroutedFiles > 0
+      )?.provider;
+      if (reroutedTarget) {
+        rerouteNote = ` File was imported in ${getBillingProviderDisplayName(
+          reroutedTarget
+        )} tab.`;
+      }
+    } else if (totalReroutedFiles > 1) {
+      rerouteNote = ` ${totalReroutedFiles} file(s) were auto-imported into matching provider tabs.`;
+    }
     setInlineNote(
       billingNote,
-      `${getBillingProviderDisplayName(currentBillingProvider)} imported ${
-        parsedImports.length
-      } file(s), month buckets updated: ${
-        importedMonthKeys.size
-      } (${monthSummary}), merged rows: ${merged?.rowCount || 0}.${
-        skippedDuplicateBuckets
-          ? ` Skipped duplicate month bucket(s): ${skippedDuplicateBuckets}.`
-          : ""
-      }${
-        mergedBuckets === 0 && !failedImports.length
-          ? " No new data was added."
-          : ""
-      }${
+      `${perProviderMessage}.${rerouteNote}${
         failedImports.length
           ? ` Failed: ${failedImports.length} (${failedImports.join(" | ")}).`
           : ""
