@@ -58,6 +58,17 @@ docker run --rm -p 3000:3000 \
   ghcr.io/techcrazi/cloudpricestudio:latest
 ```
 
+### Docker Run with Login + Persistent User Profiles
+```bash
+docker run --rm -p 3000:3000 \
+  -e APP_AUTH_USERS='analyst1:ChangeMe123,analyst2:ChangeMe456' \
+  -e AUTH_DATA_DIR=/tmp/cloud-price-data \
+  -v cloudprice-data:/tmp/cloud-price-data \
+  ghcr.io/techcrazi/cloudpricestudio:latest
+```
+
+The named volume keeps user profiles across container restarts/redeploys.
+
 ### Docker Run Container with API Keys & AWS Config Map
 ```bash
 docker run --rm -p 3000:3000 \
@@ -99,6 +110,57 @@ cloud pricing and force the provider selector to API.
 - `GCP_PRICING_API_KEY`, `GCP_API_KEY`, or `GOOGLE_API_KEY`
 
 Retail (Vantage) mode does not require credentials.
+
+## Login + profile persistence
+
+By default (guest mode), app state remains browser-local only (`localStorage`).
+
+If login is configured and a valid user signs in:
+
+- The app syncs scenario/private/billing state to server-side local storage
+  inside the container SQLite database
+  (`/tmp/cloud-price-data/cloudprice.db` by default).
+- State is isolated per signed-in user.
+- `Log Out` returns to guest behavior (browser-local only).
+- If you did work in guest mode and then sign in, the app preserves guest state.
+  If your DB profile already has different saved data, use `Import Guest Data`
+  after login to push guest work (scenarios/private cloud/tags/billing) into
+  your DB profile.
+
+Auth configuration options:
+
+- `APP_AUTH_USERS`: comma-separated `username:password` list.
+  Example: `APP_AUTH_USERS='ops1:Secret1,ops2:Secret2'`
+- Or `APP_LOGIN_USER` + `APP_LOGIN_PASSWORD` for a single user.
+- `APP_ADMIN_USERS` (optional): comma-separated admin usernames used as
+  default/seed admins for new or migrated auth records. Default is `smit`.
+- `AUTH_DATA_DIR` (optional): base path for auth files
+  (default `/tmp/cloud-price-data`).
+- `AUTH_DB_FILE` (optional): SQLite file path
+  (default `${AUTH_DATA_DIR}/cloudprice.db`).
+- `AUTH_USERS_FILE` (optional): legacy JSON user file to import if the SQLite
+  `users` table is empty.
+- `AUTH_STATE_DIR` (optional): legacy hashed JSON state directory used for
+  fallback migration into SQLite.
+- `AUTH_SESSION_TTL_MS` (optional): session cookie TTL.
+- `AUTH_STATE_MAX_BYTES` (optional): max accepted profile payload size.
+
+Login is enabled only when either `AUTH_DATA_DIR` or `AUTH_DB_FILE` is passed
+at startup. If both are missing, the UI runs in guest-only mode and hides the
+login action.
+
+`User Data` tab:
+- Export full workspace data (scenarios, private profiles, saved compare picks,
+  billing imports, tags) to a JSON file.
+- Import the same JSON on any machine/browser.
+- If signed in, imported data is immediately synced to the user DB profile.
+- If guest, imported data is applied to browser-local storage only.
+
+When signed in as an admin user, an `Admin` tab appears to:
+- Add users
+- Set each user as `Admin` or `Regular`
+- Remove non-admin users
+- Update any user password
 
 ## Scenarios
 

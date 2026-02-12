@@ -2,9 +2,18 @@ const form = document.getElementById("pricing-form");
 const formNote = document.getElementById("form-note");
 const delta = document.getElementById("delta");
 const exportButton = document.getElementById("export-csv");
+const authStatus = document.getElementById("auth-status");
+const authForm = document.getElementById("auth-form");
+const authUsernameInput = document.getElementById("auth-username");
+const authPasswordInput = document.getElementById("auth-password");
+const authOpenLoginButton = document.getElementById("auth-open-login");
+const authImportGuestButton = document.getElementById("auth-import-guest");
+const authLogoutButton = document.getElementById("auth-logout");
+const authNote = document.getElementById("auth-note");
 const modeInput = document.getElementById("mode-input");
 const pricingFocusInput = document.getElementById("pricing-focus");
 const modeTabs = document.querySelectorAll(".mode-tab");
+const adminModeTab = document.getElementById("admin-mode-tab");
 const formTitle = document.getElementById("form-title");
 const formSubtitle = document.getElementById("form-subtitle");
 const resultsTitle = document.getElementById("results-title");
@@ -176,6 +185,27 @@ const resultsTabButtons = document.querySelectorAll(".results-tab");
 const pricingPanel = document.getElementById("pricing-panel");
 const savedComparePanel = document.getElementById("saved-compare-panel");
 const billingPanel = document.getElementById("billing-panel");
+const dataTransferPanel = document.getElementById("data-transfer-panel");
+const dataTransferExportButton = document.getElementById("data-transfer-export");
+const dataTransferImportButton = document.getElementById("data-transfer-import");
+const dataTransferImportInput = document.getElementById(
+  "data-transfer-import-file"
+);
+const dataTransferScope = document.getElementById("data-transfer-scope");
+const dataTransferNote = document.getElementById("data-transfer-note");
+const adminPanel = document.getElementById("admin-panel");
+const adminRefreshUsersButton = document.getElementById("admin-refresh-users");
+const adminAddUserForm = document.getElementById("admin-add-user-form");
+const adminAddUsernameInput = document.getElementById("admin-add-username");
+const adminAddPasswordInput = document.getElementById("admin-add-password");
+const adminAddRoleSelect = document.getElementById("admin-add-role");
+const adminUpdatePasswordForm = document.getElementById(
+  "admin-update-password-form"
+);
+const adminUpdateUsernameSelect = document.getElementById("admin-update-username");
+const adminUpdatePasswordInput = document.getElementById("admin-update-password");
+const adminNote = document.getElementById("admin-note");
+const adminUsersTable = document.getElementById("admin-users-table");
 const billingProviderTabs = document.querySelectorAll("[data-billing-provider]");
 const billingImportButton = document.getElementById("billing-import-csv");
 const billingExportButton = document.getElementById("billing-export-csv");
@@ -393,6 +423,21 @@ const MAX_VENDOR_OPTIONS = 4;
 const BILLING_IMPORT_KEY = "cloud-price-billing-import";
 const BILLING_TAGS_KEY = "cloud-price-billing-tags";
 const BILLING_DETAIL_TAGS_KEY = "cloud-price-billing-detail-tags";
+const AUTH_SYNC_STORAGE_KEYS = [
+  SCENARIO_STORAGE_KEY,
+  SAVED_COMPARE_SCENARIOS_KEY,
+  SAVED_COMPARE_PRIVATE_KEY,
+  PRIVATE_STORAGE_KEY,
+  PRIVATE_PROVIDERS_KEY,
+  PRIVATE_COMPARE_KEY,
+  BILLING_IMPORT_KEY,
+  BILLING_TAGS_KEY,
+  BILLING_DETAIL_TAGS_KEY,
+];
+const AUTH_SYNC_STORAGE_PREFIX = "cloud-price-";
+const AUTH_SYNC_STORAGE_KEY_SET = new Set(AUTH_SYNC_STORAGE_KEYS);
+const AUTH_STATE_VERSION = 1;
+const AUTH_SYNC_DEBOUNCE_MS = 1200;
 const BILLING_UNTAGGED_FILTER = "__untagged__";
 const SCENARIO_SCHEMA_VERSION = 2;
 const QUALITY_WARNING_LIMIT = 8;
@@ -456,6 +501,12 @@ let scenarioStore = [];
 let billingImportStore = { aws: null, azure: null, gcp: null, rackspace: null };
 let billingTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
 let billingDetailTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
+let authSession = null;
+let authSyncTimer = null;
+let authSyncInFlight = false;
+let pendingGuestImportState = null;
+let isAdminUser = false;
+let adminUsers = [];
 const billingProductFilterSelections = {
   aws: "",
   azure: "",
@@ -1622,6 +1673,18 @@ function updateResultsHeading() {
       "Import provider billing CSVs and visualize cost allocation by service.";
     return;
   }
+  if (activePanel === "data-transfer") {
+    resultsTitle.textContent = "User Data";
+    resultsSubtitle.textContent =
+      "Export/import your full workspace data for guest and signed-in use.";
+    return;
+  }
+  if (activePanel === "admin") {
+    resultsTitle.textContent = "Admin";
+    resultsSubtitle.textContent =
+      "Manage users: add/remove accounts and update passwords.";
+    return;
+  }
   if (currentResultsTab === "saved") {
     if (currentMode === "network") {
       resultsTitle.textContent = "Network Saved Compare";
@@ -1675,7 +1738,9 @@ function updateResultsTabsVisibility() {
     activePanel !== "private" &&
     activePanel !== "scenarios" &&
     activePanel !== "saved" &&
-    activePanel !== "billing";
+    activePanel !== "billing" &&
+    activePanel !== "data-transfer" &&
+    activePanel !== "admin";
   resultsTabs.classList.toggle("is-hidden", !showTabs || isFocusMode);
   if (!showTabs) {
     currentResultsTab = "pricing";
@@ -1760,13 +1825,17 @@ function setResultsTab(tab, options = {}) {
 }
 
 function setPanel(panel) {
-  const nextPanel =
+  let nextPanel =
     panel === "private"
       ? "private"
       : panel === "scenarios"
       ? "scenarios"
       : panel === "billing"
       ? "billing"
+      : panel === "data-transfer"
+      ? "data-transfer"
+      : panel === "admin"
+      ? "admin"
       : panel === "k8s"
       ? "k8s"
       : panel === "network"
@@ -1776,6 +1845,9 @@ function setPanel(panel) {
       : panel === "saved"
       ? "saved"
       : "vm";
+  if (nextPanel === "admin" && !isAdminUser) {
+    nextPanel = "vm";
+  }
   activePanel = nextPanel;
   modeTabs.forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.mode === nextPanel);
@@ -1784,7 +1856,9 @@ function setPanel(panel) {
     nextPanel === "private" ||
     nextPanel === "scenarios" ||
     nextPanel === "saved" ||
-    nextPanel === "billing"
+    nextPanel === "billing" ||
+    nextPanel === "data-transfer" ||
+    nextPanel === "admin"
   ) {
     if (cloudPanel) {
       cloudPanel.classList.add("is-hidden");
@@ -1800,6 +1874,15 @@ function setPanel(panel) {
     }
     if (billingPanel) {
       billingPanel.classList.toggle("is-hidden", nextPanel !== "billing");
+    }
+    if (dataTransferPanel) {
+      dataTransferPanel.classList.toggle(
+        "is-hidden",
+        nextPanel !== "data-transfer"
+      );
+    }
+    if (adminPanel) {
+      adminPanel.classList.toggle("is-hidden", nextPanel !== "admin");
     }
     if (formCard) {
       formCard.classList.add("is-hidden");
@@ -1825,6 +1908,12 @@ function setPanel(panel) {
     if (nextPanel === "billing") {
       setBillingProvider(currentBillingProvider);
     }
+    if (nextPanel === "data-transfer") {
+      renderDataTransferScope(authSession?.user || null);
+    }
+    if (nextPanel === "admin") {
+      loadAdminUsers();
+    }
     return;
   }
   if (cloudPanel) {
@@ -1841,6 +1930,12 @@ function setPanel(panel) {
   }
   if (billingPanel) {
     billingPanel.classList.add("is-hidden");
+  }
+  if (dataTransferPanel) {
+    dataTransferPanel.classList.add("is-hidden");
+  }
+  if (adminPanel) {
+    adminPanel.classList.add("is-hidden");
   }
   if (formCard) {
     formCard.classList.remove("is-hidden");
@@ -1866,6 +1961,8 @@ function updateViewTabsVisibility() {
     activePanel !== "scenarios" &&
     activePanel !== "saved" &&
     activePanel !== "billing" &&
+    activePanel !== "data-transfer" &&
+    activePanel !== "admin" &&
     currentResultsTab === "pricing" &&
     currentMode !== "network" &&
     currentMode !== "storage";
@@ -1875,7 +1972,9 @@ function updateViewTabsVisibility() {
     (activePanel === "private" ||
       activePanel === "scenarios" ||
       activePanel === "saved" ||
-      activePanel === "billing") &&
+      activePanel === "billing" ||
+      activePanel === "data-transfer" ||
+      activePanel === "admin") &&
     currentView !== "compare"
   ) {
     currentView = "compare";
@@ -4821,6 +4920,798 @@ function renderCommit(data) {
     "Discounts apply to compute only. Storage, egress, network, SQL, and DR remain unchanged. Savings are visualized below.";
 }
 
+function setAuthNote(message, isError = false) {
+  if (!authNote) {
+    return;
+  }
+  authNote.textContent = message || "";
+  authNote.classList.toggle("negative", isError);
+}
+
+function setAdminNote(message, isError = false) {
+  if (!adminNote) {
+    return;
+  }
+  adminNote.textContent = message || "";
+  adminNote.classList.toggle("negative", isError);
+}
+
+function setDataTransferNote(message, isError = false) {
+  if (!dataTransferNote) {
+    return;
+  }
+  dataTransferNote.textContent = message || "";
+  dataTransferNote.classList.toggle("negative", isError);
+}
+
+function renderDataTransferScope(user = null) {
+  if (!dataTransferScope) {
+    return;
+  }
+  const username = String(user?.username || "").trim();
+  if (username) {
+    dataTransferScope.textContent = `Signed in as ${username}. Imported data is also synced to your DB profile.`;
+    return;
+  }
+  dataTransferScope.textContent =
+    "Guest mode: data transfer works browser-locally for this device/session.";
+}
+
+function renderAdminUsersTable() {
+  if (!adminUsersTable) {
+    return;
+  }
+  if (!Array.isArray(adminUsers) || !adminUsers.length) {
+    adminUsersTable.innerHTML =
+      '<p class="billing-empty">No users available. Add a user to get started.</p>';
+    return;
+  }
+  const adminCount = adminUsers.reduce(
+    (count, user) => count + (Boolean(user?.isAdmin) ? 1 : 0),
+    0
+  );
+  const rows = adminUsers
+    .map((user) => {
+      const username = String(user?.username || "").trim();
+      if (!username) {
+        return "";
+      }
+      const isAdmin = Boolean(user?.isAdmin);
+      const roleClass = isAdmin ? "" : " user";
+      const roleValue = isAdmin ? "user" : "admin";
+      const roleLabel = isAdmin ? "Set regular" : "Set admin";
+      const roleAction =
+        isAdmin && adminCount <= 1
+          ? "<span>Last admin</span>"
+          : `<button type="button" class="table-action" data-admin-role="${encodeURIComponent(
+              username
+            )}" data-admin-role-value="${roleValue}">${roleLabel}</button>`;
+      const deleteAction = isAdmin
+        ? "<span>Protected</span>"
+        : `<button type="button" class="table-action" data-admin-delete="${encodeURIComponent(
+            username
+          )}">Remove</button>`;
+      return `<tr>
+        <td>${escapeMarkup(username)}</td>
+        <td><span class="admin-role${roleClass}">${isAdmin ? "Admin" : "Regular"}</span></td>
+        <td>${escapeMarkup(formatDateTime(user?.updatedAt))}</td>
+        <td>${escapeMarkup(formatDateTime(user?.createdAt))}</td>
+        <td><div class="table-actions">${roleAction}${deleteAction}</div></td>
+      </tr>`;
+    })
+    .filter(Boolean)
+    .join("");
+  adminUsersTable.innerHTML = `<table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Role</th>
+        <th>Updated</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function syncAdminUserSelector() {
+  if (!adminUpdateUsernameSelect) {
+    return;
+  }
+  const selected = String(adminUpdateUsernameSelect.value || "");
+  adminUpdateUsernameSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select user";
+  adminUpdateUsernameSelect.appendChild(placeholder);
+  adminUsers.forEach((user) => {
+    const username = String(user?.username || "").trim();
+    if (!username) {
+      return;
+    }
+    const option = document.createElement("option");
+    option.value = username;
+    option.textContent = username;
+    adminUpdateUsernameSelect.appendChild(option);
+  });
+  if (
+    selected &&
+    adminUsers.some((user) => String(user?.username || "").trim() === selected)
+  ) {
+    adminUpdateUsernameSelect.value = selected;
+  }
+}
+
+function updateAdminTabVisibility() {
+  if (adminModeTab) {
+    adminModeTab.classList.toggle("is-hidden", !isAdminUser);
+  }
+  if (!isAdminUser) {
+    adminUsers = [];
+    renderAdminUsersTable();
+    syncAdminUserSelector();
+    if (activePanel === "admin") {
+      setPanel("vm");
+    }
+  }
+}
+
+async function loadAdminUsers(options = {}) {
+  if (!isAdminUser) {
+    return;
+  }
+  if (!options.silent) {
+    setAdminNote("Loading users...");
+  }
+  try {
+    const payload = await requestJson("/api/admin/users");
+    adminUsers = Array.isArray(payload?.users) ? payload.users : [];
+    renderAdminUsersTable();
+    syncAdminUserSelector();
+    if (!options.keepNote) {
+      setAdminNote(`Loaded ${adminUsers.length} user(s).`);
+    }
+  } catch (error) {
+    setAdminNote(error?.message || "Could not load users.", true);
+  }
+}
+
+async function handleAdminAddUserSubmit(event) {
+  event.preventDefault();
+  if (!isAdminUser) {
+    return;
+  }
+  const username = String(adminAddUsernameInput?.value || "").trim();
+  const password = String(adminAddPasswordInput?.value || "");
+  const role = String(adminAddRoleSelect?.value || "user")
+    .trim()
+    .toLowerCase();
+  const isAdmin = role === "admin";
+  if (!username || !password) {
+    setAdminNote("Username and password are required.", true);
+    return;
+  }
+  setAdminNote(
+    `Adding ${isAdmin ? "admin" : "regular"} user "${username}"...`
+  );
+  try {
+    const payload = await requestJson("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, isAdmin }),
+    });
+    if (adminAddUserForm) {
+      adminAddUserForm.reset();
+    }
+    await loadAdminUsers({ silent: true, keepNote: true });
+    setAdminNote(
+      `User "${payload?.user?.username || username}" added as ${
+        payload?.user?.isAdmin ? "admin" : "regular"
+      }.`
+    );
+  } catch (error) {
+    setAdminNote(error?.message || "Could not add user.", true);
+  }
+}
+
+async function handleAdminUpdatePasswordSubmit(event) {
+  event.preventDefault();
+  if (!isAdminUser) {
+    return;
+  }
+  const username = String(adminUpdateUsernameSelect?.value || "").trim();
+  const password = String(adminUpdatePasswordInput?.value || "");
+  if (!username || !password) {
+    setAdminNote("Choose a user and enter a new password.", true);
+    return;
+  }
+  setAdminNote(`Updating password for "${username}"...`);
+  try {
+    await requestJson(`/api/admin/users/${encodeURIComponent(username)}/password`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (adminUpdatePasswordInput) {
+      adminUpdatePasswordInput.value = "";
+    }
+    await loadAdminUsers({ silent: true, keepNote: true });
+    setAdminNote(`Password updated for "${username}".`);
+  } catch (error) {
+    setAdminNote(error?.message || "Could not update password.", true);
+  }
+}
+
+async function handleAdminUpdateRole(usernameRaw, roleRaw) {
+  if (!isAdminUser) {
+    return;
+  }
+  const username = String(usernameRaw || "").trim();
+  const role = String(roleRaw || "")
+    .trim()
+    .toLowerCase();
+  const isAdmin = role === "admin";
+  if (!username || (role !== "admin" && role !== "user")) {
+    return;
+  }
+  setAdminNote(`Updating role for "${username}"...`);
+  try {
+    const payload = await requestJson(
+      `/api/admin/users/${encodeURIComponent(username)}/role`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAdmin }),
+      }
+    );
+    const currentUser = String(authSession?.user?.username || "")
+      .trim()
+      .toLowerCase();
+    if (currentUser && currentUser === username.toLowerCase()) {
+      if (authSession?.user) {
+        authSession.user.isAdmin = Boolean(payload?.user?.isAdmin);
+      }
+      isAdminUser = Boolean(payload?.user?.isAdmin);
+      setAuthUi(authSession?.user || null, { loginEnabled: true });
+    }
+    if (isAdminUser) {
+      await loadAdminUsers({ silent: true, keepNote: true });
+    }
+    setAdminNote(
+      `Role updated for "${username}" (${isAdmin ? "admin" : "regular"}).`
+    );
+  } catch (error) {
+    setAdminNote(error?.message || "Could not update role.", true);
+  }
+}
+
+async function handleAdminDeleteUser(usernameRaw) {
+  if (!isAdminUser) {
+    return;
+  }
+  const username = String(usernameRaw || "").trim();
+  if (!username) {
+    return;
+  }
+  const shouldDelete = window.confirm(
+    `Remove user "${username}"? This will revoke active sessions for that user.`
+  );
+  if (!shouldDelete) {
+    return;
+  }
+  setAdminNote(`Removing user "${username}"...`);
+  try {
+    await requestJson(`/api/admin/users/${encodeURIComponent(username)}`, {
+      method: "DELETE",
+    });
+    await loadAdminUsers({ silent: true, keepNote: true });
+    setAdminNote(`User "${username}" removed.`);
+  } catch (error) {
+    setAdminNote(error?.message || "Could not remove user.", true);
+  }
+}
+
+function setAuthUi(user, options = {}) {
+  const loginEnabled = options.loginEnabled !== false;
+  const showGuestLogin = !user && loginEnabled;
+  const showGuestImport = Boolean(user?.username && pendingGuestImportState);
+  updateAdminTabVisibility();
+  renderDataTransferScope(user);
+  if (authStatus) {
+    if (user?.username) {
+      authStatus.textContent = `Signed in as ${user.username}. Profile data is synced to this container.`;
+    } else if (loginEnabled) {
+      authStatus.textContent =
+        "Guest mode: using browser-only temporary storage.";
+    } else {
+      authStatus.textContent = "Guest user";
+    }
+  }
+  if (authOpenLoginButton) {
+    authOpenLoginButton.classList.toggle("is-hidden", !showGuestLogin);
+    authOpenLoginButton.disabled = !loginEnabled;
+  }
+  if (authImportGuestButton) {
+    authImportGuestButton.classList.toggle("is-hidden", !showGuestImport);
+  }
+  if (authLogoutButton) {
+    authLogoutButton.classList.toggle("is-hidden", !user?.username);
+  }
+  if (authForm && user?.username) {
+    authForm.classList.add("is-hidden");
+  }
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options);
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      payload?.error ||
+        payload?.message ||
+        `Request failed (${response.status}).`
+    );
+  }
+  return payload;
+}
+
+function isAuthSyncStorageKey(key) {
+  return (
+    typeof key === "string" &&
+    (AUTH_SYNC_STORAGE_KEY_SET.has(key) ||
+      key.startsWith(AUTH_SYNC_STORAGE_PREFIX))
+  );
+}
+
+function collectAuthSyncedLocalStorage() {
+  const localStorageState = {};
+  AUTH_SYNC_STORAGE_KEYS.forEach((key) => {
+    const raw = localStorage.getItem(key);
+    if (raw !== null) {
+      localStorageState[key] = raw;
+    }
+  });
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (
+      !key ||
+      !key.startsWith(AUTH_SYNC_STORAGE_PREFIX) ||
+      AUTH_SYNC_STORAGE_KEY_SET.has(key)
+    ) {
+      continue;
+    }
+    const raw = localStorage.getItem(key);
+    if (raw !== null) {
+      localStorageState[key] = raw;
+    }
+  }
+  return localStorageState;
+}
+
+function normalizeSyncedStatePayload(state) {
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return null;
+  }
+  const localState = state.localStorage;
+  if (!localState || typeof localState !== "object" || Array.isArray(localState)) {
+    return null;
+  }
+  const normalizedLocalState = {};
+  Object.entries(localState).forEach(([key, value]) => {
+    if (isAuthSyncStorageKey(key) && typeof value === "string") {
+      normalizedLocalState[key] = value;
+    }
+  });
+  return {
+    version: AUTH_STATE_VERSION,
+    localStorage: normalizedLocalState,
+  };
+}
+
+function cloneSyncedStatePayload(state) {
+  const normalized = normalizeSyncedStatePayload(state);
+  if (!normalized) {
+    return null;
+  }
+  return {
+    version: normalized.version,
+    localStorage: { ...normalized.localStorage },
+  };
+}
+
+function hasSyncedStateData(state) {
+  const normalized = normalizeSyncedStatePayload(state);
+  return Boolean(
+    normalized && Object.keys(normalized.localStorage).length > 0
+  );
+}
+
+function areSyncedStatePayloadsEqual(left, right) {
+  const normalizedLeft = normalizeSyncedStatePayload(left);
+  const normalizedRight = normalizeSyncedStatePayload(right);
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+  const leftEntries = Object.entries(normalizedLeft.localStorage).sort(
+    ([a], [b]) => a.localeCompare(b)
+  );
+  const rightEntries = Object.entries(normalizedRight.localStorage).sort(
+    ([a], [b]) => a.localeCompare(b)
+  );
+  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries);
+}
+
+function setPendingGuestImportState(state) {
+  const candidate = cloneSyncedStatePayload(state);
+  pendingGuestImportState =
+    candidate && Object.keys(candidate.localStorage).length > 0
+      ? candidate
+      : null;
+}
+
+function buildSyncedStatePayload() {
+  return {
+    version: AUTH_STATE_VERSION,
+    localStorage: collectAuthSyncedLocalStorage(),
+  };
+}
+
+function buildUserDataExportPayload() {
+  const state = cloneSyncedStatePayload(buildSyncedStatePayload()) || {
+    version: AUTH_STATE_VERSION,
+    localStorage: {},
+  };
+  return {
+    schema: "cloud-price-user-data",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    source: {
+      authenticated: Boolean(authSession?.authenticated),
+      username: String(authSession?.user?.username || "").trim() || null,
+    },
+    state,
+  };
+}
+
+function extractSyncedStateFromTransferPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const direct = normalizeSyncedStatePayload(payload);
+  if (direct) {
+    return direct;
+  }
+  return normalizeSyncedStatePayload(payload.state);
+}
+
+function handleExportUserData() {
+  try {
+    const payload = buildUserDataExportPayload();
+    const keyCount = Object.keys(payload.state?.localStorage || {}).length;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const username =
+      String(payload.source?.username || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-") || "guest";
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    link.href = url;
+    link.download = `cloud-price-user-data-${username}-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setDataTransferNote(`Exported ${keyCount} data key(s).`);
+  } catch (error) {
+    setDataTransferNote(error?.message || "Could not export user data.", true);
+  }
+}
+
+async function handleImportUserDataFile(event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) {
+    return;
+  }
+  setDataTransferNote(`Importing "${file.name}"...`);
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    const importedState = extractSyncedStateFromTransferPayload(parsed);
+    if (!importedState) {
+      setDataTransferNote("File is not a valid Cloud Price user data export.", true);
+      return;
+    }
+    const currentState = buildSyncedStatePayload();
+    const currentKeyCount = Object.keys(currentState.localStorage || {}).length;
+    if (currentKeyCount > 0) {
+      const shouldImport = window.confirm(
+        "Import will replace your current saved workspace data. Continue?"
+      );
+      if (!shouldImport) {
+        setDataTransferNote("Import canceled.");
+        return;
+      }
+    }
+    applySyncedStatePayload(importedState);
+    reloadPersistentStateFromLocalStorage();
+    setPendingGuestImportState(null);
+    setAuthUi(authSession?.user || null, {
+      loginEnabled: authSession?.loginEnabled !== false,
+    });
+    if (authSession?.authenticated) {
+      await pushSyncedStateToServer(importedState);
+      setDataTransferNote("Import complete. Data synced to your DB profile.");
+    } else {
+      setDataTransferNote("Import complete. Data applied to guest browser storage.");
+    }
+    if (
+      activePanel !== "private" &&
+      activePanel !== "scenarios" &&
+      activePanel !== "saved" &&
+      activePanel !== "billing" &&
+      activePanel !== "data-transfer" &&
+      activePanel !== "admin"
+    ) {
+      await handleCompare();
+    }
+  } catch (error) {
+    setDataTransferNote(error?.message || "Could not import user data.", true);
+  } finally {
+    if (input) {
+      input.value = "";
+    }
+  }
+}
+
+function applySyncedStatePayload(state) {
+  const normalized = normalizeSyncedStatePayload(state);
+  if (!normalized) {
+    return false;
+  }
+  const localState = normalized.localStorage;
+  const managedKeys = new Set([
+    ...AUTH_SYNC_STORAGE_KEYS,
+    ...Object.keys(localState),
+  ]);
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key && key.startsWith(AUTH_SYNC_STORAGE_PREFIX)) {
+      managedKeys.add(key);
+    }
+  }
+  managedKeys.forEach((key) => {
+    const nextValue = localState[key];
+    if (typeof nextValue === "string") {
+      localStorage.setItem(key, nextValue);
+      return;
+    }
+    localStorage.removeItem(key);
+  });
+  return true;
+}
+
+async function fetchSyncedStateFromServer() {
+  if (!authSession?.authenticated) {
+    return null;
+  }
+  const payload = await requestJson("/api/user/state");
+  return normalizeSyncedStatePayload(payload?.state);
+}
+
+async function loadSyncedStateFromServer() {
+  const state = await fetchSyncedStateFromServer();
+  if (!state) {
+    return { state: null, applied: false };
+  }
+  return {
+    state,
+    applied: applySyncedStatePayload(state),
+  };
+}
+
+async function pushSyncedStateToServer(stateOverride = null) {
+  if (!authSession?.authenticated || authSyncInFlight) {
+    return;
+  }
+  const statePayload =
+    cloneSyncedStatePayload(stateOverride) || buildSyncedStatePayload();
+  authSyncInFlight = true;
+  try {
+    await requestJson("/api/user/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        version: AUTH_STATE_VERSION,
+        state: statePayload,
+      }),
+    });
+  } catch (error) {
+    setAuthNote(error?.message || "Could not sync profile data.", true);
+  } finally {
+    authSyncInFlight = false;
+  }
+}
+
+function scheduleSyncedStatePush() {
+  if (!authSession?.authenticated) {
+    return;
+  }
+  if (authSyncTimer) {
+    clearTimeout(authSyncTimer);
+  }
+  authSyncTimer = setTimeout(() => {
+    authSyncTimer = null;
+    pushSyncedStateToServer();
+  }, AUTH_SYNC_DEBOUNCE_MS);
+}
+
+function reloadPersistentStateFromLocalStorage() {
+  scenarioStore = loadScenarioStore();
+  billingImportStore = loadBillingImportStore();
+  billingTagStore = loadBillingTagsStore();
+  billingDetailTagStore = loadBillingDetailTagsStore();
+  savedCompareScenarioSelections = loadSavedCompareSelections(
+    SAVED_COMPARE_SCENARIOS_KEY
+  );
+  savedComparePrivateSelections = loadSavedCompareSelections(
+    SAVED_COMPARE_PRIVATE_KEY
+  );
+  renderScenarioList();
+  privateProviderStore = loadPrivateProviders();
+  privateCompareSelections = loadPrivateCompareSelections();
+  renderPrivateProviderCards();
+  renderSavedCompareSelectors();
+  setBillingProvider(currentBillingProvider || "aws");
+}
+
+async function initializeAuthSession() {
+  setPendingGuestImportState(null);
+  isAdminUser = false;
+  setAuthUi(null);
+  try {
+    const me = await requestJson("/api/auth/me");
+    authSession = me;
+    if (me?.authenticated && me.user?.username) {
+      isAdminUser = Boolean(me.user?.isAdmin);
+      setAuthUi(me.user, { loginEnabled: true });
+      const { applied } = await loadSyncedStateFromServer();
+      if (!applied) {
+        scheduleSyncedStatePush();
+      } else {
+        reloadPersistentStateFromLocalStorage();
+      }
+      if (activePanel === "admin") {
+        loadAdminUsers({ silent: true });
+      }
+      return;
+    }
+    isAdminUser = false;
+    setAuthUi(null, { loginEnabled: me?.loginEnabled !== false });
+  } catch (error) {
+    authSession = null;
+    isAdminUser = false;
+    setAuthUi(null, { loginEnabled: false });
+    setAuthNote(
+      error?.message || "Auth service unavailable. Continuing in guest mode.",
+      true
+    );
+  }
+}
+
+async function handleAuthLoginSubmit(event) {
+  event.preventDefault();
+  const username = String(authUsernameInput?.value || "").trim();
+  const password = String(authPasswordInput?.value || "");
+  const guestSnapshot = buildSyncedStatePayload();
+  const guestHadData = hasSyncedStateData(guestSnapshot);
+  if (!username || !password) {
+    setAuthNote("Enter username and password.", true);
+    return;
+  }
+  setAuthNote("Signing in...");
+  try {
+    const loginResult = await requestJson("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    authSession = {
+      authenticated: true,
+      user: loginResult?.user || { username },
+      loginEnabled: true,
+    };
+    isAdminUser = Boolean(authSession.user?.isAdmin);
+    setPendingGuestImportState(null);
+    setAuthUi(authSession.user, { loginEnabled: true });
+    const { state: serverState, applied } = await loadSyncedStateFromServer();
+    const serverHadData = hasSyncedStateData(serverState);
+    if (applied) {
+      reloadPersistentStateFromLocalStorage();
+    } else if (!serverHadData && !guestHadData) {
+      scheduleSyncedStatePush();
+    }
+    if (guestHadData && !serverHadData) {
+      applySyncedStatePayload(guestSnapshot);
+      reloadPersistentStateFromLocalStorage();
+      await pushSyncedStateToServer(guestSnapshot);
+      setAuthNote(
+        `Signed in as ${authSession.user.username}. Guest data saved to your DB profile.`
+      );
+    } else if (
+      guestHadData &&
+      serverHadData &&
+      !areSyncedStatePayloadsEqual(guestSnapshot, serverState)
+    ) {
+      setPendingGuestImportState(guestSnapshot);
+      setAuthUi(authSession.user, { loginEnabled: true });
+      setAuthNote(
+        `Signed in as ${authSession.user.username}. Server profile loaded. Click "Import Guest Data" to save your guest work to DB.`
+      );
+    } else {
+      setAuthNote(`Signed in as ${authSession.user.username}.`);
+    }
+    if (authPasswordInput) {
+      authPasswordInput.value = "";
+    }
+    await handleCompare();
+  } catch (error) {
+    setAuthNote(error?.message || "Login failed.", true);
+  }
+}
+
+async function handleImportGuestState() {
+  if (!authSession?.authenticated || !pendingGuestImportState) {
+    return;
+  }
+  setAuthNote("Importing guest data...");
+  try {
+    const nextState = cloneSyncedStatePayload(pendingGuestImportState);
+    if (!nextState) {
+      setPendingGuestImportState(null);
+      setAuthUi(authSession.user, { loginEnabled: true });
+      setAuthNote("No guest data found to import.");
+      return;
+    }
+    applySyncedStatePayload(nextState);
+    reloadPersistentStateFromLocalStorage();
+    await pushSyncedStateToServer(nextState);
+    setPendingGuestImportState(null);
+    setAuthUi(authSession.user, { loginEnabled: true });
+    setAuthNote("Guest data imported and saved to your DB profile.");
+    await handleCompare();
+  } catch (error) {
+    setAuthNote(error?.message || "Guest import failed.", true);
+  }
+}
+
+async function handleAuthLogout() {
+  setAuthNote("Signing out...");
+  try {
+    await requestJson("/api/auth/logout", { method: "POST" });
+    setPendingGuestImportState(null);
+    isAdminUser = false;
+    authSession = { authenticated: false, user: null, loginEnabled: true };
+    setAuthUi(null, { loginEnabled: true });
+    if (authForm) {
+      authForm.classList.add("is-hidden");
+    }
+    setAuthNote("Signed out. Guest mode remains browser-local only.");
+  } catch (error) {
+    setAuthNote(error?.message || "Logout failed.", true);
+  }
+}
+
 function loadScenarioStore() {
   if (!scenarioList) {
     return [];
@@ -4840,6 +5731,7 @@ function persistScenarioStore(list) {
   }
   try {
     localStorage.setItem(SCENARIO_STORAGE_KEY, JSON.stringify(list));
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors (private browsing, quota, etc.).
   }
@@ -4857,6 +5749,7 @@ function loadPrivateConfig() {
 function persistPrivateConfig(config) {
   try {
     localStorage.setItem(PRIVATE_STORAGE_KEY, JSON.stringify(config));
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors (private browsing, quota, etc.).
   }
@@ -4914,6 +5807,7 @@ function loadPrivateProviders() {
 function persistPrivateProviders(store) {
   try {
     localStorage.setItem(PRIVATE_PROVIDERS_KEY, JSON.stringify(store));
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
   }
@@ -4935,6 +5829,7 @@ function persistPrivateCompareSelections(selections) {
       PRIVATE_COMPARE_KEY,
       JSON.stringify(Array.isArray(selections) ? selections : [])
     );
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
   }
@@ -4959,6 +5854,7 @@ function persistSavedCompareSelections(key, selections) {
       key,
       JSON.stringify(Array.isArray(selections) ? selections : [])
     );
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
   }
@@ -7182,6 +8078,7 @@ function loadBillingImportStore() {
 function persistBillingImportStore(store) {
   try {
     localStorage.setItem(BILLING_IMPORT_KEY, JSON.stringify(store));
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
   }
@@ -7201,6 +8098,7 @@ function persistBillingTagsStore(store) {
   try {
     const normalized = normalizeBillingTagStore(store);
     localStorage.setItem(BILLING_TAGS_KEY, JSON.stringify(normalized));
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
   }
@@ -7220,6 +8118,7 @@ function persistBillingDetailTagsStore(store) {
   try {
     const normalized = normalizeBillingDetailTagStore(store);
     localStorage.setItem(BILLING_DETAIL_TAGS_KEY, JSON.stringify(normalized));
+    scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
   }
@@ -10088,6 +10987,69 @@ async function handleCompareScenario() {
 
 form.addEventListener("submit", handleCompare);
 exportButton.addEventListener("click", handleExportCsv);
+if (authOpenLoginButton && authForm) {
+  authOpenLoginButton.addEventListener("click", () => {
+    authForm.classList.toggle("is-hidden");
+    if (!authForm.classList.contains("is-hidden")) {
+      authUsernameInput?.focus();
+    }
+  });
+}
+if (authForm) {
+  authForm.addEventListener("submit", handleAuthLoginSubmit);
+}
+if (authLogoutButton) {
+  authLogoutButton.addEventListener("click", handleAuthLogout);
+}
+if (adminRefreshUsersButton) {
+  adminRefreshUsersButton.addEventListener("click", () => {
+    loadAdminUsers();
+  });
+}
+if (dataTransferExportButton) {
+  dataTransferExportButton.addEventListener("click", handleExportUserData);
+}
+if (dataTransferImportButton && dataTransferImportInput) {
+  dataTransferImportButton.addEventListener("click", () => {
+    dataTransferImportInput.click();
+  });
+  dataTransferImportInput.addEventListener("change", handleImportUserDataFile);
+}
+if (adminAddUserForm) {
+  adminAddUserForm.addEventListener("submit", handleAdminAddUserSubmit);
+}
+if (adminUpdatePasswordForm) {
+  adminUpdatePasswordForm.addEventListener(
+    "submit",
+    handleAdminUpdatePasswordSubmit
+  );
+}
+if (adminUsersTable) {
+  adminUsersTable.addEventListener("click", (event) => {
+    const roleButton = event.target.closest("[data-admin-role]");
+    if (roleButton) {
+      const encodedUsername = String(roleButton.dataset.adminRole || "");
+      const role = String(roleButton.dataset.adminRoleValue || "");
+      if (!encodedUsername || !role) {
+        return;
+      }
+      handleAdminUpdateRole(decodeURIComponent(encodedUsername), role);
+      return;
+    }
+    const removeButton = event.target.closest("[data-admin-delete]");
+    if (!removeButton) {
+      return;
+    }
+    const encoded = String(removeButton.dataset.adminDelete || "");
+    if (!encoded) {
+      return;
+    }
+    handleAdminDeleteUser(decodeURIComponent(encoded));
+  });
+}
+if (authImportGuestButton) {
+  authImportGuestButton.addEventListener("click", handleImportGuestState);
+}
 resultsTabButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const nextTab = button.dataset.results;
@@ -10250,7 +11212,8 @@ modeTabs.forEach((tab) => {
       nextPanel !== "private" &&
       nextPanel !== "scenarios" &&
       nextPanel !== "saved" &&
-      nextPanel !== "billing"
+      nextPanel !== "billing" &&
+      nextPanel !== "admin"
     ) {
       handleCompare();
     }
@@ -10458,21 +11421,8 @@ sqlEditionSelect.addEventListener("change", () => {
   sqlRateTouched = !isDefaultSqlRate(nextValue, sqlEditionSelect.value);
 });
 window.addEventListener("load", async () => {
-  scenarioStore = loadScenarioStore();
-  billingImportStore = loadBillingImportStore();
-  billingTagStore = loadBillingTagsStore();
-  billingDetailTagStore = loadBillingDetailTagsStore();
-  savedCompareScenarioSelections = loadSavedCompareSelections(
-    SAVED_COMPARE_SCENARIOS_KEY
-  );
-  savedComparePrivateSelections = loadSavedCompareSelections(
-    SAVED_COMPARE_PRIVATE_KEY
-  );
-  renderScenarioList();
-  privateProviderStore = loadPrivateProviders();
-  privateCompareSelections = loadPrivateCompareSelections();
-  renderPrivateProviderCards();
-  setBillingProvider("aws");
+  await initializeAuthSession();
+  reloadPersistentStateFromLocalStorage();
   setPanel(modeInput.value);
   buildRegionChecklist();
   try {

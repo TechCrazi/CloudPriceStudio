@@ -20,16 +20,58 @@
       <div class="grain"></div>
     </div>
     <main class="app">
-      <header class="hero">
-        <span class="badge">Cloud Price Studio</span>
-        <h1>Compare VM and Kubernetes pricing across AWS, Azure, and GCP.</h1>
-        <p>
-          Windows-only pricing with a selectable disk tier and a 10+ Gbps
-          network floor. Use the tabs to switch between VM sizing and managed
-          Kubernetes estimates, then compare monthly totals across AWS, Azure,
-          and GCP.
-        </p>
-      </header>
+      <section class="top-shell">
+        <header class="hero">
+          <span class="badge">Cloud Price Studio</span>
+          <h1>Compare VM and Kubernetes pricing across AWS, Azure, and GCP.</h1>
+          <p>
+            Windows-only pricing with a selectable disk tier and a 10+ Gbps
+            network floor. Use the tabs to switch between VM sizing and managed
+            Kubernetes estimates, then compare monthly totals across AWS, Azure,
+            and GCP.
+          </p>
+        </header>
+        <section class="auth-shell">
+          <div class="auth-row">
+            <span class="auth-status" id="auth-status">
+              Guest mode: using browser-only temporary storage.
+            </span>
+            <div class="auth-actions">
+              <button type="button" class="secondary-btn" id="auth-open-login">
+                Log In
+              </button>
+              <button
+                type="button"
+                class="secondary-btn is-hidden"
+                id="auth-import-guest"
+              >
+                Import Guest Data
+              </button>
+              <button
+                type="button"
+                class="secondary-btn is-hidden"
+                id="auth-logout"
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+          <form class="auth-form is-hidden" id="auth-form" autocomplete="off">
+            <label>
+              Username
+              <input type="text" id="auth-username" name="username" />
+            </label>
+            <label>
+              Password
+              <input type="password" id="auth-password" name="password" />
+            </label>
+            <button type="submit" class="secondary-btn" id="auth-login">
+              Sign In
+            </button>
+          </form>
+          <p class="form-note auth-note" id="auth-note"></p>
+        </section>
+      </section>
       <div class="mode-tabs">
         <button type="button" class="mode-tab active" data-mode="vm">
           VM
@@ -54,6 +96,17 @@
         </button>
         <button type="button" class="mode-tab" data-mode="scenarios">
           Private/Public Cloud
+        </button>
+        <button type="button" class="mode-tab" data-mode="data-transfer">
+          User Data
+        </button>
+        <button
+          type="button"
+          class="mode-tab mode-tab--end is-hidden"
+          data-mode="admin"
+          id="admin-mode-tab"
+        >
+          Admin
         </button>
       </div>
       <section class="layout">
@@ -1618,6 +1671,112 @@
             <div class="billing-summary" id="billing-summary"></div>
             <div class="billing-chart" id="billing-chart"></div>
             <div class="saved-compare-table" id="billing-table"></div>
+          </div>
+          <div class="results-panel is-hidden" id="data-transfer-panel">
+            <div class="panel-actions">
+              <button
+                type="button"
+                class="secondary-btn"
+                id="data-transfer-export"
+              >
+                Export all user data
+              </button>
+              <button
+                type="button"
+                class="secondary-btn"
+                id="data-transfer-import"
+              >
+                Import user data
+              </button>
+              <input
+                type="file"
+                id="data-transfer-import-file"
+                accept=".json,application/json"
+                class="is-hidden"
+              />
+            </div>
+            <section class="admin-card data-transfer-card">
+              <div class="form-section">Full profile transfer</div>
+              <p class="data-transfer-text">
+                Export or import scenarios, private cloud profiles, saved compare
+                selections, billing imports, and tags.
+              </p>
+              <p class="data-transfer-text" id="data-transfer-scope"></p>
+              <p class="form-note" id="data-transfer-note"></p>
+            </section>
+          </div>
+          <div class="results-panel is-hidden" id="admin-panel">
+            <div class="panel-actions">
+              <button
+                type="button"
+                class="secondary-btn"
+                id="admin-refresh-users"
+              >
+                Refresh users
+              </button>
+            </div>
+            <div class="admin-grid">
+              <section class="admin-card">
+                <div class="form-section">Add user</div>
+                <form id="admin-add-user-form" class="admin-form" autocomplete="off">
+                  <label>
+                    Username
+                    <input
+                      type="text"
+                      id="admin-add-username"
+                      placeholder="new-user"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Password
+                    <input
+                      type="password"
+                      id="admin-add-password"
+                      placeholder="Set temporary password"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Role
+                    <select id="admin-add-role">
+                      <option value="user" selected>Regular user</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </label>
+                  <button type="submit" class="secondary-btn">Add user</button>
+                </form>
+              </section>
+              <section class="admin-card">
+                <div class="form-section">Update password</div>
+                <form
+                  id="admin-update-password-form"
+                  class="admin-form"
+                  autocomplete="off"
+                >
+                  <label>
+                    Username
+                    <select id="admin-update-username" required>
+                      <option value="">Select user</option>
+                    </select>
+                  </label>
+                  <label>
+                    New password
+                    <input
+                      type="password"
+                      id="admin-update-password"
+                      placeholder="Enter new password"
+                      required
+                    />
+                  </label>
+                  <button type="submit" class="secondary-btn">
+                    Update password
+                  </button>
+                </form>
+              </section>
+            </div>
+            <p class="form-note" id="admin-note"></p>
+            <div class="saved-compare-table" id="admin-users-table"></div>
           </div>
           <div class="results-panel is-hidden" id="scenarios-panel">
             <div class="panel-actions">

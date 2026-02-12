@@ -1,5 +1,9 @@
 const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const os = require("os");
 const express = require("express");
+const initSqlJs = require("sql.js");
 const { PricingClient, GetProductsCommand } = require("@aws-sdk/client-pricing");
 
 const fetcher =
@@ -35,6 +39,35 @@ const K8S_CONTROL_PLANE_HOURLY = {
   azure: 0.6,
   gcp: 0.5,
 };
+const AUTH_COOKIE_NAME = "cloud_price_session";
+const AUTH_DB_CONFIG_PROVIDED = Boolean(
+  String(process.env.AUTH_DATA_DIR || "").trim() ||
+    String(process.env.AUTH_DB_FILE || "").trim()
+);
+const AUTH_DATA_DIR = path.resolve(
+  process.env.AUTH_DATA_DIR || path.join(os.tmpdir(), "cloud-price-data")
+);
+const AUTH_DB_FILE = path.resolve(
+  process.env.AUTH_DB_FILE || path.join(AUTH_DATA_DIR, "cloudprice.db")
+);
+const AUTH_USERS_FILE = path.resolve(
+  process.env.AUTH_USERS_FILE || path.join(AUTH_DATA_DIR, "users.json")
+);
+const AUTH_STATE_DIR = path.resolve(
+  process.env.AUTH_STATE_DIR || path.join(AUTH_DATA_DIR, "user-state")
+);
+const AUTH_SESSION_TTL_MS = Math.max(
+  5 * 60 * 1000,
+  Number.parseInt(
+    process.env.AUTH_SESSION_TTL_MS || `${7 * 24 * 60 * 60 * 1000}`,
+    10
+  ) || 7 * 24 * 60 * 60 * 1000
+);
+const AUTH_STATE_MAX_BYTES = Math.max(
+  32 * 1024,
+  Number.parseInt(process.env.AUTH_STATE_MAX_BYTES || `${2 * 1024 * 1024}`, 10) ||
+    2 * 1024 * 1024
+);
 
 const REGION_MAP = {
   "us-east": {
@@ -884,6 +917,10 @@ const gcpServiceCache = { loadedAt: 0, data: null };
 const gcpServiceSkuCache = new Map();
 const awsEfsRegionIndexCache = { loadedAt: 0, data: null };
 const k8sSharedStorageCache = new Map();
+const authSessions = new Map();
+let authDb = null;
+let authStatements = null;
+let authInitPromise = null;
 let cacheRefreshTimer = null;
 let cacheRefreshRunning = false;
 let lastCacheRefreshAt = 0;
@@ -891,8 +928,1035 @@ let lastCacheRefreshStatus = "never";
 let lastCacheRefreshSummary = null;
 let lastCacheRefreshError = null;
 
-app.use(express.json({ limit: "200kb" }));
+function normalizeAuthUsername(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+const AUTH_DEFAULT_ADMIN_USERS = new Set(
+  String(process.env.APP_ADMIN_USERS || "smit")
+    .split(",")
+    .map((value) => normalizeAuthUsername(value))
+    .filter(Boolean)
+);
+
+function normalizeAuthAdminFlag(value) {
+  return Number(value) === 1 || value === true;
+}
+
+function parseAuthAdminInput(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+    return null;
+  }
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!text) {
+    return null;
+  }
+  if (["1", "true", "admin"].includes(text)) {
+    return true;
+  }
+  if (["0", "false", "user", "regular"].includes(text)) {
+    return false;
+  }
+  return null;
+}
+
+function normalizeAuthUserRecord(record) {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+  return {
+    ...record,
+    isAdmin: normalizeAuthAdminFlag(record.isAdmin),
+  };
+}
+
+function isAuthAdmin(usernameRaw) {
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username) {
+    return false;
+  }
+  const user = getAuthUser(username);
+  if (user) {
+    return normalizeAuthAdminFlag(user.isAdmin);
+  }
+  return AUTH_DEFAULT_ADMIN_USERS.has(username);
+}
+
+function hashAuthPassword(password, saltHex) {
+  const salt = saltHex || crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return { salt, hash };
+}
+
+function verifyAuthPassword(password, userRecord) {
+  if (!userRecord || !userRecord.passwordSalt || !userRecord.passwordHash) {
+    return false;
+  }
+  const { hash } = hashAuthPassword(password, userRecord.passwordSalt);
+  const expected = Buffer.from(userRecord.passwordHash, "hex");
+  const actual = Buffer.from(hash, "hex");
+  if (expected.length !== actual.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(expected, actual);
+}
+
+function ensureAuthStorage() {
+  fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
+  fs.mkdirSync(AUTH_STATE_DIR, { recursive: true });
+}
+
+function readJsonFile(filePath, fallback) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function buildLegacyStatePath(usernameRaw) {
+  const username = normalizeAuthUsername(usernameRaw);
+  const hash = crypto.createHash("sha256").update(username).digest("hex");
+  return path.join(AUTH_STATE_DIR, `${hash}.json`);
+}
+
+function persistAuthDatabase() {
+  if (!authDb) {
+    return;
+  }
+  const exported = authDb.export();
+  fs.writeFileSync(AUTH_DB_FILE, Buffer.from(exported));
+}
+
+function sqliteGetRow(sql, params = []) {
+  if (!authDb) {
+    return null;
+  }
+  const result = authDb.exec(sql, params);
+  if (!Array.isArray(result) || !result.length) {
+    return null;
+  }
+  const table = result[0];
+  if (!Array.isArray(table.values) || !table.values.length) {
+    return null;
+  }
+  const rowValues = table.values[0];
+  const row = {};
+  table.columns.forEach((columnName, index) => {
+    row[columnName] = rowValues[index];
+  });
+  return row;
+}
+
+function sqliteGetRows(sql, params = []) {
+  if (!authDb) {
+    return [];
+  }
+  const result = authDb.exec(sql, params);
+  if (!Array.isArray(result) || !result.length) {
+    return [];
+  }
+  const table = result[0];
+  if (!Array.isArray(table.values) || !table.values.length) {
+    return [];
+  }
+  return table.values.map((rowValues) => {
+    const row = {};
+    table.columns.forEach((columnName, index) => {
+      row[columnName] = rowValues[index];
+    });
+    return row;
+  });
+}
+
+function sqliteRun(sql, params = []) {
+  if (!authDb) {
+    throw new Error("Auth database is not initialized.");
+  }
+  authDb.run(sql, params);
+}
+
+async function initializeAuthDatabase() {
+  ensureAuthStorage();
+  const SQL = await initSqlJs({
+    locateFile: (file) => require.resolve(`sql.js/dist/${file}`),
+  });
+  const dbBuffer = fs.existsSync(AUTH_DB_FILE)
+    ? fs.readFileSync(AUTH_DB_FILE)
+    : null;
+  authDb = dbBuffer && dbBuffer.length
+    ? new SQL.Database(dbBuffer)
+    : new SQL.Database();
+  authDb.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      username TEXT PRIMARY KEY,
+      password_salt TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS user_state (
+      username TEXT PRIMARY KEY,
+      state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+    );
+  `);
+  const userColumns = sqliteGetRows("PRAGMA table_info(users)");
+  const hasIsAdminColumn = userColumns.some(
+    (column) => String(column?.name || "").toLowerCase() === "is_admin"
+  );
+  if (!hasIsAdminColumn) {
+    sqliteRun("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
+    const now = new Date().toISOString();
+    AUTH_DEFAULT_ADMIN_USERS.forEach((username) => {
+      sqliteRun(
+        "UPDATE users SET is_admin = 1, updated_at = ? WHERE username = ?",
+        [now, username]
+      );
+    });
+  }
+  authStatements = {
+    countUsers: {
+      get: () => sqliteGetRow("SELECT COUNT(*) AS count FROM users"),
+    },
+    countAdminUsers: {
+      get: () => sqliteGetRow("SELECT COUNT(*) AS count FROM users WHERE is_admin = 1"),
+    },
+    getUserByUsername: {
+      get: (username) =>
+        sqliteGetRow(
+          `SELECT
+             username,
+             password_salt AS passwordSalt,
+             password_hash AS passwordHash,
+             is_admin AS isAdmin,
+             created_at AS createdAt,
+             updated_at AS updatedAt
+           FROM users
+           WHERE username = ?`,
+          [username]
+        ),
+    },
+    upsertUser: {
+      run: ({
+        username,
+        passwordSalt,
+        passwordHash,
+        isAdmin,
+        createdAt,
+        updatedAt,
+      }) =>
+        sqliteRun(
+          `INSERT INTO users (
+             username,
+             password_salt,
+             password_hash,
+             is_admin,
+             created_at,
+             updated_at
+           )
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(username) DO UPDATE SET
+             password_salt = excluded.password_salt,
+             password_hash = excluded.password_hash,
+             is_admin = excluded.is_admin,
+             updated_at = excluded.updated_at`,
+          [username, passwordSalt, passwordHash, isAdmin, createdAt, updatedAt]
+        ),
+    },
+    listUsers: {
+      all: () =>
+        sqliteGetRows(
+          `SELECT
+             username,
+             is_admin AS isAdmin,
+             created_at AS createdAt,
+             updated_at AS updatedAt
+           FROM users
+           ORDER BY username COLLATE NOCASE`
+        ),
+    },
+    setUserAdminByUsername: {
+      run: ({ username, isAdmin, updatedAt }) =>
+        sqliteRun(
+          `UPDATE users
+           SET is_admin = ?, updated_at = ?
+           WHERE username = ?`,
+          [isAdmin, updatedAt, username]
+        ),
+    },
+    deleteUserByUsername: {
+      run: (username) => {
+        sqliteRun("DELETE FROM user_state WHERE username = ?", [username]);
+        sqliteRun("DELETE FROM users WHERE username = ?", [username]);
+      },
+    },
+    getStateByUsername: {
+      get: (username) =>
+        sqliteGetRow(
+          `SELECT
+             state_json AS stateJson,
+             updated_at AS updatedAt
+           FROM user_state
+           WHERE username = ?`,
+          [username]
+        ),
+    },
+    upsertState: {
+      run: ({ username, stateJson, updatedAt }) =>
+        sqliteRun(
+          `INSERT INTO user_state (username, state_json, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(username) DO UPDATE SET
+             state_json = excluded.state_json,
+             updated_at = excluded.updated_at`,
+          [username, stateJson, updatedAt]
+        ),
+    },
+  };
+  persistAuthDatabase();
+}
+
+function getAuthUserCount() {
+  if (!authStatements) {
+    return 0;
+  }
+  const row = authStatements.countUsers.get();
+  const count = Number(row?.count);
+  return Number.isFinite(count) ? count : 0;
+}
+
+function getAuthAdminCount() {
+  if (!authStatements) {
+    return 0;
+  }
+  const row = authStatements.countAdminUsers.get();
+  const count = Number(row?.count);
+  return Number.isFinite(count) ? count : 0;
+}
+
+function getAuthUser(usernameRaw) {
+  if (!authStatements) {
+    return null;
+  }
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username) {
+    return null;
+  }
+  return normalizeAuthUserRecord(authStatements.getUserByUsername.get(username));
+}
+
+function listAuthUsers() {
+  if (!authStatements) {
+    return [];
+  }
+  return authStatements.listUsers
+    .all()
+    .map((record) => normalizeAuthUserRecord(record))
+    .filter(Boolean);
+}
+
+function upsertAuthUser(usernameRaw, password, options = {}) {
+  const username = normalizeAuthUsername(usernameRaw);
+  const passwordText = String(password || "");
+  if (!username || !passwordText) {
+    return false;
+  }
+  const now = new Date().toISOString();
+  const existing = getAuthUser(username);
+  const hasExplicitRole = Object.prototype.hasOwnProperty.call(options, "isAdmin");
+  const nextIsAdmin = hasExplicitRole
+    ? normalizeAuthAdminFlag(options.isAdmin)
+    : existing
+      ? normalizeAuthAdminFlag(existing.isAdmin)
+      : AUTH_DEFAULT_ADMIN_USERS.has(username);
+  const { salt, hash } = hashAuthPassword(passwordText);
+  authStatements.upsertUser.run({
+    username,
+    passwordSalt: salt,
+    passwordHash: hash,
+    isAdmin: nextIsAdmin ? 1 : 0,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  });
+  persistAuthDatabase();
+  return true;
+}
+
+function setAuthUserRole(usernameRaw, isAdmin) {
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username || !authStatements) {
+    return false;
+  }
+  const existing = getAuthUser(username);
+  if (!existing) {
+    return false;
+  }
+  authStatements.setUserAdminByUsername.run({
+    username,
+    isAdmin: normalizeAuthAdminFlag(isAdmin) ? 1 : 0,
+    updatedAt: new Date().toISOString(),
+  });
+  persistAuthDatabase();
+  return true;
+}
+
+function deleteAuthUser(usernameRaw) {
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username || !authStatements) {
+    return false;
+  }
+  const existing = getAuthUser(username);
+  if (!existing) {
+    return false;
+  }
+  authStatements.deleteUserByUsername.run(username);
+  persistAuthDatabase();
+  return true;
+}
+
+function parseAuthSeedUsers(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return [];
+  }
+  return text
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const separator = item.indexOf(":");
+      if (separator <= 0) {
+        return null;
+      }
+      return {
+        username: item.slice(0, separator).trim(),
+        password: item.slice(separator + 1).trim(),
+      };
+    })
+    .filter((entry) => entry && entry.username && entry.password);
+}
+
+function seedAuthUsersFromEnv() {
+  const seedUsers = [...parseAuthSeedUsers(process.env.APP_AUTH_USERS)];
+  if (process.env.APP_LOGIN_USER && process.env.APP_LOGIN_PASSWORD) {
+    seedUsers.push({
+      username: process.env.APP_LOGIN_USER,
+      password: process.env.APP_LOGIN_PASSWORD,
+    });
+  }
+  if (!seedUsers.length) {
+    return;
+  }
+  let changed = false;
+  seedUsers.forEach((entry) => {
+    if (upsertAuthUser(entry.username, entry.password)) {
+      changed = true;
+    }
+  });
+  if (changed) {
+    console.log(
+      `[auth] Seeded ${seedUsers.length} login credential${
+        seedUsers.length === 1 ? "" : "s"
+      } into SQLite.`
+    );
+  }
+}
+
+function migrateLegacyUsersJsonToSqlite() {
+  if (getAuthUserCount() > 0) {
+    return;
+  }
+  if (!fs.existsSync(AUTH_USERS_FILE)) {
+    return;
+  }
+  const parsed = readJsonFile(AUTH_USERS_FILE, { users: [] });
+  const users = Array.isArray(parsed?.users) ? parsed.users : [];
+  if (!users.length) {
+    return;
+  }
+  let migrated = 0;
+  users.forEach((entry) => {
+    const username = normalizeAuthUsername(entry?.username);
+    if (!username || !entry?.passwordSalt || !entry?.passwordHash) {
+      return;
+    }
+    const createdAt = entry?.createdAt || new Date().toISOString();
+    const updatedAt = entry?.updatedAt || createdAt;
+    authStatements.upsertUser.run({
+      username,
+      passwordSalt: entry.passwordSalt,
+      passwordHash: entry.passwordHash,
+      isAdmin: AUTH_DEFAULT_ADMIN_USERS.has(username) ? 1 : 0,
+      createdAt,
+      updatedAt,
+    });
+    migrated += 1;
+  });
+  if (migrated > 0) {
+    persistAuthDatabase();
+  }
+  if (migrated > 0) {
+    console.log(
+      `[auth] Migrated ${migrated} user credential${
+        migrated === 1 ? "" : "s"
+      } from legacy users.json to SQLite.`
+    );
+  }
+}
+
+function upsertAuthUserState(usernameRaw, state, updatedAtRaw) {
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username || !state || typeof state !== "object" || Array.isArray(state)) {
+    return false;
+  }
+  const stateJson = JSON.stringify(state);
+  const payloadBytes = Buffer.byteLength(stateJson);
+  if (payloadBytes > AUTH_STATE_MAX_BYTES) {
+    throw new Error(`State payload too large (${payloadBytes} bytes).`);
+  }
+  const updatedAt = updatedAtRaw || new Date().toISOString();
+  authStatements.upsertState.run({
+    username,
+    stateJson,
+    updatedAt,
+  });
+  persistAuthDatabase();
+  return true;
+}
+
+function readAuthUserState(usernameRaw) {
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username) {
+    return { state: null, updatedAt: null };
+  }
+  const row = authStatements.getStateByUsername.get(username);
+  if (row?.stateJson) {
+    try {
+      const parsed = JSON.parse(row.stateJson);
+      return {
+        state:
+          parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed
+            : null,
+        updatedAt: row.updatedAt || null,
+      };
+    } catch (error) {
+      return { state: null, updatedAt: row.updatedAt || null };
+    }
+  }
+  const legacyPath = buildLegacyStatePath(username);
+  if (!fs.existsSync(legacyPath)) {
+    return { state: null, updatedAt: null };
+  }
+  const legacyPayload = readJsonFile(legacyPath, null);
+  const legacyState =
+    legacyPayload && typeof legacyPayload.state === "object"
+      ? legacyPayload.state
+      : null;
+  if (!legacyState) {
+    return { state: null, updatedAt: null };
+  }
+  const updatedAt = legacyPayload?.updatedAt || new Date().toISOString();
+  try {
+    upsertAuthUserState(username, legacyState, updatedAt);
+    console.log(`[auth] Migrated legacy user-state JSON for ${username}.`);
+  } catch (error) {
+    // Keep serving the legacy value even if write-back fails.
+  }
+  return { state: legacyState, updatedAt };
+}
+
+function parseCookieHeader(cookieHeader) {
+  const output = {};
+  if (!cookieHeader) {
+    return output;
+  }
+  String(cookieHeader)
+    .split(";")
+    .forEach((segment) => {
+      const [rawKey, ...rest] = segment.trim().split("=");
+      if (!rawKey) {
+        return;
+      }
+      const value = rest.join("=") || "";
+      try {
+        output[rawKey] = decodeURIComponent(value);
+      } catch (error) {
+        output[rawKey] = value;
+      }
+    });
+  return output;
+}
+
+function cleanupExpiredAuthSessions() {
+  const now = Date.now();
+  for (const [sessionId, session] of authSessions.entries()) {
+    if (!session || !Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
+      authSessions.delete(sessionId);
+    }
+  }
+}
+
+function revokeAuthSessionsForUser(usernameRaw, options = {}) {
+  const username = normalizeAuthUsername(usernameRaw);
+  if (!username) {
+    return;
+  }
+  const excludeSessionId = String(options.excludeSessionId || "");
+  for (const [sessionId, session] of authSessions.entries()) {
+    if (session?.username !== username) {
+      continue;
+    }
+    if (excludeSessionId && sessionId === excludeSessionId) {
+      continue;
+    }
+    authSessions.delete(sessionId);
+  }
+}
+
+function getRequestSession(req) {
+  cleanupExpiredAuthSessions();
+  const cookies = parseCookieHeader(req.headers?.cookie || "");
+  const sessionId = cookies[AUTH_COOKIE_NAME];
+  if (!sessionId) {
+    return null;
+  }
+  const session = authSessions.get(sessionId);
+  if (!session) {
+    return null;
+  }
+  if (session.expiresAt <= Date.now()) {
+    authSessions.delete(sessionId);
+    return null;
+  }
+  return {
+    id: sessionId,
+    username: session.username,
+  };
+}
+
+function createAuthSession(username) {
+  const sessionId = crypto.randomBytes(32).toString("hex");
+  authSessions.set(sessionId, {
+    username,
+    expiresAt: Date.now() + AUTH_SESSION_TTL_MS,
+  });
+  return sessionId;
+}
+
+function authCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: AUTH_SESSION_TTL_MS,
+  };
+}
+
+function authCookieClearOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  };
+}
+
+function authSessionMiddleware(req, res, next) {
+  const session = getRequestSession(req);
+  req.authUser = session
+    ? {
+        username: session.username,
+        isAdmin: isAuthAdmin(session.username),
+      }
+    : null;
+  req.authSessionId = session ? session.id : null;
+  next();
+}
+
+function requireAuth(req, res, next) {
+  if (!req.authUser) {
+    res.status(401).json({ error: "Authentication required." });
+    return;
+  }
+  const user = getAuthUser(req.authUser.username);
+  if (!user) {
+    if (req.authSessionId) {
+      authSessions.delete(req.authSessionId);
+    }
+    res.status(401).json({ error: "Session is no longer valid." });
+    return;
+  }
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.authUser) {
+    res.status(401).json({ error: "Authentication required." });
+    return;
+  }
+  if (!isAuthAdmin(req.authUser.username)) {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+  next();
+}
+
+async function initializeAuth() {
+  if (!AUTH_DB_CONFIG_PROVIDED) {
+    console.log(
+      "[auth] DB config missing (set AUTH_DATA_DIR or AUTH_DB_FILE). Running guest-only mode."
+    );
+    return;
+  }
+  await initializeAuthDatabase();
+  migrateLegacyUsersJsonToSqlite();
+  seedAuthUsersFromEnv();
+}
+
+authInitPromise = initializeAuth();
+setInterval(cleanupExpiredAuthSessions, 5 * 60 * 1000).unref();
+
+function awaitAuthInitialization(req, res, next) {
+  authInitPromise
+    .then(() => {
+      next();
+    })
+    .catch((error) => {
+      res.status(500).json({
+        error: error?.message || "Auth initialization failed.",
+      });
+    });
+}
+
+app.use(express.json({ limit: "5mb" }));
+app.use(awaitAuthInitialization);
+app.use(authSessionMiddleware);
 app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/api/auth/me", (req, res) => {
+  if (!AUTH_DB_CONFIG_PROVIDED) {
+    res.json({
+      authenticated: false,
+      user: null,
+      loginEnabled: false,
+    });
+    return;
+  }
+  const sessionUser = req.authUser ? getAuthUser(req.authUser.username) : null;
+  if (!req.authUser) {
+    res.json({
+      authenticated: false,
+      user: null,
+      loginEnabled: getAuthUserCount() > 0,
+    });
+    return;
+  }
+  if (!sessionUser) {
+    if (req.authSessionId) {
+      authSessions.delete(req.authSessionId);
+    }
+    res.json({
+      authenticated: false,
+      user: null,
+      loginEnabled: getAuthUserCount() > 0,
+    });
+    return;
+  }
+  res.json({
+    authenticated: true,
+    user: {
+      username: sessionUser.username,
+      isAdmin: normalizeAuthAdminFlag(sessionUser.isAdmin),
+    },
+    loginEnabled: true,
+  });
+});
+
+app.post("/api/auth/login", (req, res) => {
+  if (!AUTH_DB_CONFIG_PROVIDED) {
+    res.status(503).json({
+      error: "DB config missing. Set AUTH_DATA_DIR or AUTH_DB_FILE.",
+    });
+    return;
+  }
+  if (getAuthUserCount() <= 0) {
+    res.status(503).json({
+      error:
+        "Login is not configured. Set APP_AUTH_USERS or APP_LOGIN_USER/APP_LOGIN_PASSWORD.",
+    });
+    return;
+  }
+  const username = normalizeAuthUsername(req.body?.username);
+  const password = String(req.body?.password || "");
+  if (!username || !password) {
+    res.status(400).json({ error: "Username and password are required." });
+    return;
+  }
+  const record = getAuthUser(username);
+  if (!record || !verifyAuthPassword(password, record)) {
+    res.status(401).json({ error: "Invalid username or password." });
+    return;
+  }
+  const sessionId = createAuthSession(username);
+  res.cookie(AUTH_COOKIE_NAME, sessionId, authCookieOptions());
+  res.json({
+    authenticated: true,
+    user: {
+      username: record.username,
+      isAdmin: normalizeAuthAdminFlag(record.isAdmin),
+    },
+  });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  if (req.authSessionId) {
+    authSessions.delete(req.authSessionId);
+  }
+  res.clearCookie(AUTH_COOKIE_NAME, authCookieClearOptions());
+  res.json({
+    authenticated: false,
+    user: null,
+  });
+});
+
+app.get("/api/user/state", requireAuth, (req, res) => {
+  const payload = readAuthUserState(req.authUser.username);
+  res.json({
+    state: payload.state,
+    updatedAt: payload.updatedAt || null,
+  });
+});
+
+app.put("/api/user/state", requireAuth, (req, res) => {
+  const nextState = req.body?.state;
+  if (
+    !nextState ||
+    typeof nextState !== "object" ||
+    Array.isArray(nextState)
+  ) {
+    res.status(400).json({ error: "State payload must be an object." });
+    return;
+  }
+  try {
+    const updatedAt = new Date().toISOString();
+    upsertAuthUserState(req.authUser.username, nextState, updatedAt);
+    const payloadBytes = Buffer.byteLength(JSON.stringify(nextState));
+    res.json({
+      ok: true,
+      updatedAt,
+      bytes: payloadBytes,
+    });
+  } catch (error) {
+    const message = error?.message || "Could not persist user state.";
+    if (message.includes("too large")) {
+      res.status(413).json({ error: message });
+      return;
+    }
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
+  const users = listAuthUsers().map((user) => ({
+    username: user.username,
+    isAdmin: normalizeAuthAdminFlag(user.isAdmin),
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null,
+  }));
+  res.json({
+    users,
+    requestedBy: req.authUser.username,
+  });
+});
+
+app.post("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
+  const username = normalizeAuthUsername(req.body?.username);
+  const password = String(req.body?.password || "");
+  const hasRoleField =
+    Object.prototype.hasOwnProperty.call(req.body || {}, "isAdmin") ||
+    Object.prototype.hasOwnProperty.call(req.body || {}, "role");
+  const parsedRole = hasRoleField
+    ? parseAuthAdminInput(
+        Object.prototype.hasOwnProperty.call(req.body || {}, "isAdmin")
+          ? req.body?.isAdmin
+          : req.body?.role
+      )
+    : false;
+  if (!username || !password) {
+    res.status(400).json({ error: "Username and password are required." });
+    return;
+  }
+  if (hasRoleField && parsedRole === null) {
+    res.status(400).json({ error: "Role must be admin or regular." });
+    return;
+  }
+  if (getAuthUser(username)) {
+    res.status(409).json({ error: "User already exists." });
+    return;
+  }
+  const created = upsertAuthUser(username, password, {
+    isAdmin: normalizeAuthAdminFlag(parsedRole),
+  });
+  if (!created) {
+    res.status(400).json({ error: "Could not create user." });
+    return;
+  }
+  const user = getAuthUser(username);
+  res.status(201).json({
+    ok: true,
+    user: {
+      username,
+      isAdmin: normalizeAuthAdminFlag(user?.isAdmin),
+      createdAt: user?.createdAt || null,
+      updatedAt: user?.updatedAt || null,
+    },
+  });
+});
+
+app.patch(
+  "/api/admin/users/:username/password",
+  requireAuth,
+  requireAdmin,
+  (req, res) => {
+    const username = normalizeAuthUsername(req.params?.username);
+    const password = String(req.body?.password || "");
+    if (!username || !password) {
+      res.status(400).json({ error: "Username and password are required." });
+      return;
+    }
+    if (!getAuthUser(username)) {
+      res.status(404).json({ error: "User not found." });
+      return;
+    }
+    const updated = upsertAuthUser(username, password);
+    if (!updated) {
+      res.status(400).json({ error: "Could not update password." });
+      return;
+    }
+    revokeAuthSessionsForUser(username, { excludeSessionId: req.authSessionId });
+    const user = getAuthUser(username);
+    res.json({
+      ok: true,
+      user: {
+        username,
+        isAdmin: normalizeAuthAdminFlag(user?.isAdmin),
+        createdAt: user?.createdAt || null,
+        updatedAt: user?.updatedAt || null,
+      },
+    });
+  }
+);
+
+app.patch(
+  "/api/admin/users/:username/role",
+  requireAuth,
+  requireAdmin,
+  (req, res) => {
+    const username = normalizeAuthUsername(req.params?.username);
+    const hasRoleField =
+      Object.prototype.hasOwnProperty.call(req.body || {}, "isAdmin") ||
+      Object.prototype.hasOwnProperty.call(req.body || {}, "role");
+    if (!username || !hasRoleField) {
+      res.status(400).json({ error: "Username and role are required." });
+      return;
+    }
+    const nextIsAdmin = parseAuthAdminInput(
+      Object.prototype.hasOwnProperty.call(req.body || {}, "isAdmin")
+        ? req.body?.isAdmin
+        : req.body?.role
+    );
+    if (nextIsAdmin === null) {
+      res.status(400).json({ error: "Role must be admin or regular." });
+      return;
+    }
+    const existing = getAuthUser(username);
+    if (!existing) {
+      res.status(404).json({ error: "User not found." });
+      return;
+    }
+    if (
+      normalizeAuthAdminFlag(existing.isAdmin) &&
+      !nextIsAdmin &&
+      getAuthAdminCount() <= 1
+    ) {
+      res.status(400).json({ error: "At least one admin user is required." });
+      return;
+    }
+    if (normalizeAuthAdminFlag(existing.isAdmin) === nextIsAdmin) {
+      res.json({
+        ok: true,
+        user: {
+          username: existing.username,
+          isAdmin: normalizeAuthAdminFlag(existing.isAdmin),
+          createdAt: existing.createdAt || null,
+          updatedAt: existing.updatedAt || null,
+        },
+      });
+      return;
+    }
+    const updated = setAuthUserRole(username, nextIsAdmin);
+    if (!updated) {
+      res.status(400).json({ error: "Could not update role." });
+      return;
+    }
+    const user = getAuthUser(username);
+    res.json({
+      ok: true,
+      user: {
+        username,
+        isAdmin: normalizeAuthAdminFlag(user?.isAdmin),
+        createdAt: user?.createdAt || null,
+        updatedAt: user?.updatedAt || null,
+      },
+    });
+  }
+);
+
+app.delete("/api/admin/users/:username", requireAuth, requireAdmin, (req, res) => {
+  const username = normalizeAuthUsername(req.params?.username);
+  if (!username) {
+    res.status(400).json({ error: "Username is required." });
+    return;
+  }
+  const existing = getAuthUser(username);
+  if (!existing) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+  if (normalizeAuthAdminFlag(existing.isAdmin)) {
+    res.status(400).json({ error: "Admin user cannot be removed." });
+    return;
+  }
+  const removed = deleteAuthUser(username);
+  if (!removed) {
+    res.status(400).json({ error: "Could not remove user." });
+    return;
+  }
+  revokeAuthSessionsForUser(username);
+  res.json({
+    ok: true,
+    username,
+  });
+});
 
 app.get("/api/options", async (req, res) => {
   try {
