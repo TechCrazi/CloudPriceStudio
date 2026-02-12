@@ -50,6 +50,13 @@
               <button
                 type="button"
                 class="secondary-btn is-hidden"
+                id="auth-save-db"
+              >
+                Save to DB
+              </button>
+              <button
+                type="button"
+                class="secondary-btn is-hidden"
                 id="auth-logout"
               >
                 Log Out
@@ -1554,7 +1561,7 @@
             <div class="billing-tools">
               <div class="billing-filter">
                 <label>
-                  Billing month
+                  Billing period
                   <select id="billing-month-filter">
                     <option value="all">All months</option>
                   </select>
@@ -1576,29 +1583,56 @@
                   </select>
                 </label>
               </div>
-              <div class="billing-tag-editor">
-                <label>
-                  Service
-                  <select id="billing-tag-service">
-                    <option value="">Select service</option>
-                  </select>
-                </label>
-                <label>
-                  Product app
-                  <input
-                    type="text"
-                    id="billing-tag-product-app"
-                    placeholder="e.g. LKInterface"
-                  />
-                </label>
-                <label>
-                  Custom tags (comma-separated)
-                  <input
-                    type="text"
-                    id="billing-tag-custom"
-                    placeholder="env:prod, owner:platform"
-                  />
-                </label>
+              <div class="billing-tagging">
+                <div class="billing-tagging-grid">
+                  <label>
+                    Service
+                    <select id="billing-tag-service">
+                      <option value="">Select service</option>
+                    </select>
+                  </label>
+                  <label>
+                    Product app
+                    <input
+                      type="text"
+                      id="billing-tag-product-app"
+                      placeholder="e.g. LKInterface"
+                    />
+                  </label>
+                  <label>
+                    Custom tags (comma-separated)
+                    <input
+                      type="text"
+                      id="billing-tag-custom"
+                      placeholder="env:prod, owner:platform"
+                    />
+                  </label>
+                  <label>
+                    Selected line items
+                    <input
+                      type="text"
+                      id="billing-bulk-count"
+                      value="0 selected"
+                      readonly
+                    />
+                  </label>
+                  <label>
+                    Bulk product app
+                    <input
+                      type="text"
+                      id="billing-bulk-product-app"
+                      placeholder="e.g. LKOasis"
+                    />
+                  </label>
+                  <label>
+                    Bulk tags (comma-separated)
+                    <input
+                      type="text"
+                      id="billing-bulk-tags"
+                      placeholder="tag1, tag2"
+                    />
+                  </label>
+                </div>
                 <div class="billing-tag-actions">
                   <button
                     type="button"
@@ -1614,35 +1648,6 @@
                   >
                     Clear tags
                   </button>
-                </div>
-              </div>
-              <div class="billing-bulk-editor">
-                <label>
-                  Selected line items
-                  <input
-                    type="text"
-                    id="billing-bulk-count"
-                    value="0 selected"
-                    readonly
-                  />
-                </label>
-                <label>
-                  Bulk product app
-                  <input
-                    type="text"
-                    id="billing-bulk-product-app"
-                    placeholder="e.g. LKOasis"
-                  />
-                </label>
-                <label>
-                  Bulk tags (comma-separated)
-                  <input
-                    type="text"
-                    id="billing-bulk-tags"
-                    placeholder="tag1, tag2"
-                  />
-                </label>
-                <div class="billing-tag-actions">
                   <button
                     type="button"
                     class="secondary-btn"

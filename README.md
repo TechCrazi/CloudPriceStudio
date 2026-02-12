@@ -119,6 +119,8 @@ only and is not synced to the cloud database.
 If login is configured and a valid user signs in:
 
 - The header status shows that profile data is synced to the cloud database.
+- A `Save to DB` action is available in the auth bar to force an immediate
+  profile sync (without waiting for debounce/autosave).
 - The app syncs scenario/private/billing state to server-side local storage
   inside the container SQLite database
   (`/tmp/cloud-price-data/cloudprice.db` by default).
@@ -175,12 +177,12 @@ localStorage and can be loaded later from the dropdown.
 ## Billing Import
 
 Use the `Billing Import` tab to import provider billing CSV files and visualize
-allocation by service, month, and tags.
+allocation by service, period, and tags.
 
 - Provider-specific import views for AWS, Azure, GCP, and Rackspace.
 - Unified billing view merges imported datasets across providers.
-- Billing month dropdown is available on every provider tab and Unified tab
-  (`All months` or a specific month bucket).
+- Billing period dropdown is available on every provider tab and Unified tab
+  (`All months`, `Yearly YYYY`, or a specific month bucket).
 - Multi-month CSV imports are grouped into per-month buckets so historical
   month-over-month imports accumulate instead of replacing prior months.
 - Aggregated totals, service share, and top service bar visualization.
@@ -199,6 +201,8 @@ allocation by service, month, and tags.
   (comma-separated tags).
 - Optional detail-level tags for expanded line items plus bulk apply/clear
   across selected visible rows.
+- Tagging controls (service + bulk tagging) are combined into a single compact
+  panel to reduce screen space usage.
 - Filter Billing Import views by `Product app` (including an `Untagged` filter).
 - Existing service/detail tags are retained and automatically reused for future
   monthly imports when service names match.

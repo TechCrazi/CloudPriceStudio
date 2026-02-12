@@ -1083,8 +1083,7 @@ select:focus {
 }
 
 .billing-filter,
-.billing-tag-editor,
-.billing-bulk-editor {
+.billing-tagging {
   padding: 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1092,16 +1091,14 @@ select:focus {
 }
 
 .billing-filter label,
-.billing-tag-editor label,
-.billing-bulk-editor label {
+.billing-tagging label {
   font-size: 0.82rem;
   color: var(--muted);
 }
 
 .billing-filter select,
-.billing-tag-editor select,
-.billing-tag-editor input,
-.billing-bulk-editor input {
+.billing-tagging select,
+.billing-tagging input {
   margin-top: 4px;
 }
 
@@ -1111,20 +1108,18 @@ select:focus {
   gap: 10px;
 }
 
-.billing-tag-editor {
+.billing-tagging {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-tagging-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.billing-bulk-editor {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.billing-bulk-editor input[readonly] {
+#billing-bulk-count {
   color: var(--text);
   font-weight: 600;
   background: rgba(255, 255, 255, 0.06);
@@ -1951,11 +1946,7 @@ select:focus {
     grid-template-columns: 1fr;
   }
 
-  .billing-tag-editor {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .billing-bulk-editor {
+  .billing-tagging-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1995,11 +1986,7 @@ select:focus {
     grid-template-columns: 1fr;
   }
 
-  .billing-tag-editor {
-    grid-template-columns: 1fr;
-  }
-
-  .billing-bulk-editor {
+  .billing-tagging-grid {
     grid-template-columns: 1fr;
   }
 

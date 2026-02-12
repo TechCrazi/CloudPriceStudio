@@ -8,6 +8,7 @@ const authUsernameInput = document.getElementById("auth-username");
 const authPasswordInput = document.getElementById("auth-password");
 const authOpenLoginButton = document.getElementById("auth-open-login");
 const authImportGuestButton = document.getElementById("auth-import-guest");
+const authSaveDbButton = document.getElementById("auth-save-db");
 const authLogoutButton = document.getElementById("auth-logout");
 const authNote = document.getElementById("auth-note");
 const modeInput = document.getElementById("mode-input");
@@ -5446,6 +5447,12 @@ function setAuthUi(user, options = {}) {
   if (authImportGuestButton) {
     authImportGuestButton.classList.toggle("is-hidden", !showGuestImport);
   }
+  if (authSaveDbButton) {
+    const showSaveDb = Boolean(user?.username);
+    authSaveDbButton.classList.toggle("is-hidden", !showSaveDb);
+    authSaveDbButton.disabled = !showSaveDb || authSyncInFlight;
+    authSaveDbButton.textContent = authSyncInFlight ? "Saving..." : "Save to DB";
+  }
   if (authLogoutButton) {
     authLogoutButton.classList.toggle("is-hidden", !user?.username);
   }
@@ -5733,13 +5740,22 @@ async function loadSyncedStateFromServer() {
   };
 }
 
-async function pushSyncedStateToServer(stateOverride = null) {
+async function pushSyncedStateToServer(stateOverride = null, options = {}) {
+  const suppressErrorNote = options.suppressErrorNote === true;
   if (!authSession?.authenticated || authSyncInFlight) {
-    return;
+    if (authSaveDbButton) {
+      authSaveDbButton.disabled = !authSession?.authenticated || authSyncInFlight;
+      authSaveDbButton.textContent = authSyncInFlight ? "Saving..." : "Save to DB";
+    }
+    return false;
   }
   const statePayload =
     cloneSyncedStatePayload(stateOverride) || buildSyncedStatePayload();
   authSyncInFlight = true;
+  if (authSaveDbButton) {
+    authSaveDbButton.disabled = true;
+    authSaveDbButton.textContent = "Saving...";
+  }
   try {
     await requestJson("/api/user/state", {
       method: "PUT",
@@ -5749,10 +5765,19 @@ async function pushSyncedStateToServer(stateOverride = null) {
         state: statePayload,
       }),
     });
+    return true;
   } catch (error) {
-    setAuthNote(error?.message || "Could not sync profile data.", true);
+    if (!suppressErrorNote) {
+      setAuthNote(error?.message || "Could not sync profile data.", true);
+    }
+    return false;
   } finally {
     authSyncInFlight = false;
+    if (authSaveDbButton) {
+      const canSave = Boolean(authSession?.authenticated && authSession?.user?.username);
+      authSaveDbButton.disabled = !canSave;
+      authSaveDbButton.textContent = "Save to DB";
+    }
   }
 }
 
@@ -5768,6 +5793,31 @@ function scheduleSyncedStatePush() {
     authSyncTimer = null;
     pushSyncedStateToServer();
   }, AUTH_SYNC_DEBOUNCE_MS);
+}
+
+async function handleAuthSaveToDb() {
+  if (!authSession?.authenticated || !authSession?.user?.username) {
+    setAuthNote("Sign in to save profile data to the cloud database.", true);
+    return;
+  }
+  if (authSyncInFlight) {
+    setAuthNote("Profile sync already in progress...");
+    return;
+  }
+  if (authSyncTimer) {
+    clearTimeout(authSyncTimer);
+    authSyncTimer = null;
+  }
+  const currentState = buildSyncedStatePayload();
+  setAuthNote("Saving profile data to cloud database...");
+  const saved = await pushSyncedStateToServer(currentState, {
+    suppressErrorNote: true,
+  });
+  if (saved) {
+    setAuthNote("Profile data saved to cloud database.");
+    return;
+  }
+  setAuthNote("Could not save profile data to cloud database.", true);
 }
 
 function reloadPersistentStateFromLocalStorage() {
@@ -8289,6 +8339,40 @@ function normalizeBillingMonthKey(value) {
   return BILLING_MONTH_UNKNOWN_KEY;
 }
 
+function normalizeBillingYearKey(value) {
+  const text = String(value || "").trim();
+  if (/^\d{4}$/.test(text)) {
+    return text;
+  }
+  return "";
+}
+
+function normalizeBillingPeriodValue(value) {
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!text || text === "all") {
+    return "all";
+  }
+  if (text === BILLING_MONTH_UNKNOWN_KEY) {
+    return BILLING_MONTH_UNKNOWN_KEY;
+  }
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) {
+    return text;
+  }
+  const yearMatch = text.match(/^year:(\d{4})$/);
+  if (yearMatch) {
+    const year = normalizeBillingYearKey(yearMatch[1]);
+    if (year) {
+      return `year:${year}`;
+    }
+  }
+  if (/^\d{4}$/.test(text)) {
+    return `year:${text}`;
+  }
+  return "all";
+}
+
 function formatBillingMonthLabel(monthKey) {
   const normalized = normalizeBillingMonthKey(monthKey);
   if (normalized === BILLING_MONTH_UNKNOWN_KEY) {
@@ -8304,6 +8388,25 @@ function formatBillingMonthLabel(monthKey) {
     month: "long",
     year: "numeric",
   });
+}
+
+function formatBillingPeriodLabel(periodValue) {
+  const normalized = normalizeBillingPeriodValue(periodValue);
+  if (normalized === "all") {
+    return "All months";
+  }
+  if (normalized.startsWith("year:")) {
+    return `Yearly ${normalized.slice(5)}`;
+  }
+  return formatBillingMonthLabel(normalized);
+}
+
+function extractBillingYearFromMonthKey(monthKey) {
+  const normalized = normalizeBillingMonthKey(monthKey);
+  if (normalized === BILLING_MONTH_UNKNOWN_KEY) {
+    return "";
+  }
+  return normalizeBillingYearKey(normalized.split("-")[0]);
 }
 
 function getBillingDatasetUsageRange(dataset) {
@@ -8538,23 +8641,25 @@ function listBillingMonthKeys(provider = currentBillingProvider) {
   return listBillingMonthKeysForProvider(normalizedProvider);
 }
 
+function listBillingYearKeys(provider = currentBillingProvider) {
+  const years = new Set();
+  listBillingMonthKeys(provider).forEach((monthKey) => {
+    const year = extractBillingYearFromMonthKey(monthKey);
+    if (year) {
+      years.add(year);
+    }
+  });
+  return Array.from(years).sort((left, right) => right.localeCompare(left));
+}
+
 function getBillingCurrentMonth(provider = currentBillingProvider) {
   const key = normalizeBillingProvider(provider);
-  const value = String(billingMonthSelections[key] || "all")
-    .trim()
-    .toLowerCase();
-  if (value === "all") {
-    return "all";
-  }
-  return normalizeBillingMonthKey(value);
+  return normalizeBillingPeriodValue(billingMonthSelections[key] || "all");
 }
 
 function setBillingCurrentMonth(value, provider = currentBillingProvider) {
   const key = normalizeBillingProvider(provider);
-  const text = String(value || "")
-    .trim()
-    .toLowerCase();
-  billingMonthSelections[key] = text === "all" ? "all" : normalizeBillingMonthKey(text);
+  billingMonthSelections[key] = normalizeBillingPeriodValue(value);
 }
 
 function getBillingProviderDataByMonth(provider, monthKey = "all", options = {}) {
@@ -8573,19 +8678,28 @@ function getBillingProviderDataByMonth(provider, monthKey = "all", options = {})
   if (!entries.length) {
     return null;
   }
-  const normalizedMonth = String(monthKey || "all")
-    .trim()
-    .toLowerCase();
-  if (normalizedMonth === "all") {
+  const normalizedPeriod = normalizeBillingPeriodValue(monthKey);
+  if (normalizedPeriod === "all") {
     return mergeBillingImportDatasets(
       normalizedProvider,
       entries.map((entry) => entry.dataset)
     );
   }
-  const targetMonth = normalizeBillingMonthKey(normalizedMonth);
-  const match = entries.find((entry) => entry.monthKey === targetMonth);
-  if (match) {
-    return match.dataset;
+  if (normalizedPeriod.startsWith("year:")) {
+    const year = normalizeBillingYearKey(normalizedPeriod.slice(5));
+    const yearEntries = entries.filter((entry) => entry.monthKey.startsWith(`${year}-`));
+    if (yearEntries.length) {
+      return mergeBillingImportDatasets(
+        normalizedProvider,
+        yearEntries.map((entry) => entry.dataset)
+      );
+    }
+  } else {
+    const targetMonth = normalizeBillingMonthKey(normalizedPeriod);
+    const match = entries.find((entry) => entry.monthKey === targetMonth);
+    if (match) {
+      return match.dataset;
+    }
   }
   if (!fallbackToAllWhenMissing) {
     return null;
@@ -8941,6 +9055,7 @@ function syncBillingControls(data) {
   const isUnified = normalizedProvider === "unified";
   const hasData = Boolean(data && Array.isArray(data.services) && data.services.length);
   const monthKeys = listBillingMonthKeys(currentBillingProvider);
+  const yearKeys = listBillingYearKeys(currentBillingProvider);
   if (billingImportButton) {
     billingImportButton.disabled = isUnified;
   }
@@ -8952,6 +9067,12 @@ function syncBillingControls(data) {
   }
   if (billingMonthFilter) {
     const monthOptions = [{ key: "all", label: "All months" }];
+    yearKeys.forEach((yearKey) => {
+      monthOptions.push({
+        key: `year:${yearKey}`,
+        label: `Yearly ${yearKey}`,
+      });
+    });
     monthKeys.forEach((monthKey) => {
       monthOptions.push({
         key: monthKey,
@@ -10253,8 +10374,7 @@ function renderBillingImportPanel() {
 
   const activeFilter = getBillingCurrentFilter(currentBillingProvider);
   const monthKey = getBillingCurrentMonth(currentBillingProvider);
-  const monthLabel =
-    monthKey === "all" ? "All months" : formatBillingMonthLabel(monthKey);
+  const monthLabel = formatBillingPeriodLabel(monthKey);
   const monthBucketCount = listBillingMonthKeys(currentBillingProvider).length;
   const filterLabel =
     activeFilter === BILLING_UNTAGGED_FILTER
@@ -10306,7 +10426,7 @@ function renderBillingImportPanel() {
       <strong>${formatMoney(data.totalCost)}</strong>
     </article>
     <article class="billing-summary-card">
-      <h4>Month scope</h4>
+      <h4>Period scope</h4>
       <p>${escapeMarkup(monthLabel)}</p>
       <strong>${monthBucketCount} month bucket(s)</strong>
     </article>
@@ -12039,6 +12159,9 @@ if (authOpenLoginButton && authForm) {
 }
 if (authForm) {
   authForm.addEventListener("submit", handleAuthLoginSubmit);
+}
+if (authSaveDbButton) {
+  authSaveDbButton.addEventListener("click", handleAuthSaveToDb);
 }
 if (authLogoutButton) {
   authLogoutButton.addEventListener("click", handleAuthLogout);
