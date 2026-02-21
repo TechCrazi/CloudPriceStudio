@@ -13,7 +13,7 @@ WORKDIR /app
 COPY --from=build /app /app
 
 ENV NODE_ENV=production
-EXPOSE 3000
+EXPOSE 8080
 
 USER 1000
 

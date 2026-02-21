@@ -80,7 +80,7 @@ const fetcher =
     import("node-fetch").then(({ default: fetch }) => fetch(...args)));
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 const HOURS_IN_MONTH = 730;
 const MIN_CPU = 8;
 const MIN_MEMORY = 8;
