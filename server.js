@@ -1720,7 +1720,18 @@ const apiLimiter = rateLimit({
   message: "Too many requests, please try again later."
 });
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*"],
+    },
+  },
+  crossOriginOpenerPolicy: { policy: "unsafe-none" },
+}));
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" })); // In a real app, restrict this!
 app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
