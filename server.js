@@ -3,6 +3,8 @@ const fs = require("fs");
 const crypto = require("crypto");
 const os = require("os");
 const express = require("express");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const initSqlJs = require("sql.js");
 const { PricingClient, GetProductsCommand } = require("@aws-sdk/client-pricing");
 
@@ -106,7 +108,7 @@ const K8S_CONTROL_PLANE_HOURLY = {
 const AUTH_COOKIE_NAME = "cloud_price_session";
 const AUTH_DB_CONFIG_PROVIDED = Boolean(
   String(process.env.AUTH_DATA_DIR || "").trim() ||
-    String(process.env.AUTH_DB_FILE || "").trim()
+  String(process.env.AUTH_DB_FILE || "").trim()
 );
 const AUTH_DATA_DIR = path.resolve(
   process.env.AUTH_DATA_DIR || path.join(os.tmpdir(), "cloud-price-data")
@@ -130,7 +132,7 @@ const AUTH_SESSION_TTL_MS = Math.max(
 const AUTH_STATE_MAX_BYTES = Math.max(
   32 * 1024,
   Number.parseInt(process.env.AUTH_STATE_MAX_BYTES || `${2 * 1024 * 1024}`, 10) ||
-    2 * 1024 * 1024
+  2 * 1024 * 1024
 );
 
 const REGION_MAP = {
@@ -1436,8 +1438,7 @@ function seedAuthUsersFromEnv() {
   });
   if (changed) {
     console.log(
-      `[auth] Seeded ${seedUsers.length} login credential${
-        seedUsers.length === 1 ? "" : "s"
+      `[auth] Seeded ${seedUsers.length} login credential${seedUsers.length === 1 ? "" : "s"
       } into SQLite.`
     );
   }
@@ -1478,8 +1479,7 @@ function migrateLegacyUsersJsonToSqlite() {
   }
   if (migrated > 0) {
     console.log(
-      `[auth] Migrated ${migrated} user credential${
-        migrated === 1 ? "" : "s"
+      `[auth] Migrated ${migrated} user credential${migrated === 1 ? "" : "s"
       } from legacy users.json to SQLite.`
     );
   }
@@ -1648,9 +1648,9 @@ function authSessionMiddleware(req, res, next) {
   const session = getRequestSession(req);
   req.authUser = session
     ? {
-        username: session.username,
-        isAdmin: isAuthAdmin(session.username),
-      }
+      username: session.username,
+      isAdmin: isAuthAdmin(session.username),
+    }
     : null;
   req.authSessionId = session ? session.id : null;
   next();
@@ -1711,6 +1711,15 @@ function awaitAuthInitialization(req, res, next) {
     });
 }
 
+// Set up rate limiting: max 1000 requests per 15 minutes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: "Too many requests, please try again later."
+});
+
+app.use(helmet());
+app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
 app.use(awaitAuthInitialization);
 app.use(authSessionMiddleware);
@@ -1860,10 +1869,10 @@ app.post("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
     Object.prototype.hasOwnProperty.call(req.body || {}, "role");
   const parsedRole = hasRoleField
     ? parseAuthAdminInput(
-        Object.prototype.hasOwnProperty.call(req.body || {}, "isAdmin")
-          ? req.body?.isAdmin
-          : req.body?.role
-      )
+      Object.prototype.hasOwnProperty.call(req.body || {}, "isAdmin")
+        ? req.body?.isAdmin
+        : req.body?.role
+    )
     : false;
   if (!username || !password) {
     res.status(400).json({ error: "Username and password are required." });
@@ -2119,7 +2128,7 @@ function buildCacheStatus() {
       ttlMs: AWS_PRICE_LIST_CACHE_TTL_MS,
       size:
         awsPriceListIndexCache.data &&
-        typeof awsPriceListIndexCache.data === "object"
+          typeof awsPriceListIndexCache.data === "object"
           ? Object.keys(awsPriceListIndexCache.data).length
           : 0,
       loadedAt: Number.isFinite(awsPriceListIndexCache.loadedAt)
@@ -2153,7 +2162,7 @@ function buildCacheStatus() {
       ttlMs: K8S_SHARED_STORAGE_CACHE_TTL_MS,
       size:
         awsEfsRegionIndexCache.data &&
-        typeof awsEfsRegionIndexCache.data === "object"
+          typeof awsEfsRegionIndexCache.data === "object"
           ? Object.keys(awsEfsRegionIndexCache.data?.regions || {}).length
           : 0,
       loadedAt: Number.isFinite(awsEfsRegionIndexCache.loadedAt)
@@ -2512,7 +2521,7 @@ function logPricingError(provider, context, error) {
 function hasAwsApiCredentials() {
   return Boolean(
     process.env.AWS_PROFILE ||
-      (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
+    (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
   );
 }
 
@@ -3295,7 +3304,7 @@ async function loadAwsEfsRegionIndex() {
   if (
     awsEfsRegionIndexCache.data &&
     Date.now() - awsEfsRegionIndexCache.loadedAt <
-      K8S_SHARED_STORAGE_CACHE_TTL_MS
+    K8S_SHARED_STORAGE_CACHE_TTL_MS
   ) {
     return awsEfsRegionIndexCache.data;
   }
@@ -3693,9 +3702,9 @@ function computeStorageFocusTotals(profile, providerRates) {
   const replicationMonthly =
     profile?.drEnabled
       ? Math.max(0, toNumber(profile?.drDeltaTb, 0)) *
-        1024 *
-        providerRates.replication *
-        accountCount
+      1024 *
+      providerRates.replication *
+      accountCount
       : 0;
   const total = storageMonthly + replicationMonthly;
   return {
@@ -4054,8 +4063,8 @@ async function getAwsOnDemandPrice({
     sqlEdition === "standard"
       ? "SQL Std"
       : sqlEdition === "enterprise"
-      ? "SQL Ent"
-      : "NA";
+        ? "SQL Ent"
+        : "NA";
   const cacheKey = [instanceType, location, os, preInstalledSw].join("|");
   if (awsCache.has(cacheKey)) {
     return awsCache.get(cacheKey);
@@ -4204,9 +4213,8 @@ async function getAzureOnDemandPrice({ skuName, region, os }) {
   const items = data.Items || [];
   const isWindows = os === "windows";
   const filtered = items.filter((item) => {
-    const label = `${item.productName || ""} ${item.skuName || ""} ${
-      item.meterName || ""
-    }`;
+    const label = `${item.productName || ""} ${item.skuName || ""} ${item.meterName || ""
+      }`;
     if (/spot|low priority/i.test(label)) {
       return false;
     }
@@ -4958,8 +4966,8 @@ function filterNetworkAddonsByFocus(addons, focus, hours) {
     const monthly = Number.isFinite(item.monthlyTotal)
       ? item.monthlyTotal
       : Number.isFinite(hours)
-      ? (Number.isFinite(item.hourlyRate) ? item.hourlyRate : 0) * hours
-      : 0;
+        ? (Number.isFinite(item.hourlyRate) ? item.hourlyRate : 0) * hours
+        : 0;
     return sum + monthly;
   }, 0);
   const errors = items
@@ -5054,7 +5062,7 @@ function computeTotals({
   const drMonthly =
     drRate > 0
       ? (computeMonthly + storageMonthly + backupMonthly + sqlMonthly) *
-        drRate
+      drRate
       : 0;
   const total =
     computeMonthly +
@@ -5185,8 +5193,8 @@ app.post("/api/compare", async (req, res) => {
     body.pricingFocus === "network"
       ? "network"
       : body.pricingFocus === "storage"
-      ? "storage"
-      : "all";
+        ? "storage"
+        : "all";
   const networkAddonFocus =
     pricingFocus === "network"
       ? normalizeNetworkAddonFocus(body.networkAddonFocus)
@@ -5298,7 +5306,7 @@ app.post("/api/compare", async (req, res) => {
   const snapshotMultiplier =
     1 +
     Math.max(0, BACKUP_RETENTION_DAYS - 1) *
-      (BACKUP_DAILY_DELTA_PERCENT / 100);
+    (BACKUP_DAILY_DELTA_PERCENT / 100);
   const snapshotBaseGb = mode === "k8s" ? osDiskGb : storageGb;
   const snapshotGb = backupEnabled ? snapshotBaseGb * snapshotMultiplier : 0;
   const egressTb =
@@ -5345,7 +5353,7 @@ app.post("/api/compare", async (req, res) => {
   }
   const diskTierKey =
     typeof body.diskTier === "string" &&
-    Object.prototype.hasOwnProperty.call(DISK_TIERS, body.diskTier)
+      Object.prototype.hasOwnProperty.call(DISK_TIERS, body.diskTier)
       ? body.diskTier
       : DEFAULT_DISK_TIER;
   const diskTier = DISK_TIERS[diskTierKey] || DISK_TIERS[DEFAULT_DISK_TIER];
@@ -5361,8 +5369,8 @@ app.post("/api/compare", async (req, res) => {
     mode === "k8s"
       ? 0
       : sqlEdition === "none"
-      ? 0
-      : toNumber(body.sqlLicenseRate, SQL_LICENSE_RATES[sqlEdition]);
+        ? 0
+        : toNumber(body.sqlLicenseRate, SQL_LICENSE_RATES[sqlEdition]);
   const privateEnabled =
     pricingFocus === "all" ? toBoolean(body.privateEnabled) : false;
   const privateVmwareMonthly = Math.max(
@@ -5465,72 +5473,72 @@ app.post("/api/compare", async (req, res) => {
   const awsNetworkSelections =
     pricingFocus === "network"
       ? {
-          vpc: awsNetworkVpc,
-          gateway: awsNetworkGateway,
-          loadBalancer: awsNetworkLoadBalancer,
-        }
+        vpc: awsNetworkVpc,
+        gateway: awsNetworkGateway,
+        loadBalancer: awsNetworkLoadBalancer,
+      }
       : {
-          vpc: { flavor: awsVpcFlavor, count: 1, dataTb: 0 },
-          firewall: { flavor: awsFirewallFlavor, count: 1, dataTb: 0 },
-          loadBalancer: {
-            flavor: awsLoadBalancerFlavor,
-            count: 1,
-            dataTb: 0,
-          },
-        };
+        vpc: { flavor: awsVpcFlavor, count: 1, dataTb: 0 },
+        firewall: { flavor: awsFirewallFlavor, count: 1, dataTb: 0 },
+        loadBalancer: {
+          flavor: awsLoadBalancerFlavor,
+          count: 1,
+          dataTb: 0,
+        },
+      };
   const azureNetworkSelections =
     pricingFocus === "network"
       ? {
-          vpc: azureNetworkVpc,
-          gateway: azureNetworkGateway,
-          loadBalancer: azureNetworkLoadBalancer,
-        }
+        vpc: azureNetworkVpc,
+        gateway: azureNetworkGateway,
+        loadBalancer: azureNetworkLoadBalancer,
+      }
       : {
-          vpc: { flavor: azureVpcFlavor, count: 1, dataTb: 0 },
-          firewall: { flavor: azureFirewallFlavor, count: 1, dataTb: 0 },
-          loadBalancer: {
-            flavor: azureLoadBalancerFlavor,
-            count: 1,
-            dataTb: 0,
-          },
-        };
+        vpc: { flavor: azureVpcFlavor, count: 1, dataTb: 0 },
+        firewall: { flavor: azureFirewallFlavor, count: 1, dataTb: 0 },
+        loadBalancer: {
+          flavor: azureLoadBalancerFlavor,
+          count: 1,
+          dataTb: 0,
+        },
+      };
   const gcpNetworkSelections =
     pricingFocus === "network"
       ? {
-          vpc: gcpNetworkVpc,
-          gateway: gcpNetworkGateway,
-          loadBalancer: gcpNetworkLoadBalancer,
-        }
+        vpc: gcpNetworkVpc,
+        gateway: gcpNetworkGateway,
+        loadBalancer: gcpNetworkLoadBalancer,
+      }
       : {
-          vpc: { flavor: gcpVpcFlavor, count: 1, dataTb: 0 },
-          firewall: { flavor: gcpFirewallFlavor, count: 1, dataTb: 0 },
-          loadBalancer: {
-            flavor: gcpLoadBalancerFlavor,
-            count: 1,
-            dataTb: 0,
-          },
-        };
+        vpc: { flavor: gcpVpcFlavor, count: 1, dataTb: 0 },
+        firewall: { flavor: gcpFirewallFlavor, count: 1, dataTb: 0 },
+        loadBalancer: {
+          flavor: gcpLoadBalancerFlavor,
+          count: 1,
+          dataTb: 0,
+        },
+      };
   const [awsNetworkAddonsRaw, azureNetworkAddonsRaw, gcpNetworkAddonsRaw] =
     await Promise.all([
-    resolveNetworkAddonsForProvider({
-      providerKey: "aws",
-      region,
-      selections: awsNetworkSelections,
-      hours,
-    }),
-    resolveNetworkAddonsForProvider({
-      providerKey: "azure",
-      region,
-      selections: azureNetworkSelections,
-      hours,
-    }),
-    resolveNetworkAddonsForProvider({
-      providerKey: "gcp",
-      region,
-      selections: gcpNetworkSelections,
-      hours,
-    }),
-  ]);
+      resolveNetworkAddonsForProvider({
+        providerKey: "aws",
+        region,
+        selections: awsNetworkSelections,
+        hours,
+      }),
+      resolveNetworkAddonsForProvider({
+        providerKey: "azure",
+        region,
+        selections: azureNetworkSelections,
+        hours,
+      }),
+      resolveNetworkAddonsForProvider({
+        providerKey: "gcp",
+        region,
+        selections: gcpNetworkSelections,
+        hours,
+      }),
+    ]);
   const awsNetworkAddons = awsNetworkAddonsRaw;
   const azureNetworkAddons = azureNetworkAddonsRaw;
   const gcpNetworkAddons = gcpNetworkAddonsRaw;
@@ -5594,8 +5602,7 @@ app.post("/api/compare", async (req, res) => {
   if (!awsSize || !azureSize) {
     res.status(400).json({
       error:
-        `No instance sizes meet the ${
-          mode === "k8s" ? "Linux" : "Windows"
+        `No instance sizes meet the ${mode === "k8s" ? "Linux" : "Windows"
         }, premium disk, and network constraints.`,
     });
     return;
@@ -6131,9 +6138,8 @@ app.post("/api/compare", async (req, res) => {
         ? privateClusterVmwareMonthly / hours / privateClusterVmCapacity
         : null;
     if (privateCapacityInputs) {
-      privateCapacityNote = `Compute assumes ${privateVmPerNode} VM${
-        privateVmPerNode === 1 ? "" : "s"
-      } per node, ${privateNodeCount} nodes with N+1 spare (${privateUsableNodes} usable).`;
+      privateCapacityNote = `Compute assumes ${privateVmPerNode} VM${privateVmPerNode === 1 ? "" : "s"
+        } per node, ${privateNodeCount} nodes with N+1 spare (${privateUsableNodes} usable).`;
     }
   }
   const privateNetworkItems = [];
@@ -6385,35 +6391,35 @@ app.post("/api/compare", async (req, res) => {
 
   const privateTotals = privateEnabled
     ? applyPricingFocusToTotals(
-        computeTotalsOrNull({
-          hourlyRate: privateHourlyRate,
-          osDiskGb,
-          dataDiskGb,
-          snapshotGb,
-          egressGb,
-          hours,
-          storageRate: privateStorageRate,
-          dataStorageRate: privateStorageRate,
-          snapshotRate: privateStorageRate,
-          egressRate: 0,
-          networkMonthly: privateNetworkMonthlyTotal,
-          interVlanMonthly: 0,
-          intraVlanMonthly: 0,
-          interRegionMonthly: 0,
-          iopsMonthly: 0,
-          throughputMonthly: 0,
-          sqlLicenseRate,
-          windowsLicenseMonthly: privateWindowsLicenseMonthly,
-          vcpu: cpu,
-          drPercent,
-          vmCount,
-          controlPlaneMonthly: 0,
-          egressScale,
-          osScale,
-          dataScale,
-        }),
-        pricingFocus
-      )
+      computeTotalsOrNull({
+        hourlyRate: privateHourlyRate,
+        osDiskGb,
+        dataDiskGb,
+        snapshotGb,
+        egressGb,
+        hours,
+        storageRate: privateStorageRate,
+        dataStorageRate: privateStorageRate,
+        snapshotRate: privateStorageRate,
+        egressRate: 0,
+        networkMonthly: privateNetworkMonthlyTotal,
+        interVlanMonthly: 0,
+        intraVlanMonthly: 0,
+        interRegionMonthly: 0,
+        iopsMonthly: 0,
+        throughputMonthly: 0,
+        sqlLicenseRate,
+        windowsLicenseMonthly: privateWindowsLicenseMonthly,
+        vcpu: cpu,
+        drPercent,
+        vmCount,
+        controlPlaneMonthly: 0,
+        egressScale,
+        osScale,
+        dataScale,
+      }),
+      pricingFocus
+    )
     : null;
 
   let awsStorageServices = null;
@@ -6468,16 +6474,16 @@ app.post("/api/compare", async (req, res) => {
     pricingFocus === "network"
       ? "Networking focus: public-cloud VPC/VNet, VPC gateway, and load balancer pricing only (with per-component counts and data transfer). Inter-VLAN, intra-VLAN, inter-region transfer, and egress are modeled. Compute, storage, SQL, DR, and private cloud are excluded."
       : pricingFocus === "storage"
-      ? "Storage focus: public storage service pricing only (object, file, table, queue) with optional DR replication delta. Compute, networking, SQL, DR uplift, and private cloud are excluded."
-      : mode === "k8s"
-      ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
-      : "Windows-only. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
+        ? "Storage focus: public storage service pricing only (object, file, table, queue) with optional DR replication delta. Compute, networking, SQL, DR uplift, and private cloud are excluded."
+        : mode === "k8s"
+          ? "Kubernetes mode: node sizing uses VM families. Control plane fees use premium tiers. Linux-only. Minimum node count 3. OS disk minimum 32 GB. Shared data storage uses EFS/Azure Files/Filestore public pricing (cached; falls back to defaults) and is cluster-level. SQL pricing disabled. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM."
+          : "Windows-only. Disk tier selectable (Premium or Max performance). Optional network add-ons: VPC/VNet, firewall, load balancer. No local or temp disks. Network >= 10 Gbps (GCP network listed as variable). Minimum 8 vCPU and 8 GB RAM.";
   const cacheStatus = buildCacheStatus();
   const cacheWarning =
     cacheStatus.summary.staleCount > 0
       ? `Cache warning: stale cache groups detected (${cacheStatus.summary.staleCaches.join(
-          ", "
-        )}). Results can fall back to defaults until refresh completes.`
+        ", "
+      )}). Results can fall back to defaults until refresh completes.`
       : null;
   const cacheStatusSummary = cacheStatus.summary;
   const cacheMeta = {
@@ -6658,8 +6664,8 @@ app.post("/api/compare", async (req, res) => {
         mode === "k8s"
           ? null
           : sqlEdition === "none"
-          ? "No SQL Server license."
-          : "SQL license add-on estimated per vCPU-hour (BYOL).",
+            ? "No SQL Server license."
+            : "SQL license add-on estimated per vCPU-hour (BYOL).",
     },
     azure: {
       ...azureResponse,
@@ -6711,8 +6717,8 @@ app.post("/api/compare", async (req, res) => {
         mode === "k8s"
           ? null
           : sqlEdition === "none"
-          ? "No SQL Server license."
-          : "SQL license add-on estimated per vCPU-hour.",
+            ? "No SQL Server license."
+            : "SQL license add-on estimated per vCPU-hour.",
     },
     gcp: {
       ...gcpResponse,
@@ -6763,15 +6769,15 @@ app.post("/api/compare", async (req, res) => {
         mode === "k8s"
           ? null
           : sqlEdition === "none"
-          ? "No SQL Server license."
-          : "SQL license add-on estimated per vCPU-hour.",
+            ? "No SQL Server license."
+            : "SQL license add-on estimated per vCPU-hour.",
     },
     private: {
       status: privateEnabled ? "manual" : "off",
       message: privateEnabled
         ? ["Manual private cloud inputs.", privateCapacityNote]
-            .filter(Boolean)
-            .join(" ")
+          .filter(Boolean)
+          .join(" ")
         : "Enable private cloud to include manual pricing.",
       enabled: privateEnabled,
       instance: privateInstance,
@@ -6826,8 +6832,8 @@ app.post("/api/compare", async (req, res) => {
         mode === "k8s"
           ? null
           : sqlEdition === "none"
-          ? "No SQL Server license."
-          : "SQL license add-on estimated per vCPU-hour.",
+            ? "No SQL Server license."
+            : "SQL license add-on estimated per vCPU-hour.",
     },
     notes: {
       constraints: constraintsNote,
