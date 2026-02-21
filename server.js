@@ -1732,7 +1732,23 @@ app.use(helmet({
   },
   crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
-app.use(cors({ origin: process.env.CORS_ORIGIN || "*" })); // In a real app, restrict this!
+const allowedOrigins = [
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+  process.env.CORS_ORIGIN
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = "The CORS policy for this site does not allow access from the specified Origin.";
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  }
+}));
 app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
 app.use(awaitAuthInitialization);

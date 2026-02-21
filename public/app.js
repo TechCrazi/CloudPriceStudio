@@ -448,6 +448,29 @@ const AUTH_SYNC_DEBOUNCE_MS = 1200;
 const DATA_HISTORY_STORAGE_PREFIX = "cps-state-history";
 const DATA_HISTORY_MAX_ENTRIES = 50;
 const BILLING_UNTAGGED_FILTER = "__untagged__";
+
+function obfuscateLocalData(data) {
+  try {
+    const text = typeof data === "string" ? data : JSON.stringify(data);
+    return btoa(unescape(encodeURIComponent(text)));
+  } catch (e) {
+    return null;
+  }
+}
+
+function deobfuscateLocalData(text) {
+  try {
+    if (!text) return null;
+    const decoded = decodeURIComponent(escape(atob(text)));
+    try {
+      return JSON.parse(decoded);
+    } catch (e) {
+      return decoded;
+    }
+  } catch (e) {
+    return null;
+  }
+}
 const SCENARIO_SCHEMA_VERSION = 2;
 const QUALITY_WARNING_LIMIT = 8;
 const BILLING_IMPORT_PROVIDERS = ["aws", "azure", "gcp", "rackspace"];
@@ -1438,12 +1461,12 @@ function setMode(mode) {
     mode === "k8s"
       ? "k8s"
       : mode === "network"
-      ? "network"
-      : mode === "storage"
-      ? "storage"
-      : mode === "saved"
-      ? "saved"
-      : "vm";
+        ? "network"
+        : mode === "storage"
+          ? "storage"
+          : mode === "saved"
+            ? "saved"
+            : "vm";
   const leavingVm = currentMode === "vm" && nextMode !== "vm";
   if (leavingVm) {
     sqlState = {
@@ -1458,8 +1481,8 @@ function setMode(mode) {
       currentMode === "network"
         ? "network"
         : currentMode === "storage"
-        ? "storage"
-        : "all";
+          ? "storage"
+          : "all";
   }
   const copy = MODE_COPY[currentMode] || MODE_COPY.vm;
   formTitle.textContent = copy.formTitle;
@@ -1780,7 +1803,7 @@ function setResultsTab(tab, options = {}) {
   const isFocusMode = currentMode === "network" || currentMode === "storage";
   const nextTab =
     !isFocusMode &&
-    (tab === "saved" || tab === "insight" || tab === "commit")
+      (tab === "saved" || tab === "insight" || tab === "commit")
       ? tab
       : "pricing";
   currentResultsTab = nextTab;
@@ -1808,7 +1831,7 @@ function setResultsTab(tab, options = {}) {
       button.classList.toggle(
         "active",
         (nextTab === "insight" && key === "insight") ||
-          (nextTab === "pricing" && key === currentNetworkResult)
+        (nextTab === "pricing" && key === currentNetworkResult)
       );
     });
     storageResultTabs.forEach((button) => {
@@ -1816,7 +1839,7 @@ function setResultsTab(tab, options = {}) {
       button.classList.toggle(
         "active",
         (nextTab === "insight" && key === "insight") ||
-          (nextTab === "pricing" && key === currentStorageResult)
+        (nextTab === "pricing" && key === currentStorageResult)
       );
     });
   }
@@ -1845,22 +1868,22 @@ function setPanel(panel) {
     panel === "private"
       ? "private"
       : panel === "scenarios"
-      ? "scenarios"
-      : panel === "billing"
-      ? "billing"
-      : panel === "data-transfer"
-      ? "data-transfer"
-      : panel === "admin"
-      ? "admin"
-      : panel === "k8s"
-      ? "k8s"
-      : panel === "network"
-      ? "network"
-      : panel === "storage"
-      ? "storage"
-      : panel === "saved"
-      ? "saved"
-      : "vm";
+        ? "scenarios"
+        : panel === "billing"
+          ? "billing"
+          : panel === "data-transfer"
+            ? "data-transfer"
+            : panel === "admin"
+              ? "admin"
+              : panel === "k8s"
+                ? "k8s"
+                : panel === "network"
+                  ? "network"
+                  : panel === "storage"
+                    ? "storage"
+                    : panel === "saved"
+                      ? "saved"
+                      : "vm";
   if (nextPanel === "admin" && !isAdminUser) {
     nextPanel = "vm";
   }
@@ -2046,8 +2069,8 @@ function setView(view) {
     view === "aws" || view === "azure" || view === "gcp"
       ? view
       : view === "private" && !privateViewBlocked
-      ? view
-      : "compare";
+        ? view
+        : "compare";
   currentView = nextView;
   viewTabButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.view === nextView);
@@ -2229,8 +2252,8 @@ function buildProviderSourceConfidence(provider, options = {}, totals = null) {
     options.pricingFocus === "network"
       ? "network"
       : options.pricingFocus === "storage"
-      ? "storage"
-      : "all";
+        ? "storage"
+        : "all";
   const computeSource = formatSourceDetail(
     provider?.pricingTiers?.onDemand?.source || provider?.source
   );
@@ -2252,8 +2275,8 @@ function buildProviderSourceConfidence(provider, options = {}, totals = null) {
   const storageSource =
     options.mode === "k8s"
       ? formatSourceDetail(
-          options.sharedStorageSources?.[options.providerKey] || "fallback-default"
-        )
+        options.sharedStorageSources?.[options.providerKey] || "fallback-default"
+      )
       : "disk-tier model";
   return `Source confidence: compute ${computeSource}, 1-year ${reserved1Source}, 3-year ${reserved3Source}, network add-ons ${networkSource}, traffic transfer ${egressUsesFallback ? "fallback" : "none"}, storage ${storageSource}.`;
 }
@@ -2263,20 +2286,20 @@ function updateProvider(target, provider, region, options = {}) {
     options.pricingFocus === "network"
       ? "network"
       : options.pricingFocus === "storage"
-      ? "storage"
-      : "all";
+        ? "storage"
+        : "all";
   const statusOverride =
     pricingFocus === "all"
       ? null
       : options.pricingProvider === "api"
-      ? "api"
-      : "retail";
+        ? "api"
+        : "retail";
   target.family.textContent =
     pricingFocus === "network"
       ? "Networking"
       : pricingFocus === "storage"
-      ? "Shared storage"
-      : provider.family || "-";
+        ? "Shared storage"
+        : provider.family || "-";
   if (target.instance) {
     syncInstanceSelect(target.instance, provider.instance);
   }
@@ -2346,10 +2369,9 @@ function updateProvider(target, provider, region, options = {}) {
     const backupInfo = provider.backup
       ? provider.backup.enabled
         ? `(Snapshots ${Math.round(
-            provider.backup.snapshotGb
-          )} GB, ${provider.backup.retentionDays}d @ ${
-            provider.backup.dailyDeltaPercent
-          }%)`
+          provider.backup.snapshotGb
+        )} GB, ${provider.backup.retentionDays}d @ ${provider.backup.dailyDeltaPercent
+        }%)`
         : "(Disabled)"
       : "";
     const drInfo = provider.dr ? `(DR ${provider.dr.percent}%)` : "";
@@ -2364,7 +2386,7 @@ function updateProvider(target, provider, region, options = {}) {
       : null;
     const windowsLine =
       Number.isFinite(breakdownTotals.windowsLicenseMonthly) &&
-      breakdownTotals.windowsLicenseMonthly > 0
+        breakdownTotals.windowsLicenseMonthly > 0
         ? `Windows ${formatMoney(breakdownTotals.windowsLicenseMonthly)}`
         : null;
     const countLabel = options.mode === "k8s" ? "Nodes" : "VMs";
@@ -2421,8 +2443,8 @@ function updateProvider(target, provider, region, options = {}) {
       pricingFocus === "network"
         ? [networkBreakdownLine]
         : pricingFocus === "storage"
-        ? storageBreakdownLines
-        : defaultBreakdownLines;
+          ? storageBreakdownLines
+          : defaultBreakdownLines;
     if (vmLabel) {
       breakdownLines.unshift(vmLabel);
     }
@@ -2441,7 +2463,7 @@ function updateProvider(target, provider, region, options = {}) {
   target.savings.classList.toggle(
     "negative",
     (Number.isFinite(year1Diff) && year1Diff < 0) ||
-      (Number.isFinite(year3Diff) && year3Diff < 0)
+    (Number.isFinite(year3Diff) && year3Diff < 0)
   );
 
   const noteParts = [];
@@ -2999,9 +3021,9 @@ function renderNetworkProviderCards(data) {
       );
       const trafficSource =
         (input.egressTb || 0) > 0 ||
-        (input.interVlanTb || 0) > 0 ||
-        (input.intraVlanTb || 0) > 0 ||
-        (input.interRegionTb || 0) > 0
+          (input.interVlanTb || 0) > 0 ||
+          (input.intraVlanTb || 0) > 0 ||
+          (input.interRegionTb || 0) > 0
           ? "fallback"
           : "none";
       const sourceDetail = `Source detail: add-ons ${addonSource}; transfer ${trafficSource}.`;
@@ -3009,9 +3031,8 @@ function renderNetworkProviderCards(data) {
         <article class="focus-provider-card">
           <div class="focus-provider-head">
             <h4>${label}</h4>
-            <span class="status-pill ${
-              sourceLabel === "HARDCODED" ? "hardcoded" : ""
-            }">${sourceLabel}</span>
+            <span class="status-pill ${sourceLabel === "HARDCODED" ? "hardcoded" : ""
+        }">${sourceLabel}</span>
           </div>
           <p class="subtle">API pricing for VPC/VNet, VPC/VPN gateway, and load balancer.</p>
           <p class="subtle">${sourceDetail}</p>
@@ -3019,9 +3040,9 @@ function renderNetworkProviderCards(data) {
             <label>
               VPC / VNet flavor
               <select name="${prefix}NetworkVpcFlavor" form="pricing-form">${buildOptionHtml(
-                vpcOptions,
-                vpcValue
-              )}</select>
+          vpcOptions,
+          vpcValue
+        )}</select>
             </label>
             <label>
               Count
@@ -3036,9 +3057,9 @@ function renderNetworkProviderCards(data) {
             <label>
               VPC/VPN gateway
               <select name="${prefix}NetworkGatewayFlavor" form="pricing-form">${buildOptionHtml(
-                gatewayOptions,
-                gatewayValue
-              )}</select>
+          gatewayOptions,
+          gatewayValue
+        )}</select>
             </label>
             <label>
               Count
@@ -3053,9 +3074,9 @@ function renderNetworkProviderCards(data) {
             <label>
               Load balancer
               <select name="${prefix}NetworkLoadBalancerFlavor" form="pricing-form">${buildOptionHtml(
-                lbOptions,
-                lbValue
-              )}</select>
+          lbOptions,
+          lbValue
+        )}</select>
             </label>
             <label>
               Count
@@ -3141,9 +3162,8 @@ function renderStorageProviderCards(data) {
         <article class="focus-provider-card">
           <div class="focus-provider-head">
             <h4>${label}</h4>
-            <span class="status-pill ${
-              sourceLabel === "HARDCODED" ? "hardcoded" : ""
-            }">${sourceLabel}</span>
+            <span class="status-pill ${sourceLabel === "HARDCODED" ? "hardcoded" : ""
+        }">${sourceLabel}</span>
           </div>
           <p class="subtle">API pricing for object, file, table, queue, and DR delta replication.</p>
           <p class="subtle">${sourceDetail}</p>
@@ -3174,9 +3194,8 @@ function renderStorageProviderCards(data) {
             </label>
             <label>
               DR replication
-              <input type="checkbox" name="${prefix}StorageDrEnabled" form="pricing-form" ${
-                drEnabled ? "checked" : ""
-              } />
+              <input type="checkbox" name="${prefix}StorageDrEnabled" form="pricing-form" ${drEnabled ? "checked" : ""
+        } />
             </label>
             <label>
               DR delta (TB)
@@ -3185,20 +3204,20 @@ function renderStorageProviderCards(data) {
           </div>
           <div class="focus-provider-summary">
             <div><span>Object monthly</span><strong>${formatMoney(
-              breakdown.objectMonthly || 0
-            )}</strong></div>
+          breakdown.objectMonthly || 0
+        )}</strong></div>
             <div><span>File monthly</span><strong>${formatMoney(
-              breakdown.fileMonthly || 0
-            )}</strong></div>
+          breakdown.fileMonthly || 0
+        )}</strong></div>
             <div><span>Table monthly</span><strong>${formatMoney(
-              breakdown.tableMonthly || 0
-            )}</strong></div>
+          breakdown.tableMonthly || 0
+        )}</strong></div>
             <div><span>Queue monthly</span><strong>${formatMoney(
-              breakdown.queueMonthly || 0
-            )}</strong></div>
+          breakdown.queueMonthly || 0
+        )}</strong></div>
             <div><span>Replication monthly</span><strong>${formatMoney(
-              breakdown.replicationMonthly || 0
-            )}</strong></div>
+          breakdown.replicationMonthly || 0
+        )}</strong></div>
             <div><span>Total storage</span><strong>${formatMoney(total)}</strong></div>
           </div>
         </article>`;
@@ -3219,8 +3238,8 @@ function renderNetworkFocusTable(data) {
     focus === "gateway"
       ? "VPC/VPN gateway"
       : focus === "loadBalancer"
-      ? "Load balancer"
-      : "VPC / VNet";
+        ? "Load balancer"
+        : "VPC / VNet";
   const providers = [
     { label: "AWS", provider: data.aws },
     { label: "Azure", provider: data.azure },
@@ -3306,11 +3325,10 @@ function renderStorageFocusTable(data) {
       <thead>
         <tr>
           <th>Provider</th>
-          ${
-            isPerformance
-              ? "<th>DR replication</th><th>DR delta (TB)</th><th>Replication monthly</th><th>Total storage</th>"
-              : "<th>Object</th><th>File</th><th>Table</th><th>Queue</th><th>Total storage</th>"
-          }
+          ${isPerformance
+      ? "<th>DR replication</th><th>DR delta (TB)</th><th>Replication monthly</th><th>Total storage</th>"
+      : "<th>Object</th><th>File</th><th>Table</th><th>Queue</th><th>Total storage</th>"
+    }
         </tr>
       </thead>
       <tbody>
@@ -3763,8 +3781,8 @@ function applySharedPrivateNetworkOnce(rows, privateProviders) {
       const share = isLast
         ? Math.max(0, sharedNetworkMonthly - allocated)
         : baseSum > 0
-        ? (sharedNetworkMonthly * entry.baseTotal) / baseSum
-        : sharedNetworkMonthly / applicableRows.length;
+          ? (sharedNetworkMonthly * entry.baseTotal) / baseSum
+          : sharedNetworkMonthly / applicableRows.length;
       allocated += share;
       const breakdown = entry.row.privateBreakdowns[provider.id];
       const nextTotal = entry.baseTotal + share;
@@ -3886,8 +3904,8 @@ async function runSavedPrivateCompare() {
   savedComparePrivateNote.textContent = hasError
     ? "Private vs public compare completed with errors."
     : hasSharedPrivateNetwork
-    ? "Private vs public compare updated. Shared private networking is charged once per provider."
-    : "Private vs public compare updated.";
+      ? "Private vs public compare updated. Shared private networking is charged once per provider."
+      : "Private vs public compare updated.";
   savedComparePrivateNote.classList.toggle("negative", hasError);
 }
 
@@ -3980,8 +3998,8 @@ function renderSavedPrivateCompareTable(rows, privateProviders) {
     statusCell.textContent = row.error
       ? row.error
       : hasPrivateError
-      ? "Partial"
-      : "OK";
+        ? "Partial"
+        : "OK";
     tr.appendChild(statusCell);
     body.appendChild(tr);
 
@@ -4435,7 +4453,7 @@ function getNormalizationInfo(data, providerKey) {
       : 0;
     const drDeltaTb =
       input[`${providerPrefix}StorageDrEnabled`] &&
-      Number.isFinite(input[`${providerPrefix}StorageDrDeltaTb`])
+        Number.isFinite(input[`${providerPrefix}StorageDrDeltaTb`])
         ? input[`${providerPrefix}StorageDrDeltaTb`]
         : 0;
     const totalTb = objectTb + fileTb + tableTb + queueTb + drDeltaTb;
@@ -4482,8 +4500,8 @@ function renderDataQualityPanel(data) {
     const storageSourceValues = Object.values(provider?.storageServices?.sources || {});
     const storageSource = storageSourceValues.length
       ? summarizeItemSources(
-          storageSourceValues.map((source) => ({ source }))
-        )
+        storageSourceValues.map((source) => ({ source }))
+      )
       : "none";
     lines.push(
       `${label}: compute ${computeSource}, network ${networkSource}, storage ${storageSource}.`
@@ -4586,15 +4604,14 @@ function renderUnitEconomics(data) {
     </thead>
     <tbody>
       ${rows
-        .map(
-          (row) => `
+      .map(
+        (row) => `
         <tr>
           <td>${row.label}</td>
           <td>${formatMonthly(row.total)}</td>
-          <td>${
-            Number.isFinite(row.normalized)
-              ? `${formatMoney(row.normalized)}/${row.unit}`
-              : "n/a"
+          <td>${Number.isFinite(row.normalized)
+            ? `${formatMoney(row.normalized)}/${row.unit}`
+            : "n/a"
           }</td>
           <td>${row.computeShare}</td>
           <td>${row.storageShare}</td>
@@ -4605,8 +4622,8 @@ function renderUnitEconomics(data) {
           <td>${row.licenseShare}</td>
           <td>${row.otherShare}</td>
         </tr>`
-        )
-        .join("")}
+      )
+      .join("")}
     </tbody>
   `;
   const focus = data.input?.pricingFocus || "all";
@@ -4870,8 +4887,8 @@ function renderCommit(data) {
         : null;
       const committedValue =
         component.key === "compute" &&
-        Number.isFinite(rawValue) &&
-        Number.isFinite(discountAmount)
+          Number.isFinite(rawValue) &&
+          Number.isFinite(discountAmount)
           ? rawValue - discountAmount
           : rawValue;
       setCommitField(
@@ -5011,9 +5028,9 @@ function persistDataHistory(history, user = authSession?.user || null) {
   const key = getDataHistoryStorageKey(user);
   let entries = Array.isArray(history)
     ? history
-        .map((entry) => normalizeDataHistoryEntry(entry))
-        .filter(Boolean)
-        .slice(-DATA_HISTORY_MAX_ENTRIES)
+      .map((entry) => normalizeDataHistoryEntry(entry))
+      .filter(Boolean)
+      .slice(-DATA_HISTORY_MAX_ENTRIES)
     : [];
   while (entries.length >= 0) {
     try {
@@ -5059,9 +5076,8 @@ function renderDataVersionHistory(user = authSession?.user || null, options = {}
       const option = document.createElement("option");
       option.value = entry.id;
       const keyCount = Object.keys(entry.state.localStorage || {}).length;
-      option.textContent = `${formatDateTime(entry.savedAt)} (${keyCount} key${
-        keyCount === 1 ? "" : "s"
-      })`;
+      option.textContent = `${formatDateTime(entry.savedAt)} (${keyCount} key${keyCount === 1 ? "" : "s"
+        })`;
       dataVersionSelect.appendChild(option);
     });
   const hasSelected = history.some((entry) => entry.id === selected);
@@ -5196,13 +5212,13 @@ function renderAdminUsersTable() {
         isAdmin && adminCount <= 1
           ? "<span>Last admin</span>"
           : `<button type="button" class="table-action" data-admin-role="${encodeURIComponent(
-              username
-            )}" data-admin-role-value="${roleValue}">${roleLabel}</button>`;
+            username
+          )}" data-admin-role-value="${roleValue}">${roleLabel}</button>`;
       const deleteAction = isAdmin
         ? "<span>Protected</span>"
         : `<button type="button" class="table-action" data-admin-delete="${encodeURIComponent(
-            username
-          )}">Remove</button>`;
+          username
+        )}">Remove</button>`;
       return `<tr>
         <td>${escapeMarkup(username)}</td>
         <td><span class="admin-role${roleClass}">${isAdmin ? "Admin" : "Regular"}</span></td>
@@ -5318,8 +5334,7 @@ async function handleAdminAddUserSubmit(event) {
     }
     await loadAdminUsers({ silent: true, keepNote: true });
     setAdminNote(
-      `User "${payload?.user?.username || username}" added as ${
-        payload?.user?.isAdmin ? "admin" : "regular"
+      `User "${payload?.user?.username || username}" added as ${payload?.user?.isAdmin ? "admin" : "regular"
       }.`
     );
   } catch (error) {
@@ -5472,8 +5487,8 @@ async function requestJson(url, options = {}) {
   if (!response.ok) {
     throw new Error(
       payload?.error ||
-        payload?.message ||
-        `Request failed (${response.status}).`
+      payload?.message ||
+      `Request failed (${response.status}).`
     );
   }
   return payload;
@@ -7056,8 +7071,8 @@ function applyScenarioInput(input) {
     input.pricingFocus === "network"
       ? "network"
       : input.pricingFocus === "storage"
-      ? "storage"
-      : "vm";
+        ? "storage"
+        : "vm";
   const nextMode = input.mode === "k8s" ? "k8s" : focusPanel;
   setPanel(nextMode);
   if (focusPanel === "network") {
@@ -7522,8 +7537,8 @@ function updateCpuOptions() {
   const options = cpuOptions.length
     ? cpuOptions
     : sizeOptions?.minCpu
-    ? [sizeOptions.minCpu]
-    : [];
+      ? [sizeOptions.minCpu]
+      : [];
   setSelectOptions(cpuSelect, options, fallbackValue);
 }
 
@@ -7764,8 +7779,8 @@ function serializeForm(formElement) {
     data.pricingFocus === "network"
       ? "network"
       : data.pricingFocus === "storage"
-      ? "storage"
-      : "all";
+        ? "storage"
+        : "all";
   const networkAddonFocus = normalizeNetworkAddonFocus(
     data.networkAddonFocus
   );
@@ -8007,15 +8022,15 @@ async function fetchAndRender() {
     const entries =
       input.pricingFocus === "network"
         ? [
-            ["vpc", input[`${providerKey}NetworkVpcFlavor`]],
-            ["gateway", input[`${providerKey}NetworkGatewayFlavor`]],
-            ["loadBalancer", input[`${providerKey}NetworkLoadBalancerFlavor`]],
-          ]
+          ["vpc", input[`${providerKey}NetworkVpcFlavor`]],
+          ["gateway", input[`${providerKey}NetworkGatewayFlavor`]],
+          ["loadBalancer", input[`${providerKey}NetworkLoadBalancerFlavor`]],
+        ]
         : [
-            ["vpc", input[`${providerKey}VpcFlavor`]],
-            ["firewall", input[`${providerKey}FirewallFlavor`]],
-            ["loadBalancer", input[`${providerKey}LoadBalancerFlavor`]],
-          ];
+          ["vpc", input[`${providerKey}VpcFlavor`]],
+          ["firewall", input[`${providerKey}FirewallFlavor`]],
+          ["loadBalancer", input[`${providerKey}LoadBalancerFlavor`]],
+        ];
     const filtered = entries.filter(([addonKey]) =>
       networkAddonFocus === "all" ? true : addonKey === networkAddonFocus
     );
@@ -8068,12 +8083,12 @@ async function handleCompare(event) {
     (currentView === "aws" || currentView === "azure" || currentView === "gcp");
   formNote.textContent =
     currentView === "compare" ||
-    currentResultsTab === "insight" ||
-    currentResultsTab === "commit"
+      currentResultsTab === "insight" ||
+      currentResultsTab === "commit"
       ? "Fetching live prices..."
       : isRegionCompare
-      ? "Fetching region compare..."
-      : "Fetching vendor options...";
+        ? "Fetching region compare..."
+        : "Fetching vendor options...";
   try {
     if (currentResultsTab === "insight" || currentResultsTab === "commit") {
       await fetchAndRender();
@@ -8479,11 +8494,11 @@ function cloneBillingDataset(dataset) {
     ...dataset,
     services: Array.isArray(dataset.services)
       ? dataset.services.map((service) => ({
-          ...service,
-          details: Array.isArray(service.details)
-            ? service.details.map((detail) => ({ ...detail }))
-            : [],
-        }))
+        ...service,
+        details: Array.isArray(service.details)
+          ? service.details.map((detail) => ({ ...detail }))
+          : [],
+      }))
       : [],
     sourceFiles: Array.isArray(dataset.sourceFiles) ? [...dataset.sourceFiles] : [],
     sourceAccounts: Array.isArray(dataset.sourceAccounts)
@@ -8544,9 +8559,9 @@ function normalizeBillingProviderImportEntry(entry, provider = "aws") {
       const current = base.months[monthKey];
       base.months[monthKey] = current
         ? mergeBillingImportDatasets(normalizedProvider, [
-            current,
-            normalizedDataset,
-          ])
+          current,
+          normalizedDataset,
+        ])
         : normalizedDataset;
     });
     return base;
@@ -8713,7 +8728,8 @@ function getBillingProviderDataByMonth(provider, monthKey = "all", options = {})
 function loadBillingImportStore() {
   try {
     const raw = localStorage.getItem(BILLING_IMPORT_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    // Try deobfuscate, fallback to JSON.parse for migration/legacy
+    const parsed = raw ? deobfuscateLocalData(raw) : null;
     return normalizeBillingImportStore(parsed);
   } catch (error) {
     // Ignore storage errors.
@@ -8723,7 +8739,8 @@ function loadBillingImportStore() {
 
 function persistBillingImportStore(store) {
   try {
-    localStorage.setItem(BILLING_IMPORT_KEY, JSON.stringify(store));
+    const obfuscated = obfuscateLocalData(store);
+    localStorage.setItem(BILLING_IMPORT_KEY, obfuscated);
     scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
@@ -8733,7 +8750,7 @@ function persistBillingImportStore(store) {
 function loadBillingTagsStore() {
   try {
     const raw = localStorage.getItem(BILLING_TAGS_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    const parsed = raw ? deobfuscateLocalData(raw) : null;
     return normalizeBillingTagStore(parsed);
   } catch (error) {
     return { aws: {}, azure: {}, gcp: {}, rackspace: {} };
@@ -8743,7 +8760,8 @@ function loadBillingTagsStore() {
 function persistBillingTagsStore(store) {
   try {
     const normalized = normalizeBillingTagStore(store);
-    localStorage.setItem(BILLING_TAGS_KEY, JSON.stringify(normalized));
+    const obfuscated = obfuscateLocalData(normalized);
+    localStorage.setItem(BILLING_TAGS_KEY, obfuscated);
     scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
@@ -8753,7 +8771,7 @@ function persistBillingTagsStore(store) {
 function loadBillingDetailTagsStore() {
   try {
     const raw = localStorage.getItem(BILLING_DETAIL_TAGS_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    const parsed = raw ? deobfuscateLocalData(raw) : null;
     return normalizeBillingDetailTagStore(parsed);
   } catch (error) {
     return { aws: {}, azure: {}, gcp: {}, rackspace: {} };
@@ -8763,7 +8781,8 @@ function loadBillingDetailTagsStore() {
 function persistBillingDetailTagsStore(store) {
   try {
     const normalized = normalizeBillingDetailTagStore(store);
-    localStorage.setItem(BILLING_DETAIL_TAGS_KEY, JSON.stringify(normalized));
+    const obfuscated = obfuscateLocalData(normalized);
+    localStorage.setItem(BILLING_DETAIL_TAGS_KEY, obfuscated);
     scheduleSyncedStatePush();
   } catch (error) {
     // Ignore storage errors.
@@ -10358,11 +10377,10 @@ function renderBillingImportPanel() {
     billingSummary.innerHTML = `
       <article class="billing-summary-card">
         <h4>${getBillingProviderDisplayName(currentBillingProvider)}</h4>
-        <p>${
-          isUnified
-            ? "Import at least one provider CSV to populate Unified view."
-            : "No CSV imported for this provider yet."
-        }</p>
+        <p>${isUnified
+        ? "Import at least one provider CSV to populate Unified view."
+        : "No CSV imported for this provider yet."
+      }</p>
       </article>`;
     billingChart.innerHTML = `<p class="billing-empty">Import a billing CSV to visualize service allocation.</p>`;
     billingTable.innerHTML = "";
@@ -10406,10 +10424,10 @@ function renderBillingImportPanel() {
     chartGroup === "account"
       ? "Account"
       : chartGroup === "productApp"
-      ? "Product app"
-      : chartGroup === "tag"
-      ? "Tag"
-      : "Service";
+        ? "Product app"
+        : chartGroup === "tag"
+          ? "Tag"
+          : "Service";
   const sourceDatasetCount = Number.isFinite(data.sourceDatasetCount)
     ? data.sourceDatasetCount
     : 1;
@@ -10473,10 +10491,10 @@ function renderBillingImportPanel() {
 
   billingChart.innerHTML = topServices.length
     ? topServices
-        .map((service) => {
-          const width = maxValue > 0 ? (service.cost / maxValue) * 100 : 0;
-          const share = filteredTotal > 0 ? (service.cost / filteredTotal) * 100 : 0;
-          return `
+      .map((service) => {
+        const width = maxValue > 0 ? (service.cost / maxValue) * 100 : 0;
+        const share = filteredTotal > 0 ? (service.cost / filteredTotal) * 100 : 0;
+        return `
             <div class="billing-bar-row">
               <div class="billing-bar-meta">
                 <span class="billing-bar-label">${escapeMarkup(service.name)}</span>
@@ -10486,8 +10504,8 @@ function renderBillingImportPanel() {
                 <div class="billing-bar-fill" style="width: ${Math.max(0, Math.min(100, width))}%"></div>
               </div>
             </div>`;
-        })
-        .join("")
+      })
+      .join("")
     : `<p class="billing-empty">No ${escapeMarkup(chartLabel.toLowerCase())} buckets match the current Product App filter.</p>`;
 
   const expandedServices = getBillingExpandedServiceSet(currentBillingProvider);
@@ -10526,8 +10544,8 @@ function renderBillingImportPanel() {
     .map((service) => {
       const serviceExpandKey = isUnified
         ? `${normalizeBillingProvider(service.sourceProvider)}@@${String(
-            service.sourceServiceName || service.name
-          )}`
+          service.sourceServiceName || service.name
+        )}`
         : service.name;
       const isExpanded = expandedServices.has(serviceExpandKey);
       const toggleLabel = isExpanded ? "-" : "+";
@@ -10548,22 +10566,22 @@ function renderBillingImportPanel() {
         filteredTotal > 0 ? (service.cost / filteredTotal) * 100 : 0;
       const detailRows = isExpanded
         ? details
-            .slice(0, 200)
-            .map((detail) => {
-              const detailKey = encodeBillingDetailKey(service.name, detail.name);
-              const detailChecked = selectedDetails.has(detailKey) ? "checked" : "";
-              const detailTag = getBillingDetailTag(
-                tagProvider,
-                tagServiceName,
-                detail.name
-              );
-              const detailApp = detailTag?.productApp || "";
-              const detailTags =
-                Array.isArray(detailTag?.tags) && detailTag.tags.length
-                  ? detailTag.tags.join(", ")
-                  : "";
-              if (isUnified) {
-                return `
+          .slice(0, 200)
+          .map((detail) => {
+            const detailKey = encodeBillingDetailKey(service.name, detail.name);
+            const detailChecked = selectedDetails.has(detailKey) ? "checked" : "";
+            const detailTag = getBillingDetailTag(
+              tagProvider,
+              tagServiceName,
+              detail.name
+            );
+            const detailApp = detailTag?.productApp || "";
+            const detailTags =
+              Array.isArray(detailTag?.tags) && detailTag.tags.length
+                ? detailTag.tags.join(", ")
+                : "";
+            if (isUnified) {
+              return `
               <tr class="billing-detail-row">
                 <td></td>
                 <td class="billing-detail-name">${escapeMarkup(detail.name)}</td>
@@ -10574,8 +10592,8 @@ function renderBillingImportPanel() {
                 <td>${detail.rowCount}</td>
                 <td>Line item</td>
               </tr>`;
-              }
-              return `
+            }
+            return `
               <tr class="billing-detail-row">
                 <td>
                   <input
@@ -10612,39 +10630,39 @@ function renderBillingImportPanel() {
                   <button type="button" class="table-action" data-billing-detail-clear="${detailKey}">Clear</button>
                 </td>
               </tr>`;
-            })
-            .join("") +
-          (() => {
-            if (details.length > 200) {
-              return `
+          })
+          .join("") +
+        (() => {
+          if (details.length > 200) {
+            return `
                 <tr class="billing-detail-row">
                   <td></td>
                   <td class="billing-detail-name" colspan="7">
                     Showing top 200 line items by cost (${details.length} total).
                   </td>
                 </tr>`;
-            }
+          }
+          return "";
+        })() +
+        (() => {
+          const tags = [];
+          if (Array.isArray(service.topChargeTypes) && service.topChargeTypes.length) {
+            tags.push(`Charge types: ${service.topChargeTypes.join(", ")}`);
+          }
+          if (Number.isFinite(service.minDate) && Number.isFinite(service.maxDate)) {
+            const start = new Date(service.minDate).toLocaleDateString();
+            const end = new Date(service.maxDate).toLocaleDateString();
+            tags.push(`Usage range: ${start} - ${end}`);
+          }
+          if (!tags.length) {
             return "";
-          })() +
-          (() => {
-            const tags = [];
-            if (Array.isArray(service.topChargeTypes) && service.topChargeTypes.length) {
-              tags.push(`Charge types: ${service.topChargeTypes.join(", ")}`);
-            }
-            if (Number.isFinite(service.minDate) && Number.isFinite(service.maxDate)) {
-              const start = new Date(service.minDate).toLocaleDateString();
-              const end = new Date(service.maxDate).toLocaleDateString();
-              tags.push(`Usage range: ${start} - ${end}`);
-            }
-            if (!tags.length) {
-              return "";
-            }
-            return `
+          }
+          return `
               <tr class="billing-detail-row billing-detail-meta">
                 <td></td>
                 <td colspan="7">${escapeMarkup(tags.join(" | "))}</td>
               </tr>`;
-          })()
+        })()
         : "";
       return `
         <tr class="billing-service-row">
@@ -10658,29 +10676,25 @@ function renderBillingImportPanel() {
               ${toggleLabel}
             </button>
           </td>
-          <td>${
-            isUnified
-              ? `${escapeMarkup(
-                  getBillingProviderDisplayName(service.sourceProvider)
-                )} / ${
-                  service.sourceAccountName
-                    ? `${escapeMarkup(service.sourceAccountName)} / `
-                    : ""
-                }${escapeMarkup(service.name)}`
-              : `${
-                  service.sourceAccountName
-                    ? `${escapeMarkup(service.sourceAccountName)} / `
-                    : ""
-                }${escapeMarkup(service.name)}`
-          }</td>
+          <td>${isUnified
+          ? `${escapeMarkup(
+            getBillingProviderDisplayName(service.sourceProvider)
+          )} / ${service.sourceAccountName
+            ? `${escapeMarkup(service.sourceAccountName)} / `
+            : ""
+          }${escapeMarkup(service.name)}`
+          : `${service.sourceAccountName
+            ? `${escapeMarkup(service.sourceAccountName)} / `
+            : ""
+          }${escapeMarkup(service.name)}`
+        }</td>
           <td>${escapeMarkup(productApp)}</td>
           <td>${escapeMarkup(customTags)}</td>
           <td>${formatMoney(service.cost)}</td>
           <td>${serviceShare.toFixed(2)}%</td>
           <td>${service.rowCount}</td>
-          <td>${service.detailCount || details.length}${
-            service.isPartial ? " (filtered)" : ""
-          }</td>
+          <td>${service.detailCount || details.length}${service.isPartial ? " (filtered)" : ""
+        }</td>
         </tr>
         ${detailRows}`;
     })
@@ -11131,12 +11145,12 @@ async function handleBillingImportFile(event) {
         }));
         const parsedMonthDatasets =
           parsed.monthDatasets &&
-          typeof parsed.monthDatasets === "object" &&
-          !Array.isArray(parsed.monthDatasets)
+            typeof parsed.monthDatasets === "object" &&
+            !Array.isArray(parsed.monthDatasets)
             ? parsed.monthDatasets
             : {
-                [inferBillingDatasetMonthKey(parsed)]: cloneBillingDataset(parsed),
-              };
+              [inferBillingDatasetMonthKey(parsed)]: cloneBillingDataset(parsed),
+            };
         const normalizedMonthDatasets = {};
         Object.entries(parsedMonthDatasets).forEach(([rawMonthKey, dataset]) => {
           const normalizedDataset = normalizeBillingImportDataset(dataset);
@@ -11227,13 +11241,13 @@ async function handleBillingImportFile(event) {
           );
           const incomingFiles = Array.isArray(normalizedDataset.sourceFiles)
             ? normalizedDataset.sourceFiles
-                .map((name) => String(name || "").trim())
-                .filter(Boolean)
+              .map((name) => String(name || "").trim())
+              .filter(Boolean)
             : [];
           const existingFiles = Array.isArray(existingDataset?.sourceFiles)
             ? existingDataset.sourceFiles
-                .map((name) => String(name || "").trim())
-                .filter(Boolean)
+              .map((name) => String(name || "").trim())
+              .filter(Boolean)
             : [];
           const hasLegacyLikeDuplicate =
             Boolean(existingDataset) &&
@@ -11278,9 +11292,8 @@ async function handleBillingImportFile(event) {
       const monthSummary = importedMonthLabels.length
         ? importedMonthLabels.length <= 4
           ? importedMonthLabels.join(", ")
-          : `${importedMonthLabels.slice(0, 4).join(", ")} (+${
-              importedMonthLabels.length - 4
-            } more)`
+          : `${importedMonthLabels.slice(0, 4).join(", ")} (+${importedMonthLabels.length - 4
+          } more)`
         : "All months";
       providerSummaries.push({
         provider,
@@ -11305,23 +11318,17 @@ async function handleBillingImportFile(event) {
     );
     const perProviderMessage = providerSummaries
       .map((summary) => {
-        return `${getBillingProviderDisplayName(summary.provider)} imported ${
-          summary.fileCount
-        } file(s), month buckets updated: ${summary.monthBucketCount} (${
-          summary.monthSummary
-        }), merged rows: ${summary.mergedRows}${
-          summary.skippedDuplicateBuckets
+        return `${getBillingProviderDisplayName(summary.provider)} imported ${summary.fileCount
+          } file(s), month buckets updated: ${summary.monthBucketCount} (${summary.monthSummary
+          }), merged rows: ${summary.mergedRows}${summary.skippedDuplicateBuckets
             ? `, skipped duplicates: ${summary.skippedDuplicateBuckets}`
             : ""
-        }${
-          summary.mergedBuckets === 0 ? ", no new data added" : ""
-        }${
-          summary.reroutedFiles
-            ? `, auto-routed from ${
-                getBillingProviderDisplayName(selectedProvider)
-              } tab: ${summary.reroutedFiles}`
+          }${summary.mergedBuckets === 0 ? ", no new data added" : ""
+          }${summary.reroutedFiles
+            ? `, auto-routed from ${getBillingProviderDisplayName(selectedProvider)
+            } tab: ${summary.reroutedFiles}`
             : ""
-        }`;
+          }`;
       })
       .join(" | ");
     let rerouteNote = "";
@@ -11339,10 +11346,9 @@ async function handleBillingImportFile(event) {
     }
     setInlineNote(
       billingNote,
-      `${perProviderMessage}.${rerouteNote}${
-        failedImports.length
-          ? ` Failed: ${failedImports.length} (${failedImports.join(" | ")}).`
-          : ""
+      `${perProviderMessage}.${rerouteNote}${failedImports.length
+        ? ` Failed: ${failedImports.length} (${failedImports.join(" | ")}).`
+        : ""
       }`
     );
     renderBillingImportPanel();
@@ -11752,12 +11758,12 @@ async function handleImportScenarioFile(event) {
     const items = Array.isArray(parsed)
       ? parsed
       : Array.isArray(parsed?.scenarios)
-      ? parsed.scenarios
-      : parsed?.scenario
-      ? [parsed.scenario]
-      : parsed?.name && parsed?.input
-      ? [parsed]
-      : [];
+        ? parsed.scenarios
+        : parsed?.scenario
+          ? [parsed.scenario]
+          : parsed?.name && parsed?.input
+            ? [parsed]
+            : [];
     if (!items.length) {
       setInlineNote(targetNote, "No valid scenarios found in file.", true);
       return;
