@@ -15,4 +15,6 @@ COPY --from=build /app /app
 ENV NODE_ENV=production
 EXPOSE 3000
 
+USER 1000
+
 CMD ["server.js"]

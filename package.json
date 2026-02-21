@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-pricing": "^3.524.0",
+    "cors": "^2.8.6",
     "express": "^4.19.2",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "node-fetch": "^3.3.2",
-    "sql.js": "^1.13.0"
+    "sql.js": "^1.13.0",
+    "zod": "^4.3.6"
   }
 }

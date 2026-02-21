@@ -4,6 +4,8 @@ const crypto = require("crypto");
 const os = require("os");
 const express = require("express");
 const helmet = require("helmet");
+const cors = require("cors");
+const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
 const initSqlJs = require("sql.js");
 const { PricingClient, GetProductsCommand } = require("@aws-sdk/client-pricing");
@@ -1719,6 +1721,7 @@ const apiLimiter = rateLimit({
 });
 
 app.use(helmet());
+app.use(cors({ origin: process.env.CORS_ORIGIN || "*" })); // In a real app, restrict this!
 app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
 app.use(awaitAuthInitialization);
@@ -1764,7 +1767,17 @@ app.get("/api/auth/me", (req, res) => {
   });
 });
 
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required")
+});
+
 app.post("/api/auth/login", (req, res) => {
+  const parseResult = loginSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid input", details: parseResult.error.errors });
+    return;
+  }
   if (!AUTH_DB_CONFIG_PROVIDED) {
     res.status(503).json({
       error: "DB config missing. Set AUTH_DATA_DIR or AUTH_DB_FILE.",
@@ -1859,9 +1872,19 @@ app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
     users,
     requestedBy: req.authUser.username,
   });
+}); const adminUserSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+  isAdmin: z.union([z.boolean(), z.number(), z.string()]).optional(),
+  role: z.string().optional()
 });
 
 app.post("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
+  const parseResult = adminUserSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid input", details: parseResult.error.errors });
+    return;
+  }
   const username = normalizeAuthUsername(req.body?.username);
   const password = String(req.body?.password || "");
   const hasRoleField =
@@ -5170,7 +5193,14 @@ function computeTotalsOrNull(params) {
   return computeTotals(params);
 }
 
+const compareSchema = z.object({});
+
 app.post("/api/compare", async (req, res) => {
+  const parseResult = compareSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid input payload" });
+    return;
+  }
   const body = req.body || {};
   const requestId = `req-${Date.now().toString(36)}-${Math.random()
     .toString(36)
