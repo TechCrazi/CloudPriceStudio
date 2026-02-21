@@ -34,7 +34,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:8080`.
 
 Environment sample:
 
@@ -62,7 +62,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/techcrazi/clou
 
 ### Docker Run Container with API Keys
 ```bash
-docker run --rm -p 3000:3000 \
+docker run --rm -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID=... \
   -e AWS_SECRET_ACCESS_KEY=... \
   -e GCP_PRICING_API_KEY=... \
@@ -72,7 +72,7 @@ docker run --rm -p 3000:3000 \
 
 ### Docker Run with Login + Persistent User Profiles
 ```bash
-docker run --rm -p 3000:3000 \
+docker run --rm -p 8080:8080 \
   -e APP_AUTH_USERS='analyst1:ChangeMe123,analyst2:ChangeMe456' \
   -e AUTH_DATA_DIR=/tmp/cloud-price-data \
   -v cloudprice-data:/tmp/cloud-price-data \
@@ -83,7 +83,7 @@ The named volume keeps user profiles across container restarts/redeploys.
 
 ### Docker Run Container with API Keys & AWS Config Map
 ```bash
-docker run --rm -p 3000:3000 \
+docker run --rm -p 8080:8080 \
   -v ~/.aws:/root/.aws:ro \
   -e AWS_PROFILE=profile-name \
   -e AWS_SDK_LOAD_CONFIG=1 \
@@ -93,7 +93,7 @@ docker run --rm -p 3000:3000 \
 ```
 
 #### Local App UI
-Open `http://localhost:3000`.
+Open `http://localhost:8080`.
 
 
 ## Pricing provider
@@ -359,7 +359,7 @@ slim build \
   --target ghcr.io/techcrazi/cloudpricestudio:latest \
   --tag ghcr.io/techcrazi/cloudpricestudio:slim-amd64 \
   --image-build-arch amd64 \
-  --publish-port 3000:3000 \
+  --publish-port 8080:8080 \
   --include-path '/app' \
   --env AWS_ACCESS_KEY_ID="AWS-API-Key" \
   --env AWS_SECRET_ACCESS_KEY="AWS-API-Secret" \
@@ -367,8 +367,8 @@ slim build \
   --env GCP_API_KEY="GCP-API-Key" 
 ```
 
-  - Original Image: 281.51 MB
-  - Slim Image: 189.86 MB
+  - Original Image: 257 MB
+  - Slim Image: 157 MB
 
 
 ##### Scan & Build Image ARM64 (On Apple or ARM Processor)
@@ -377,15 +377,15 @@ slim build \
   --target ghcr.io/techcrazi/cloudpricestudio:latest \
   --tag ghcr.io/techcrazi/cloudpricestudio:slim-arm64 \
   --image-build-arch arm64 \
-  --publish-port 3000:3000 \
+  --publish-port 8080:8080 \
   --include-path '/app' \
   --env AWS_ACCESS_KEY_ID="AWS-API-Key" \
   --env AWS_SECRET_ACCESS_KEY="AWS-API-Secret" \
   --env GCP_PRICING_API_KEY="GCP-Pricing-API-Key" \
   --env GCP_API_KEY="GCP-API-Key" 
 ```
-  - Original Image: 225.42 MB
-  - Slim Image: 189.86 MB
+  - Original Image: 257 MB
+  - Slim Image: 157 MB
 
 
 
@@ -395,7 +395,7 @@ slim build \
   --target ghcr.io/techcrazi/cloudpricestudio:latest \
   --tag ghcr.io/techcrazi/cloudpricestudio:slim-arm64 \
   --image-build-arch arm64 \
-  --publish-port 3000:3000 \
+  --publish-port 8080:8080 \
   --continue-after=enter \
   --include-path '/app' \
   --env AWS_ACCESS_KEY_ID="AWS-API-Key" \
