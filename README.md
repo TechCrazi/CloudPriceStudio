@@ -121,6 +121,33 @@ Open `http://localhost:8080`.
   `Host`/`X-Forwarded-Host`; use `CORS_ORIGINS` only for explicit cross-origin
   frontend origins.
 
+## App Security Scans
+
+Run application-level security scans with:
+
+```bash
+semgrep scan --config auto
+```
+
+```bash
+codeql database create /tmp/codeql-db-cloudpricestudio --language=javascript --source-root=. --overwrite
+codeql database analyze /tmp/codeql-db-cloudpricestudio \
+  codeql/javascript-queries:codeql-suites/javascript-security-and-quality.qls \
+  --format=sarif-latest \
+  --output /tmp/codeql-cloudpricestudio.sarif
+```
+
+Latest remediation highlights:
+- Hardened cookie parsing against prototype-pollution keys.
+- Removed user-derived value from auth migration logs and normalized logging format.
+- Enforced auth storage permissions (`0700` dirs, `0600` DB file writes).
+- Removed duplicate object keys in export row construction (`public/app.js`).
+- Replaced high-risk DOM `innerHTML` render paths with a sanitized fragment renderer (`setSanitizedMarkup`).
+- Removed dynamic `RegExp` construction from CORS wildcard and GCP SKU pattern matching paths.
+- Hardened legacy auth state path generation to hash-based, filename-safe state files only.
+- Current Semgrep findings: `1` (`express-check-csurf-middleware-usage`).
+- Current CodeQL security findings: `0` (remaining CodeQL results are quality-level only).
+
 
 ## Pricing provider
 
@@ -175,7 +202,8 @@ Auth configuration options:
   Example: `APP_AUTH_USERS='ops1:Secret1,ops2:Secret2'`
 - Or `APP_LOGIN_USER` + `APP_LOGIN_PASSWORD` for a single user.
 - `APP_ADMIN_USERS` (optional): comma-separated admin usernames used as
-  default/seed admins for new or migrated auth records. Default is `admin`.
+  default/seed admins for new or migrated auth records. Default is `admin`
+  (no user-specific fallback value).
 - `AUTH_DATA_DIR` (optional): base path for auth files
   (default `/tmp/cloud-price-data`).
 - `AUTH_DB_FILE` (optional): SQLite file path

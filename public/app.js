@@ -448,6 +448,67 @@ const AUTH_SYNC_DEBOUNCE_MS = 1200;
 const DATA_HISTORY_STORAGE_PREFIX = "cps-state-history";
 const DATA_HISTORY_MAX_ENTRIES = 50;
 const BILLING_UNTAGGED_FILTER = "__untagged__";
+const BLOCKED_MARKUP_TAGS = new Set([
+  "script",
+  "iframe",
+  "object",
+  "embed",
+  "link",
+  "meta",
+  "base",
+]);
+const URL_ATTR_NAMES = new Set(["href", "src", "xlink:href", "formaction"]);
+
+function sanitizeMarkupFragment(fragment) {
+  const removals = [];
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_ELEMENT);
+  let node = walker.nextNode();
+  while (node) {
+    const tagName = String(node.tagName || "").toLowerCase();
+    if (BLOCKED_MARKUP_TAGS.has(tagName)) {
+      removals.push(node);
+      node = walker.nextNode();
+      continue;
+    }
+    Array.from(node.attributes || []).forEach((attr) => {
+      const attrName = String(attr.name || "").toLowerCase();
+      const attrValue = String(attr.value || "");
+      if (attrName.startsWith("on") || attrName === "srcdoc") {
+        node.removeAttribute(attr.name);
+        return;
+      }
+      if (
+        URL_ATTR_NAMES.has(attrName) &&
+        /^\s*javascript\s*:/i.test(attrValue)
+      ) {
+        node.removeAttribute(attr.name);
+      }
+    });
+    node = walker.nextNode();
+  }
+  removals.forEach((element) => element.remove());
+  return fragment;
+}
+
+function buildSanitizedFragment(markup) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(
+    `<body>${String(markup ?? "")}</body>`,
+    "text/html"
+  );
+  const fragment = document.createDocumentFragment();
+  while (doc.body.firstChild) {
+    fragment.appendChild(doc.body.firstChild);
+  }
+  return sanitizeMarkupFragment(fragment);
+}
+
+function setSanitizedMarkup(element, markup) {
+  if (!element) {
+    return;
+  }
+  element.replaceChildren(buildSanitizedFragment(markup));
+}
 
 function obfuscateLocalData(data) {
   try {
@@ -3096,7 +3157,7 @@ function renderNetworkProviderCards(data) {
         </article>`;
     })
     .join("");
-  networkProviderCards.innerHTML = html;
+  setSanitizedMarkup(networkProviderCards, html);
 }
 
 function renderStorageProviderCards(data) {
@@ -3223,7 +3284,7 @@ function renderStorageProviderCards(data) {
         </article>`;
     })
     .join("");
-  storageProviderCards.innerHTML = html;
+  setSanitizedMarkup(storageProviderCards, html);
 }
 
 function renderNetworkFocusTable(data) {
@@ -3264,7 +3325,9 @@ function renderNetworkFocusTable(data) {
         <td><strong>${formatMoney(totals.total || 0)}</strong></td>
       </tr>`;
   });
-  networkFocusTable.innerHTML = `
+  setSanitizedMarkup(
+    networkFocusTable,
+    `
     <table class="focus-table">
       <thead>
         <tr>
@@ -3283,7 +3346,8 @@ function renderNetworkFocusTable(data) {
       <tbody>
         ${rows.join("")}
       </tbody>
-    </table>`;
+    </table>`
+  );
 }
 
 function renderStorageFocusTable(data) {
@@ -3320,7 +3384,9 @@ function renderStorageFocusTable(data) {
         <td><strong>${formatMoney(totals.total || 0)}</strong></td>
       </tr>`;
   });
-  storageFocusTable.innerHTML = `
+  setSanitizedMarkup(
+    storageFocusTable,
+    `
     <table class="focus-table">
       <thead>
         <tr>
@@ -3334,7 +3400,8 @@ function renderStorageFocusTable(data) {
       <tbody>
         ${rows.join("")}
       </tbody>
-    </table>`;
+    </table>`
+  );
 }
 
 async function comparePricing(payload) {
@@ -4525,7 +4592,7 @@ function renderUnitEconomics(data) {
     return;
   }
   if (!data) {
-    unitEconTable.innerHTML = "";
+    setSanitizedMarkup(unitEconTable, "");
     unitEconNote.textContent = "Per-provider normalized costs.";
     return;
   }
@@ -4586,7 +4653,9 @@ function renderUnitEconomics(data) {
       otherShare: share(other),
     };
   });
-  unitEconTable.innerHTML = `
+  setSanitizedMarkup(
+    unitEconTable,
+    `
     <thead>
       <tr>
         <th>Provider</th>
@@ -4625,7 +4694,8 @@ function renderUnitEconomics(data) {
       )
       .join("")}
     </tbody>
-  `;
+  `
+  );
   const focus = data.input?.pricingFocus || "all";
   if (focus === "network") {
     unitEconNote.textContent =
@@ -5190,8 +5260,10 @@ function renderAdminUsersTable() {
     return;
   }
   if (!Array.isArray(adminUsers) || !adminUsers.length) {
-    adminUsersTable.innerHTML =
-      '<p class="billing-empty">No users available. Add a user to get started.</p>';
+    setSanitizedMarkup(
+      adminUsersTable,
+      '<p class="billing-empty">No users available. Add a user to get started.</p>'
+    );
     return;
   }
   const adminCount = adminUsers.reduce(
@@ -5229,7 +5301,9 @@ function renderAdminUsersTable() {
     })
     .filter(Boolean)
     .join("");
-  adminUsersTable.innerHTML = `<table>
+  setSanitizedMarkup(
+    adminUsersTable,
+    `<table>
     <thead>
       <tr>
         <th>Username</th>
@@ -5240,7 +5314,8 @@ function renderAdminUsersTable() {
       </tr>
     </thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table>`
+  );
 }
 
 function syncAdminUserSelector() {
@@ -10374,16 +10449,22 @@ function renderBillingImportPanel() {
   const data = getBillingPanelData(currentBillingProvider);
   syncBillingControls(data);
   if (!data) {
-    billingSummary.innerHTML = `
+    setSanitizedMarkup(
+      billingSummary,
+      `
       <article class="billing-summary-card">
         <h4>${getBillingProviderDisplayName(currentBillingProvider)}</h4>
         <p>${isUnified
         ? "Import at least one provider CSV to populate Unified view."
         : "No CSV imported for this provider yet."
       }</p>
-      </article>`;
-    billingChart.innerHTML = `<p class="billing-empty">Import a billing CSV to visualize service allocation.</p>`;
-    billingTable.innerHTML = "";
+      </article>`
+    );
+    setSanitizedMarkup(
+      billingChart,
+      '<p class="billing-empty">Import a billing CSV to visualize service allocation.</p>'
+    );
+    setSanitizedMarkup(billingTable, "");
     if (billingNote && !billingNote.textContent.trim()) {
       billingNote.textContent = "Import a billing CSV to start allocation analysis.";
     }
@@ -10437,7 +10518,9 @@ function renderBillingImportPanel() {
   const sourceAccountCount = Array.isArray(data.sourceAccounts)
     ? data.sourceAccounts.length
     : 0;
-  billingSummary.innerHTML = `
+  setSanitizedMarkup(
+    billingSummary,
+    `
     <article class="billing-summary-card">
       <h4>${getBillingProviderDisplayName(currentBillingProvider)}</h4>
       <p>Total imported</p>
@@ -10487,9 +10570,12 @@ function renderBillingImportPanel() {
       <h4>Line-item column</h4>
       <p>${escapeMarkup(data.detailColumn || "Detail")}</p>
       <strong>${data.usageDateColumn ? escapeMarkup(data.usageDateColumn) : "No usage date column"}</strong>
-    </article>`;
+    </article>`
+  );
 
-  billingChart.innerHTML = topServices.length
+  setSanitizedMarkup(
+    billingChart,
+    topServices.length
     ? topServices
       .map((service) => {
         const width = maxValue > 0 ? (service.cost / maxValue) * 100 : 0;
@@ -10506,7 +10592,8 @@ function renderBillingImportPanel() {
             </div>`;
       })
       .join("")
-    : `<p class="billing-empty">No ${escapeMarkup(chartLabel.toLowerCase())} buckets match the current Product App filter.</p>`;
+    : `<p class="billing-empty">No ${escapeMarkup(chartLabel.toLowerCase())} buckets match the current Product App filter.</p>`
+  );
 
   const expandedServices = getBillingExpandedServiceSet(currentBillingProvider);
   const selectedDetails = getBillingSelectedDetailSet(currentBillingProvider);
@@ -10699,7 +10786,9 @@ function renderBillingImportPanel() {
         ${detailRows}`;
     })
     .join("");
-  billingTable.innerHTML = `
+  setSanitizedMarkup(
+    billingTable,
+    `
     ${bulkSelectionBanner}
     <table>
       <thead>
@@ -10717,7 +10806,8 @@ function renderBillingImportPanel() {
       <tbody>
         ${tableRows}
       </tbody>
-    </table>`;
+    </table>`
+  );
 }
 
 function pruneBillingProviderTags(provider, validServiceNames) {
@@ -11494,8 +11584,6 @@ function buildCsv(data) {
         Pricing_Focus: input.pricingFocus ?? "all",
         Network_Addon_Focus: input.networkAddonFocus ?? "",
         SQL_Edition: input.sqlEdition ?? "",
-        Pricing_Focus: input.pricingFocus ?? "all",
-        Network_Addon_Focus: input.networkAddonFocus ?? "",
         SQL_License_Rate: input.sqlLicenseRate ?? "",
         Disk_Tier: input.diskTier ?? "",
         OS_Disk_GB: input.osDiskGb ?? "",

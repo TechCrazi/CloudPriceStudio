@@ -1,7 +1,6 @@
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const os = require("os");
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -72,10 +71,11 @@ function loadLocalEnvFile() {
         }
       });
     }
-    console.log(`[env] Loaded ${envPath} for local development.`);
+    console.log("[env] Loaded %s for local development.", envPath);
   } catch (error) {
     console.warn(
-      `[env] Failed to load ${envPath}:`,
+      "[env] Failed to load %s:",
+      envPath,
       error?.message || String(error)
     );
   }
@@ -90,11 +90,39 @@ function parseDelimitedEnvList(value) {
     .filter(Boolean);
 }
 
-function wildcardToRegExp(pattern) {
-  const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*");
-  return new RegExp(`^${escaped}$`);
+function sanitizeForLog(value) {
+  return String(value ?? "")
+    .replace(/[\r\n\t]/g, " ")
+    .slice(0, 1000);
+}
+
+function wildcardToMatcher(patternRaw) {
+  const pattern = String(patternRaw || "");
+  const segments = pattern.split("*").filter(Boolean);
+  const startsWithWildcard = pattern.startsWith("*");
+  const endsWithWildcard = pattern.endsWith("*");
+  return (valueRaw) => {
+    const value = String(valueRaw || "");
+    if (!segments.length) {
+      return pattern.includes("*") ? true : value === pattern;
+    }
+    let cursor = 0;
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index];
+      const matchIndex = value.indexOf(segment, cursor);
+      if (matchIndex === -1) {
+        return false;
+      }
+      if (index === 0 && !startsWithWildcard && matchIndex !== 0) {
+        return false;
+      }
+      cursor = matchIndex + segment.length;
+    }
+    if (!endsWithWildcard) {
+      return value.endsWith(segments[segments.length - 1]);
+    }
+    return true;
+  };
 }
 
 function resolveTrustProxySetting() {
@@ -154,12 +182,16 @@ const K8S_CONTROL_PLANE_HOURLY = {
   gcp: 0.5,
 };
 const AUTH_COOKIE_NAME = "cloud_price_session";
+const DEFAULT_AUTH_DATA_DIR =
+  process.platform === "win32"
+    ? path.join(process.cwd(), "cloud-price-data")
+    : "/tmp/cloud-price-data";
 const AUTH_DB_CONFIG_PROVIDED = Boolean(
   String(process.env.AUTH_DATA_DIR || "").trim() ||
   String(process.env.AUTH_DB_FILE || "").trim()
 );
 const AUTH_DATA_DIR = path.resolve(
-  process.env.AUTH_DATA_DIR || path.join(os.tmpdir(), "cloud-price-data")
+  process.env.AUTH_DATA_DIR || DEFAULT_AUTH_DATA_DIR
 );
 const AUTH_DB_FILE = path.resolve(
   process.env.AUTH_DB_FILE || path.join(AUTH_DATA_DIR, "cloudprice.db")
@@ -1049,7 +1081,7 @@ function normalizeAuthUsername(value) {
 }
 
 const AUTH_DEFAULT_ADMIN_USERS = new Set(
-  String(process.env.APP_ADMIN_USERS || "smit")
+  String(process.env.APP_ADMIN_USERS || "admin")
     .split(",")
     .map((value) => normalizeAuthUsername(value))
     .filter(Boolean)
@@ -1129,8 +1161,14 @@ function verifyAuthPassword(password, userRecord) {
 }
 
 function ensureAuthStorage() {
-  fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
-  fs.mkdirSync(AUTH_STATE_DIR, { recursive: true });
+  fs.mkdirSync(AUTH_DATA_DIR, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(AUTH_STATE_DIR, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(AUTH_DATA_DIR, 0o700);
+    fs.chmodSync(AUTH_STATE_DIR, 0o700);
+  } catch (_error) {
+    // Best-effort hardening for environments that support chmod.
+  }
 }
 
 function readJsonFile(filePath, fallback) {
@@ -1145,7 +1183,8 @@ function readJsonFile(filePath, fallback) {
 function buildLegacyStatePath(usernameRaw) {
   const username = normalizeAuthUsername(usernameRaw);
   const hash = crypto.createHash("sha256").update(username).digest("hex");
-  return path.join(AUTH_STATE_DIR, `${hash}.json`);
+  const safeHash = /^[a-f0-9]{64}$/.test(hash) ? hash : "invalid";
+  return `${AUTH_STATE_DIR}${path.sep}${safeHash}.json`;
 }
 
 function persistAuthDatabase() {
@@ -1153,7 +1192,7 @@ function persistAuthDatabase() {
     return;
   }
   const exported = authDb.export();
-  fs.writeFileSync(AUTH_DB_FILE, Buffer.from(exported));
+  fs.writeFileSync(AUTH_DB_FILE, Buffer.from(exported), { mode: 0o600 });
 }
 
 function sqliteGetRow(sql, params = []) {
@@ -1588,15 +1627,18 @@ function readAuthUserState(usernameRaw) {
   const updatedAt = legacyPayload?.updatedAt || new Date().toISOString();
   try {
     upsertAuthUserState(username, legacyState, updatedAt);
-    console.log(`[auth] Migrated legacy user-state JSON for ${username}.`);
+    console.log("[auth] Migrated legacy user-state JSON.");
   } catch (error) {
     // Keep serving the legacy value even if write-back fails.
   }
   return { state: legacyState, updatedAt };
 }
 
+const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const UNSAFE_COOKIE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
 function parseCookieHeader(cookieHeader) {
-  const output = {};
+  const output = Object.create(null);
   if (!cookieHeader) {
     return output;
   }
@@ -1604,14 +1646,19 @@ function parseCookieHeader(cookieHeader) {
     .split(";")
     .forEach((segment) => {
       const [rawKey, ...rest] = segment.trim().split("=");
-      if (!rawKey) {
+      const key = String(rawKey || "").trim();
+      if (
+        !key ||
+        UNSAFE_COOKIE_KEYS.has(key) ||
+        !COOKIE_NAME_PATTERN.test(key)
+      ) {
         return;
       }
       const value = rest.join("=") || "";
       try {
-        output[rawKey] = decodeURIComponent(value);
+        output[key] = decodeURIComponent(value);
       } catch (error) {
-        output[rawKey] = value;
+        output[key] = value;
       }
     });
   return output;
@@ -1788,7 +1835,7 @@ const allowedOrigins = Array.from(
 );
 const allowedOriginMatchers = allowedOrigins
   .filter((origin) => origin.includes("*"))
-  .map((pattern) => wildcardToRegExp(pattern));
+  .map((pattern) => wildcardToMatcher(pattern));
 
 function extractForwardedHost(req) {
   const forwardedHostHeader = String(req.get("x-forwarded-host") || "").trim();
@@ -1824,7 +1871,7 @@ function isOriginAllowed(origin, req) {
   if (allowedOrigins.includes(origin)) {
     return true;
   }
-  return allowedOriginMatchers.some((matcher) => matcher.test(origin));
+  return allowedOriginMatchers.some((matcher) => matcher(origin));
 }
 
 app.use(
@@ -2647,7 +2694,12 @@ function logPricingWarning(provider, context, message) {
   if (context?.silent) {
     return;
   }
-  console.warn(`[pricing:${provider}] ${message}`, context);
+  console.warn(
+    "[pricing:%s] %s",
+    sanitizeForLog(provider),
+    sanitizeForLog(message),
+    context
+  );
 }
 
 function logPricingError(provider, context, error) {
@@ -2655,7 +2707,12 @@ function logPricingError(provider, context, error) {
     return;
   }
   const details = error?.stack || error?.message || String(error);
-  console.error(`[pricing:${provider}] ${details}`, context);
+  console.error(
+    "[pricing:%s] %s",
+    sanitizeForLog(provider),
+    sanitizeForLog(details),
+    context
+  );
 }
 
 function hasAwsApiCredentials() {
@@ -2903,10 +2960,7 @@ async function warmPricingCaches() {
   await runWithConcurrency(tasks, PRICING_WARMUP_CONCURRENCY);
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-  console.log(
-    `[pricing] Cache warm-up complete in ${elapsed}s.`,
-    summary
-  );
+  console.log("[pricing] Cache warm-up complete in %ss.", elapsed, summary);
   return {
     ...summary,
     elapsedSeconds: Number.parseFloat(elapsed),
@@ -3342,12 +3396,12 @@ function findGcpSkuRate({
   os,
   kind,
 }) {
-  const token = familyToken.toUpperCase();
+  const token = String(familyToken || "").trim().toLowerCase();
+  if (!token) {
+    return null;
+  }
   const isWindows = os === "windows";
-  const pattern =
-    kind === "cpu"
-      ? new RegExp(`${token}.*instance core`, "i")
-      : new RegExp(`${token}.*instance ram`, "i");
+  const metricToken = kind === "cpu" ? "instance core" : "instance ram";
   const candidate = skus.find((sku) => {
     if (sku.category?.resourceFamily !== "Compute") {
       return false;
@@ -3359,11 +3413,11 @@ function findGcpSkuRate({
     if (!regions.includes(region) && !regions.includes("global")) {
       return false;
     }
-    const description = sku.description || "";
-    if (!pattern.test(description)) {
+    const description = String(sku.description || "").toLowerCase();
+    if (!description.includes(token) || !description.includes(metricToken)) {
       return false;
     }
-    const hasWindows = /windows/i.test(description);
+    const hasWindows = description.includes("windows");
     if (isWindows && !hasWindows) {
       return false;
     }
@@ -4832,12 +4886,20 @@ async function loadGcpServiceSkus(apiKey, serviceId) {
 }
 
 function findGcpHourlySkuRate({ skus, region, descriptionPatterns }) {
-  const patterns = (descriptionPatterns || []).map((pattern) =>
-    pattern instanceof RegExp ? pattern : new RegExp(pattern, "i")
-  );
+  const patterns = Array.isArray(descriptionPatterns)
+    ? descriptionPatterns
+    : [];
   const candidate = skus.find((sku) => {
     const description = toText(sku.description);
-    if (!patterns.every((pattern) => pattern.test(description))) {
+    if (
+      !patterns.every((pattern) => {
+        if (pattern instanceof RegExp) {
+          return pattern.test(description);
+        }
+        const token = toText(pattern).trim().toLowerCase();
+        return token ? description.toLowerCase().includes(token) : true;
+      })
+    ) {
       return false;
     }
     const regions = sku.serviceRegions || [];
@@ -4863,12 +4925,20 @@ function findGcpHourlySkuRate({ skus, region, descriptionPatterns }) {
 }
 
 function findGcpGbMonthSkuRate({ skus, region, descriptionPatterns }) {
-  const patterns = (descriptionPatterns || []).map((pattern) =>
-    pattern instanceof RegExp ? pattern : new RegExp(pattern, "i")
-  );
+  const patterns = Array.isArray(descriptionPatterns)
+    ? descriptionPatterns
+    : [];
   const candidate = skus.find((sku) => {
     const description = toText(sku.description);
-    if (!patterns.every((pattern) => pattern.test(description))) {
+    if (
+      !patterns.every((pattern) => {
+        if (pattern instanceof RegExp) {
+          return pattern.test(description);
+        }
+        const token = toText(pattern).trim().toLowerCase();
+        return token ? description.toLowerCase().includes(token) : true;
+      })
+    ) {
       return false;
     }
     const regions = sku.serviceRegions || [];
