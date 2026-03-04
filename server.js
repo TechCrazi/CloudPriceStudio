@@ -4,6 +4,8 @@ const crypto = require("crypto");
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const csurf = require("csurf");
 const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
 const initSqlJs = require("sql.js");
@@ -182,6 +184,9 @@ const K8S_CONTROL_PLANE_HOURLY = {
   gcp: 0.5,
 };
 const AUTH_COOKIE_NAME = "cloud_price_session";
+const CSRF_COOKIE_NAME = "cloud_price_csrf";
+const CORS_POLICY_ERROR_MESSAGE =
+  "The CORS policy for this site does not allow access from the specified Origin.";
 const DEFAULT_AUTH_DATA_DIR =
   process.platform === "win32"
     ? path.join(process.cwd(), "cloud-price-data")
@@ -1739,6 +1744,21 @@ function authCookieClearOptions() {
   };
 }
 
+function csrfCookieOptions() {
+  return {
+    key: CSRF_COOKIE_NAME,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  };
+}
+
+const csrfProtection = csurf({
+  cookie: csrfCookieOptions(),
+  ignoreMethods: ["GET", "HEAD", "OPTIONS"],
+});
+
 function authSessionMiddleware(req, res, next) {
   const session = getRequestSession(req);
   req.authUser = session
@@ -1881,15 +1901,15 @@ app.use(
     if (!origin || isOriginAllowed(origin, req)) {
       return callback(null, { origin: true });
     }
-    const msg =
-      "The CORS policy for this site does not allow access from the specified Origin.";
-    return callback(new Error(msg), { origin: false });
+    return callback(new Error(CORS_POLICY_ERROR_MESSAGE), { origin: false });
   })
 );
 app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
+app.use(cookieParser());
 app.use(awaitAuthInitialization);
 app.use(authSessionMiddleware);
+app.use(csrfProtection);
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/api/auth/me", (req, res) => {
@@ -1928,6 +1948,13 @@ app.get("/api/auth/me", (req, res) => {
       isAdmin: normalizeAuthAdminFlag(sessionUser.isAdmin),
     },
     loginEnabled: true,
+  });
+});
+
+app.get("/api/auth/csrf", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({
+    csrfToken: req.csrfToken(),
   });
 });
 
@@ -2446,16 +2473,6 @@ function buildCacheStatus() {
   };
 }
 
-function buildCacheHealthWarning() {
-  const status = buildCacheStatus();
-  if (status.summary.staleCount <= 0) {
-    return null;
-  }
-  return `Cache warning: stale cache groups detected (${status.summary.staleCaches.join(
-    ", "
-  )}). Results can fall back to defaults until refresh completes.`;
-}
-
 async function runCacheRefreshCycle(trigger = "scheduled") {
   if (cacheRefreshRunning) {
     return {
@@ -2637,7 +2654,7 @@ async function buildSizeOptions() {
 
   const awsFlavors = buildProviderFlavorSizes(AWS_FAMILIES, coreConstraints);
   const azureFlavors = buildProviderFlavorSizes(AZURE_FAMILIES, coreConstraints);
-  let gcpFlavors = buildEmptyGcpFlavors();
+  let gcpFlavors;
   try {
     const list = await loadGcpPublicPricing();
     gcpFlavors = buildGcpFlavorSizesFromList(list, gcpConstraints);
@@ -3018,53 +3035,6 @@ function collectProviderSizes(families, flavorKeys, options) {
     });
   });
   return sizes;
-}
-
-function collectGcpSizesFromList(list, flavorKeys, options) {
-  const familySet = new Set();
-  (flavorKeys || []).forEach((flavorKey) => {
-    const families = GCP_FLAVOR_MAP[flavorKey] || [];
-    families.forEach((family) => familySet.add(family));
-  });
-  const sizes = [];
-  const seen = new Set();
-  list.forEach((item) => {
-    if (!familySet.has(item.family)) {
-      return;
-    }
-    if (item.local_ssd || item.shared_cpu) {
-      return;
-    }
-    const size = {
-      type: item.instance_type,
-      vcpu: Number(item.vCPU),
-      memory: Number(item.memory),
-      networkGbps: null,
-      networkLabel: "Variable",
-      localDisk: false,
-      flavorKey: GCP_FAMILY_TO_FLAVOR[item.family],
-    };
-    if (!isSizeEligible(size, options)) {
-      return;
-    }
-    if (seen.has(size.type)) {
-      return;
-    }
-    sizes.push(size);
-    seen.add(size.type);
-  });
-  return sizes;
-}
-
-function isMissingAwsCredentials(error) {
-  const message = (error?.message || "").toLowerCase();
-  const name = (error?.name || "").toLowerCase();
-  return (
-    name.includes("credential") ||
-    message.includes("credential") ||
-    message.includes("could not load") ||
-    message.includes("missing credentials")
-  );
 }
 
 async function loadAwsPublicPricing() {
@@ -5161,39 +5131,6 @@ async function resolveNetworkAddonsForProvider({
   };
 }
 
-function filterNetworkAddonsByFocus(addons, focus, hours) {
-  if (!addons || focus === "all") {
-    return addons;
-  }
-  const items = Array.isArray(addons.items)
-    ? addons.items.filter((item) => item.addonKey === focus)
-    : [];
-  const hourlyTotal = items.reduce((sum, item) => {
-    const hourlyRate = Number.isFinite(item.hourlyRate) ? item.hourlyRate : 0;
-    return sum + hourlyRate;
-  }, 0);
-  const monthlyTotal = items.reduce((sum, item) => {
-    const monthly = Number.isFinite(item.monthlyTotal)
-      ? item.monthlyTotal
-      : Number.isFinite(hours)
-        ? (Number.isFinite(item.hourlyRate) ? item.hourlyRate : 0) * hours
-        : 0;
-    return sum + monthly;
-  }, 0);
-  const errors = items
-    .filter((item) => item.status === "error")
-    .map((item) => `${focus}:${item.label}`);
-  return {
-    ...addons,
-    items,
-    hourlyTotal,
-    monthlyTotal,
-    note: errors.length
-      ? `Network add-on pricing missing for ${errors.join(", ")}.`
-      : null,
-  };
-}
-
 function computeTotals({
   hourlyRate,
   osDiskGb,
@@ -7066,6 +7003,35 @@ app.post("/api/compare", async (req, res) => {
         gcp: hasGcpApiCredentials(),
       },
     },
+  });
+});
+
+app.use((error, req, res, next) => {
+  if (error?.code === "EBADCSRFTOKEN") {
+    res.status(403).json({
+      error: "Invalid or missing CSRF token.",
+    });
+    return;
+  }
+  if (error?.message === CORS_POLICY_ERROR_MESSAGE) {
+    res.status(403).json({
+      error: CORS_POLICY_ERROR_MESSAGE,
+    });
+    return;
+  }
+  next(error);
+});
+
+app.use((error, req, res, _next) => {
+  console.error(
+    "[server] Unhandled error: %s",
+    sanitizeForLog(error?.message || String(error))
+  );
+  if (res.headersSent) {
+    return;
+  }
+  res.status(500).json({
+    error: "Internal server error.",
   });
 });
 

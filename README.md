@@ -145,8 +145,12 @@ Latest remediation highlights:
 - Replaced high-risk DOM `innerHTML` render paths with a sanitized fragment renderer (`setSanitizedMarkup`).
 - Removed dynamic `RegExp` construction from CORS wildcard and GCP SKU pattern matching paths.
 - Hardened legacy auth state path generation to hash-based, filename-safe state files only.
-- Current Semgrep findings: `1` (`express-check-csurf-middleware-usage`).
-- Current CodeQL security findings: `0` (remaining CodeQL results are quality-level only).
+- Added CSRF protection for state-changing API routes (`csurf` + `X-CSRF-Token`) and client-side automatic CSRF token handling.
+- Removed unused server helpers and dead assignments previously flagged by CodeQL quality checks.
+- Added npm dependency overrides for `cookie` and `fast-xml-parser` to clear low-severity audit advisories.
+- Current Semgrep findings: `0`.
+- Current CodeQL findings: `0` (security + quality).
+- Current npm audit findings (`--omit=dev`): `0`.
 
 
 ## Pricing provider

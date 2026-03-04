@@ -597,6 +597,8 @@ let billingDetailTagStore = { aws: {}, azure: {}, gcp: {}, rackspace: {} };
 let authSession = null;
 let authSyncTimer = null;
 let authSyncInFlight = false;
+let csrfToken = "";
+let csrfTokenPromise = null;
 let pendingGuestImportState = null;
 let isAdminUser = false;
 let adminUsers = [];
@@ -3405,7 +3407,7 @@ function renderStorageFocusTable(data) {
 }
 
 async function comparePricing(payload) {
-  const response = await fetch("/api/compare", {
+  const response = await fetchWithCsrf("/api/compare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -5551,8 +5553,69 @@ function setAuthUi(user, options = {}) {
   }
 }
 
+function isSafeHttpMethod(method) {
+  return ["GET", "HEAD", "OPTIONS"].includes(
+    String(method || "GET").toUpperCase()
+  );
+}
+
+async function fetchCsrfToken() {
+  const response = await fetch("/api/auth/csrf", {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (_error) {
+    payload = null;
+  }
+  if (!response.ok || typeof payload?.csrfToken !== "string" || !payload.csrfToken) {
+    throw new Error("Could not initialize CSRF token.");
+  }
+  csrfToken = payload.csrfToken;
+  return csrfToken;
+}
+
+async function ensureCsrfToken(forceRefresh = false) {
+  if (forceRefresh) {
+    csrfToken = "";
+  }
+  if (csrfToken) {
+    return csrfToken;
+  }
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = fetchCsrfToken().finally(() => {
+      csrfTokenPromise = null;
+    });
+  }
+  return csrfTokenPromise;
+}
+
+async function fetchWithCsrf(url, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = new Headers(options.headers || {});
+  const requestOptions = {
+    ...options,
+    method,
+    headers,
+    credentials: "same-origin",
+  };
+  if (isSafeHttpMethod(method)) {
+    return fetch(url, requestOptions);
+  }
+  headers.set("X-CSRF-Token", await ensureCsrfToken());
+  let response = await fetch(url, requestOptions);
+  if (response.status === 403) {
+    headers.set("X-CSRF-Token", await ensureCsrfToken(true));
+    response = await fetch(url, requestOptions);
+  }
+  return response;
+}
+
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetchWithCsrf(url, options);
   let payload = null;
   try {
     payload = await response.json();

@@ -36,8 +36,19 @@
   - `javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal`:
     removed user-influenced `path.join` for legacy auth state resolution and
     enforced hash-based safe filename construction.
-- Current post-fix CodeQL security findings: `0`.
-- Current post-fix Semgrep findings: `1` (`express-check-csurf-middleware-usage`).
+  - `javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage`:
+    added CSRF middleware (`csurf`) with cookie-based CSRF secret and
+    state-changing request protection (`X-CSRF-Token`), plus frontend token
+    bootstrap/retry handling.
+- Fixed CodeQL quality findings:
+  - removed unused server helper functions and dead assignments identified by
+    `unused-local-variable` and `useless-assignment-to-local`.
+- Dependency hardening:
+  - added npm `overrides` for `cookie` and `fast-xml-parser`, clearing low
+    severity advisories from runtime dependencies.
+- Current post-fix CodeQL findings: `0` (security + quality).
+- Current post-fix Semgrep findings: `0`.
+- Current npm audit findings (`--omit=dev`): `0`.
 
 ### Container startup and Kubernetes runtime fixes
 
