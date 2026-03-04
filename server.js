@@ -11,6 +11,15 @@ const initSqlJs = require("sql.js");
 const { PricingClient, GetProductsCommand } = require("@aws-sdk/client-pricing");
 
 function isContainerRuntime() {
+  if (
+    String(process.env.KUBERNETES_SERVICE_HOST || "").trim() ||
+    String(process.env.KUBERNETES_PORT || "").trim()
+  ) {
+    return true;
+  }
+  if (fs.existsSync("/run/.containerenv")) {
+    return true;
+  }
   if (fs.existsSync("/.dockerenv")) {
     return true;
   }
@@ -74,6 +83,41 @@ function loadLocalEnvFile() {
 
 loadLocalEnvFile();
 
+function parseDelimitedEnvList(value) {
+  return String(value || "")
+    .split(/[,\n]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function wildcardToRegExp(pattern) {
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+
+function resolveTrustProxySetting() {
+  const configured = String(process.env.TRUST_PROXY || "").trim();
+  if (!configured) {
+    if (String(process.env.KUBERNETES_SERVICE_HOST || "").trim()) {
+      return 1;
+    }
+    return false;
+  }
+  const lower = configured.toLowerCase();
+  if (lower === "true") {
+    return true;
+  }
+  if (lower === "false") {
+    return false;
+  }
+  if (/^\d+$/.test(configured)) {
+    return Number.parseInt(configured, 10);
+  }
+  return configured;
+}
+
 const fetcher =
   global.fetch ||
   ((...args) =>
@@ -81,6 +125,8 @@ const fetcher =
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const TRUST_PROXY_SETTING = resolveTrustProxySetting();
+app.set("trust proxy", TRUST_PROXY_SETTING);
 const HOURS_IN_MONTH = 730;
 const MIN_CPU = 8;
 const MIN_MEMORY = 8;
@@ -1732,23 +1778,67 @@ app.use(helmet({
   },
   crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
-const allowedOrigins = [
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
-  process.env.CORS_ORIGIN
-].filter(Boolean);
+const allowedOrigins = Array.from(
+  new Set([
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    ...parseDelimitedEnvList(process.env.CORS_ORIGIN),
+    ...parseDelimitedEnvList(process.env.CORS_ORIGINS),
+  ])
+);
+const allowedOriginMatchers = allowedOrigins
+  .filter((origin) => origin.includes("*"))
+  .map((pattern) => wildcardToRegExp(pattern));
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = "The CORS policy for this site does not allow access from the specified Origin.";
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
+function extractForwardedHost(req) {
+  const forwardedHostHeader = String(req.get("x-forwarded-host") || "").trim();
+  if (forwardedHostHeader) {
+    return forwardedHostHeader.split(",")[0].trim();
   }
-}));
+  return String(req.get("host") || "").trim();
+}
+
+function isSameHostOrigin(origin, req) {
+  if (!origin) {
+    return true;
+  }
+  const requestHost = extractForwardedHost(req);
+  if (!requestHost) {
+    return false;
+  }
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.host === requestHost;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isOriginAllowed(origin, req) {
+  if (!origin) {
+    return true;
+  }
+  if (isSameHostOrigin(origin, req)) {
+    return true;
+  }
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  return allowedOriginMatchers.some((matcher) => matcher.test(origin));
+}
+
+app.use(
+  cors((req, callback) => {
+    const origin = req.get("origin");
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || isOriginAllowed(origin, req)) {
+      return callback(null, { origin: true });
+    }
+    const msg =
+      "The CORS policy for this site does not allow access from the specified Origin.";
+    return callback(new Error(msg), { origin: false });
+  })
+);
 app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
 app.use(awaitAuthInitialization);

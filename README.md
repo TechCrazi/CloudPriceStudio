@@ -47,6 +47,8 @@ npm run dev
 For local runs, the app auto-loads `.env` if present.
 In Docker/containers, `.env` auto-load is skipped; pass env vars with `-e` or
 `--env-file`.
+The container image excludes `.env` by default, so host-local paths are not
+accidentally baked into runtime deployments.
 
 ## Docker
 
@@ -80,6 +82,14 @@ docker run --rm -p 8080:8080 \
 ```
 
 The named volume keeps user profiles across container restarts/redeploys.
+If you are upgrading from an older image and see
+`EACCES: permission denied, mkdir '/tmp/cloud-price-data/user-state'`,
+fix ownership once for the existing volume:
+
+```bash
+docker run --rm -v cloudprice-data:/tmp/cloud-price-data alpine \
+  sh -c 'chown -R 1000:1000 /tmp/cloud-price-data'
+```
 
 ### Docker Run Container with API Keys & AWS Config Map
 ```bash
@@ -94,6 +104,22 @@ docker run --rm -p 8080:8080 \
 
 #### Local App UI
 Open `http://localhost:8080`.
+
+### Kubernetes Notes
+
+- Run with `runAsUser: 1000` and keep auth data under a writable in-container
+  path (for example `/tmp/cloud-price-data`).
+- Set `AUTH_DATA_DIR` (and optionally `AUTH_DB_FILE`) explicitly in your Pod
+  `env` section to avoid fallback path issues.
+- If you use persistence, mount a writable PVC/`emptyDir` at `AUTH_DATA_DIR`.
+- When running behind Ingress/Traefik, set `TRUST_PROXY=1` so request IP
+  detection and rate limiting handle `X-Forwarded-For` correctly.
+- Set `CORS_ORIGINS` (or `CORS_ORIGIN`) to a comma-separated list of allowed
+  browser origins (for example
+  `https://cloudprice.192.168.250.240.nip.io,https://cloudstudioprice.jvvgroup.com`).
+- Same-host browser origins are allowed automatically using
+  `Host`/`X-Forwarded-Host`; use `CORS_ORIGINS` only for explicit cross-origin
+  frontend origins.
 
 
 ## Pricing provider
